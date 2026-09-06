@@ -5,13 +5,14 @@ import {
   rotateFov,
   type FramingResult,
 } from "@fielder/fov-math";
-import type { Preset, Settings } from "./types";
+import { PHONE } from "./phone.ts";
+import type { Preset, Settings } from "./types.ts";
 
 export interface Box { width: number; height: number }
 export interface Rect { left: number; top: number; width: number; height: number }
 
 /** Largest 4:3 (landscape window) or 3:4 (portrait window) box that fits the window. */
-export function previewBox(window: Box, sensorAspect = 4 / 3): Box {
+export function previewBox(window: Box, sensorAspect: number = PHONE.sensorAspect): Box {
   const portrait = window.height >= window.width;
   const aspect = portrait ? 1 / sensorAspect : sensorAspect; // width / height on screen
   let width = window.width;
@@ -35,7 +36,7 @@ export function computeOverlay(settings: Settings, preset: Preset, lensMm: numbe
     { sensor: { widthMm: preset.sensorWidthMm, heightMm: preset.sensorHeightMm }, speedboosterFactor: preset.speedboosterFactor },
     lensMm,
   );
-  const phoneFov = phoneViewFromEquivalent(settings.phoneEquivalentFocalMm, preview.width / preview.height, 4 / 3);
+  const phoneFov = phoneViewFromEquivalent(settings.phoneEquivalentFocalMm, preview.width / preview.height, PHONE.sensorAspect);
   // On screen, horizontal always means world-horizontal (the preview rotates with the device),
   // so the rig's horizontal FOV maps to the screen's horizontal axis unless the rig is held portrait.
   const rigFov = settings.rigOrientation === "portrait" ? rotateFov(framing.fov) : framing.fov;

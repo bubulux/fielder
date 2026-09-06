@@ -1,3 +1,4 @@
+import { File } from "expo-file-system";
 import { API_URL, CF_ACCESS_CLIENT_ID, CF_ACCESS_CLIENT_SECRET, isConfigured } from "./config";
 import type { Preset, ShotMetadata } from "./types";
 
@@ -48,8 +49,9 @@ export const api = {
   /** Multipart upload. `fileUri` must be a local file:// URI of a JPEG. */
   uploadShot: (metadata: ShotMetadata, fileUri: string) => {
     const form = new FormData();
-    // React Native's FormData accepts a file descriptor object in place of a Blob.
-    form.append("image", { uri: fileUri, name: `${metadata.id}.jpg`, type: "image/jpeg" } as unknown as Blob);
+    // Expo's global fetch is the WinterCG implementation: it rejects React Native's
+    // {uri,name,type} descriptors but accepts an expo-file-system File directly.
+    form.append("image", new File(fileUri) as unknown as Blob, `${metadata.id}.jpg`);
     form.append("metadata", JSON.stringify(metadata));
     return call<{ shot: { id: string }; duplicate?: boolean }>("/api/shots", { method: "POST", body: form });
   },

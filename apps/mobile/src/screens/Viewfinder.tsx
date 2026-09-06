@@ -8,6 +8,7 @@ import { StatusBar } from "expo-status-bar";
 import { api } from "../api";
 import { API_URL, isConfigured } from "../config";
 import { computeOverlay, formatDeg, previewBox, type Box } from "../framing";
+import { PHONE } from "../phone";
 import { store } from "../storage";
 import type { Preset, Settings, ShotMetadata } from "../types";
 import { enqueue, flush } from "../uploads";
@@ -35,7 +36,7 @@ export function Viewfinder() {
   const [activeId, setActiveId] = useState<string | null>(() => store.loadActivePresetId());
   const [lensMm, setLensMm] = useState<number>(() => store.loadLensMm());
   const [sheet, setSheet] = useState<Sheet>(null);
-  const [busy, setBusy] = useState<"capture" | "calibrate" | null>(null);
+  const [busy, setBusy] = useState<"capture" | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [pendingCount, setPendingCount] = useState(() => store.loadPending().length);
 
@@ -132,10 +133,11 @@ export function Viewfinder() {
             vfov_deg: round(overlay.framing.fov.vertical),
           },
           phone: {
+            model: PHONE.model,
             equivalent_focal_mm: settings.phoneEquivalentFocalMm,
             exif_focal_length: exif.FocalLength ?? null,
             exif_focal_length_35mm: exif.FocalLengthIn35mmFilm ?? null,
-            model: exif.Model ?? null,
+            exif_model: exif.Model ?? null,
           },
           gps: { accuracy_m: pos.coords.accuracy ?? null, altitude_m: pos.coords.altitude ?? null, heading_deg: pos.coords.heading ?? null },
           image: { width: small.width, height: small.height },
@@ -151,26 +153,6 @@ export function Viewfinder() {
       showToast(r.remaining === 0 ? "Saved & uploaded" : `Saved locally (${r.remaining} pending)`);
     } catch (err) {
       Alert.alert("Capture failed", err instanceof Error ? err.message : String(err));
-    } finally {
-      setBusy(null);
-    }
-  }
-
-  async function calibrate(): Promise<string> {
-    if (!camera.current || !cameraReady) return "Camera not ready";
-    setBusy("calibrate");
-    try {
-      const pic = await camera.current.takePictureAsync({ quality: 0.1, exif: true, shutterSound: false });
-      const exif = (pic.exif ?? {}) as Record<string, unknown>;
-      const eq = Number(exif.FocalLengthIn35mmFilm);
-      if (Number.isFinite(eq) && eq > 5) {
-        setSettings((s) => ({ ...s, phoneEquivalentFocalMm: eq }));
-        showToast(`Calibrated: ${eq} mm equivalent`);
-        return "ok";
-      }
-      const f = exif.FocalLength;
-      Alert.alert("No 35mm-equivalent value in EXIF", `This phone reports only FocalLength=${String(f ?? "n/a")}. Look up your phone's main-camera equivalent focal length and enter it manually.`);
-      return "missing";
     } finally {
       setBusy(null);
     }
@@ -232,7 +214,7 @@ export function Viewfinder() {
         onChange={(p, id) => { setPresets(p); setActiveId(id); }} />
       <LensSheet visible={sheet === "lens"} onClose={() => setSheet(null)} lensMm={lensMm} onChange={setLensMm} />
       <SettingsSheet visible={sheet === "settings"} onClose={() => setSheet(null)} settings={settings} onChange={setSettings}
-        onCalibrate={calibrate} calibrating={busy === "calibrate"} pendingCount={pendingCount} onRetryUploads={() => void retryUploads()}
+        pendingCount={pendingCount} onRetryUploads={() => void retryUploads()}
         buildInfo={`API: ${isConfigured ? API_URL.replace(/^https?:\/\//, "") : "not configured"}`} />
     </View>
   );

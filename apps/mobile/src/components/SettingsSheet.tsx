@@ -1,5 +1,6 @@
 import { Switch, Text, View } from "react-native";
 import { Button, Chip, ChipRow, colors, Hint, Input, Row, Sheet } from "./ui";
+import { PHONE } from "../phone";
 import type { Settings } from "../types";
 
 interface Props {
@@ -7,8 +8,6 @@ interface Props {
   onClose: () => void;
   settings: Settings;
   onChange: (s: Settings) => void;
-  onCalibrate: () => Promise<string>;
-  calibrating: boolean;
   pendingCount: number;
   onRetryUploads: () => void;
   buildInfo: string;
@@ -22,18 +21,20 @@ const TINTS: { label: string; value: string }[] = [
   { label: "White 50%", value: "rgba(255,255,255,0.5)" },
 ];
 
-export function SettingsSheet({ visible, onClose, settings, onChange, onCalibrate, calibrating, pendingCount, onRetryUploads, buildInfo }: Props) {
+export function SettingsSheet({ visible, onClose, settings, onChange, pendingCount, onRetryUploads, buildInfo }: Props) {
   const set = <K extends keyof Settings>(k: K, v: Settings[K]) => onChange({ ...settings, [k]: v });
   return (
     <Sheet visible={visible} title="Settings" onClose={onClose}>
-      <Row label="Phone camera, 35mm-equivalent focal length">
+      <Row label={`${PHONE.model} main camera, 35mm-equivalent`}>
         <Input
           value={String(settings.phoneEquivalentFocalMm)}
           onChangeText={(t) => { const v = Number(t.replace(",", ".")); if (Number.isFinite(v) && v > 5 && v < 200) set("phoneEquivalentFocalMm", v); }}
           keyboardType="decimal-pad"
         />
-        <Hint>Scales the overlay. Most Android main cameras are 23-27 mm. "Calibrate" takes a throwaway photo and reads the value from its EXIF data when the phone reports it.</Hint>
-        <Button label={calibrating ? "Calibrating…" : "Calibrate from camera EXIF"} kind="ghost" disabled={calibrating} onPress={() => { void onCalibrate(); }} />
+        <Hint>Spec-sheet value is {PHONE.mainCameraEquivalentFocalMm} mm. Only change this if the overlay is measurably off against a real camera; a smaller value makes the frame smaller on screen.</Hint>
+        {settings.phoneEquivalentFocalMm !== PHONE.mainCameraEquivalentFocalMm && (
+          <Button label={`Reset to ${PHONE.mainCameraEquivalentFocalMm} mm`} kind="ghost" onPress={() => set("phoneEquivalentFocalMm", PHONE.mainCameraEquivalentFocalMm)} />
+        )}
       </Row>
       <Row label="Rig orientation">
         <ChipRow>
