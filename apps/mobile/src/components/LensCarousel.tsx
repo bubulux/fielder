@@ -1,68 +1,56 @@
-import { useEffect, useRef } from "react";
-import { FlatList, Pressable, StyleSheet, Text, View } from "react-native";
+import { Pressable, StyleSheet, Text, View } from "react-native";
 import { LENS_PRESETS_MM } from "@fielder/fov-math";
 import { colors } from "./ui";
-
-const ITEM = 56;
 
 interface Props {
   lensMm: number;
   onChange: (mm: number) => void;
   /** Vertical strip (landscape phone) or horizontal strip (portrait). */
   vertical: boolean;
-  /** Length of the strip along its scroll axis. */
+  /** Length of the strip along its main axis. */
   length: number;
 }
 
-/** One-tap / swipe lens picker over the built-in focal lengths. Custom values still go through the Lens sheet. */
+const LENSES = LENS_PRESETS_MM as readonly number[];
+
+/** Step through the built-in focal lengths. For a custom value, stepping goes to the nearest neighbour in the list. */
+function step(current: number, dir: -1 | 1): number {
+  const i = LENSES.indexOf(current);
+  if (i >= 0) return LENSES[Math.min(LENSES.length - 1, Math.max(0, i + dir))];
+  const next = dir > 0 ? LENSES.find((mm) => mm > current) : [...LENSES].reverse().find((mm) => mm < current);
+  return next ?? current;
+}
+
 export function LensCarousel({ lensMm, onChange, vertical, length }: Props) {
-  const list = useRef<FlatList<number>>(null);
-  const data = LENS_PRESETS_MM as number[];
-  const index = data.indexOf(lensMm);
-  const pad = Math.max(0, (length - ITEM) / 2);
-
-  useEffect(() => {
-    if (index >= 0) list.current?.scrollToIndex({ index, animated: true, viewPosition: 0.5 });
-  }, [index, vertical, length]);
-
+  const i = LENSES.indexOf(lensMm);
+  const atStart = i === 0 || (i < 0 && lensMm <= LENSES[0]);
+  const atEnd = i === LENSES.length - 1 || (i < 0 && lensMm >= LENSES[LENSES.length - 1]);
+  const prev = () => onChange(step(lensMm, -1));
+  const next = () => onChange(step(lensMm, 1));
   return (
-    <View style={vertical ? { width: 72, height: length } : { height: 64, width: length }}>
-      <FlatList
-        ref={list}
-        data={data}
-        horizontal={!vertical}
-        keyExtractor={(mm) => String(mm)}
-        showsHorizontalScrollIndicator={false}
-        showsVerticalScrollIndicator={false}
-        snapToInterval={ITEM}
-        decelerationRate="fast"
-        contentContainerStyle={vertical ? { paddingVertical: pad } : { paddingHorizontal: pad }}
-        getItemLayout={(_, i) => ({ length: ITEM, offset: ITEM * i, index: i })}
-        onMomentumScrollEnd={(e) => {
-          const off = vertical ? e.nativeEvent.contentOffset.y : e.nativeEvent.contentOffset.x;
-          const i = Math.min(data.length - 1, Math.max(0, Math.round(off / ITEM)));
-          if (data[i] !== lensMm) onChange(data[i]);
-        }}
-        renderItem={({ item }) => {
-          const sel = item === lensMm;
-          return (
-            <Pressable onPress={() => onChange(item)} style={[s.item, vertical ? { height: ITEM } : { width: ITEM }]}>
-              <Text style={[s.mm, sel && s.mmSel]}>{item}</Text>
-              {sel && <Text style={s.unit}>mm</Text>}
-            </Pressable>
-          );
-        }}
-      />
-      {/* centre marker */}
-      <View pointerEvents="none" style={[s.marker, vertical ? { top: pad, left: 4, right: 4, height: ITEM } : { left: pad, top: 4, bottom: 4, width: ITEM }]} />
+    <View style={[s.strip, vertical ? { width: 72, height: length, flexDirection: "column" } : { height: 64, width: length, flexDirection: "row" }]}>
+      {/* In landscape, "up" = wider (shorter focal length), like a zoom ring; in portrait, left = wider. */}
+      <Pressable onPress={prev} disabled={atStart} style={s.btn} hitSlop={10}>
+        <Text style={[s.arrow, atStart && s.disabled]}>{vertical ? "▲" : "◀"}</Text>
+      </Pressable>
+      <View style={s.value}>
+        <Text style={[s.mm, i < 0 && s.custom]}>{lensMm}</Text>
+        <Text style={s.unit}>mm{i < 0 ? " ·custom" : ""}</Text>
+      </View>
+      <Pressable onPress={next} disabled={atEnd} style={s.btn} hitSlop={10}>
+        <Text style={[s.arrow, atEnd && s.disabled]}>{vertical ? "▼" : "▶"}</Text>
+      </Pressable>
     </View>
   );
 }
 
 const s = StyleSheet.create({
-  item: { alignItems: "center", justifyContent: "center" },
-  mm: { color: colors.dim, fontSize: 18, fontVariant: ["tabular-nums"] },
-  mmSel: { color: colors.accent, fontSize: 22, fontWeight: "700" },
-  unit: { color: colors.accent, fontSize: 10, marginTop: -2 },
-  marker: { position: "absolute", borderRadius: 10, borderWidth: 1, borderColor: colors.border },
+  strip: { alignItems: "center", justifyContent: "center", backgroundColor: colors.bg },
+  btn: { flex: 1, alignItems: "center", justifyContent: "center", alignSelf: "stretch" },
+  arrow: { color: colors.text, fontSize: 22 },
+  disabled: { color: colors.border },
+  value: { alignItems: "center", justifyContent: "center", paddingHorizontal: 12, paddingVertical: 6, borderRadius: 10, borderWidth: 1, borderColor: colors.border },
+  mm: { color: colors.accent, fontSize: 24, fontWeight: "700", fontVariant: ["tabular-nums"] },
+  custom: { color: colors.text },
+  unit: { color: colors.dim, fontSize: 10, marginTop: -2 },
 });
