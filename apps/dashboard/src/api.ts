@@ -14,10 +14,13 @@ export interface Shot {
 export interface Preset {
   id: string;
   name: string;
+  camera_id: string | null;
+  format_id: string | null;
   sensor_width_mm: number;
   sensor_height_mm: number;
   speedbooster_factor: number;
   created_at: string;
+  updated_at: string | null;
 }
 
 async function get<T>(path: string): Promise<T> {
@@ -51,5 +54,10 @@ export const fetchPresets = () => get<{ presets: Preset[] }>("/api/presets").the
 
 export async function deleteShot(id: string): Promise<void> {
   const res = await fetch(`/api/shots/${id}`, { method: "DELETE", credentials: "same-origin" });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+}
+
+export async function deletePreset(id: string): Promise<void> {
+  const res = await fetch(`/api/presets/${id}`, { method: "DELETE", credentials: "same-origin" });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
 }

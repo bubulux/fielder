@@ -7,12 +7,21 @@ export interface PresetRow {
   sensor_width_mm: number;
   sensor_height_mm: number;
   speedbooster_factor: number;
+  camera_id: string | null;
+  format_id: string | null;
   created_at: string;
+  updated_at: string | null;
 }
+
+const optionalId = (v: unknown, field: string): string | null => {
+  if (v === undefined || v === null || v === "") return null;
+  if (typeof v !== "string" || v.length > 60 || !/^[\w.-]+$/.test(v)) throw new HttpError(400, `${field} must be a short id`);
+  return v;
+};
 
 export function registerPresetRoutes(r: Router<Ctx>) {
   r.on("GET", "/api/presets", async ({ env }) => {
-    const { results } = await env.DB.prepare("SELECT * FROM presets ORDER BY created_at DESC").all<PresetRow>();
+    const { results } = await env.DB.prepare("SELECT * FROM presets ORDER BY name COLLATE NOCASE").all<PresetRow>();
     return json({ presets: results });
   });
 
@@ -24,12 +33,16 @@ export function registerPresetRoutes(r: Router<Ctx>) {
     const w = assertNumber(b.sensor_width_mm, "sensor_width_mm", { min: 1, max: 100 });
     const h = assertNumber(b.sensor_height_mm, "sensor_height_mm", { min: 1, max: 100 });
     const sb = assertNumber(b.speedbooster_factor ?? 1, "speedbooster_factor", { min: 0.3, max: 2 });
+    const cameraId = optionalId(b.camera_id, "camera_id");
+    const formatId = optionalId(b.format_id, "format_id");
+    const now = new Date().toISOString();
 
     await env.DB.prepare(
-      `INSERT INTO presets (id, name, sensor_width_mm, sensor_height_mm, speedbooster_factor)
-       VALUES (?1, ?2, ?3, ?4, ?5)
-       ON CONFLICT(id) DO UPDATE SET name = ?2, sensor_width_mm = ?3, sensor_height_mm = ?4, speedbooster_factor = ?5`,
-    ).bind(pid, name, w, h, sb).run();
+      `INSERT INTO presets (id, name, sensor_width_mm, sensor_height_mm, speedbooster_factor, camera_id, format_id, updated_at)
+       VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
+       ON CONFLICT(id) DO UPDATE SET name = ?2, sensor_width_mm = ?3, sensor_height_mm = ?4, speedbooster_factor = ?5,
+         camera_id = ?6, format_id = ?7, updated_at = ?8`,
+    ).bind(pid, name, w, h, sb, cameraId, formatId, now).run();
 
     const row = await env.DB.prepare("SELECT * FROM presets WHERE id = ?1").bind(pid).first<PresetRow>();
     return json({ preset: row });

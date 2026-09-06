@@ -36,6 +36,8 @@ export interface OverlayLayout {
    * drawn at true proportion around it. Everything outside the image is unknown to the phone.
    */
   camera: Rect;
+  /** Rig frame relative to the phone photo (centred). > 1 means the rig sees more than the phone. */
+  fractions: { width: number; height: number };
   phoneFov: { horizontalFovDeg: number; verticalFovDeg: number };
 }
 
@@ -59,6 +61,7 @@ export function computeOverlay(settings: Settings, preset: Preset, lensMm: numbe
     framing,
     phoneFov,
     exceedsPreview: r.exceedsPreview,
+    fractions: { width: r.widthFraction, height: r.heightFraction },
     camera: { left: (preview.width - camW) / 2, top: (preview.height - camH) / 2, width: camW, height: camH },
     rect: { left: (preview.width - width) / 2, top: (preview.height - height) / 2, width, height },
   };

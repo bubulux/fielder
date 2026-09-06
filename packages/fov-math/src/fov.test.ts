@@ -1,12 +1,13 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { computeFraming, overlayRect, phoneViewFromEquivalent, rotateFov } from "./fov.ts";
-import { FULL_FRAME, SENSOR_PRESETS } from "./presets.ts";
+import { FULL_FRAME } from "./presets.ts";
+import { CAMERAS, describeRig, findFormat } from "./cameras.ts";
 
 const near = (a: number, b: number, tol = 0.05) =>
   assert.ok(Math.abs(a - b) <= tol, `${a} not within ${tol} of ${b}`);
 
-const mft = SENSOR_PRESETS.find((s) => s.id === "mft")!;
+const mft = findFormat("mft", "4-3")!;
 
 test("50mm on full frame, no booster: textbook FOV", () => {
   const r = computeFraming({ sensor: FULL_FRAME, speedboosterFactor: 1 }, 50);
@@ -88,4 +89,16 @@ test("phone view: 16:9 preview crops the vertical axis of a 4:3 sensor", () => {
   const p169 = phoneViewFromEquivalent(26, 16 / 9);
   near(p169.horizontalFovDeg, p43.horizontalFovDeg, 1e-9);
   assert.ok(p169.verticalFovDeg < p43.verticalFovDeg);
+});
+
+test("camera formats: Pocket 4K DCI is 18.96 × 10, Pocket 6K UHD is a windowed crop", () => {
+  const dci = findFormat("bmpcc4k", "4k-dci")!;
+  near(dci.widthMm, 18.96, 0.01); near(dci.heightMm, 10, 0.01);
+  const uhd6k = findFormat("bmpcc6k", "uhd")!;
+  assert.equal(uhd6k.windowed, true);
+  assert.ok(uhd6k.widthMm < findFormat("bmpcc6k", "6k")!.widthMm);
+  assert.equal(findFormat("nope", "x"), null);
+  assert.equal(describeRig("bmpcc4k", "4k-dci", 1, 1), "Blackmagic Pocket 4K · 4K DCI 4096×2160");
+  assert.equal(describeRig(null, null, 20, 11), "Custom 20 × 11 mm");
+  for (const c of CAMERAS) for (const f of c.formats) assert.ok(f.widthMm > f.heightMm && f.widthMm < 40, `${c.id}/${f.id}`);
 });

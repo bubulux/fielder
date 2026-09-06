@@ -38,7 +38,8 @@ export const store = {
   loadSettings: (): Settings => read(KEYS.settings, DEFAULT_SETTINGS),
   saveSettings: (s: Settings) => write(KEYS.settings, s),
 
-  loadPresets: (): Preset[] => readArray<Preset>(KEYS.presets),
+  loadPresets: (): Preset[] =>
+    readArray<Preset>(KEYS.presets).map((p) => ({ ...p, cameraId: p.cameraId ?? null, formatId: p.formatId ?? null })),
   savePresets: (p: Preset[]) => write(KEYS.presets, p),
 
   loadActivePresetId: (): string | null => Storage.getItemSync(KEYS.activePresetId),

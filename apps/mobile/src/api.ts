@@ -29,15 +29,47 @@ async function call<T>(path: string, init: RequestInit = {}): Promise<T> {
   return body as T;
 }
 
+interface ServerPreset {
+  id: string;
+  name: string;
+  camera_id: string | null;
+  format_id: string | null;
+  sensor_width_mm: number;
+  sensor_height_mm: number;
+  speedbooster_factor: number;
+  created_at: string;
+}
+
+function fromServer(s: ServerPreset): Preset {
+  return {
+    id: s.id,
+    name: s.name,
+    cameraId: s.camera_id ?? null,
+    formatId: s.format_id ?? null,
+    sensorWidthMm: s.sensor_width_mm,
+    sensorHeightMm: s.sensor_height_mm,
+    speedboosterFactor: s.speedbooster_factor,
+    createdAt: s.created_at,
+    synced: true,
+  };
+}
+
 export const api = {
   health: () => call<{ ok: boolean; identity: string }>("/health"),
 
+  listPresets: async (): Promise<Preset[]> => {
+    const r = await call<{ presets: ServerPreset[] }>("/api/presets");
+    return r.presets.map(fromServer);
+  },
+
   putPreset: (p: Preset) =>
-    call<{ preset: unknown }>(`/api/presets/${p.id}`, {
+    call<{ preset: ServerPreset }>(`/api/presets/${p.id}`, {
       method: "PUT",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
         name: p.name,
+        camera_id: p.cameraId,
+        format_id: p.formatId,
         sensor_width_mm: p.sensorWidthMm,
         sensor_height_mm: p.sensorHeightMm,
         speedbooster_factor: p.speedboosterFactor,

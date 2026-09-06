@@ -1,6 +1,10 @@
 export interface Preset {
   id: string;
   name: string;
+  /** Camera body + recording format from @fielder/fov-math CAMERAS, or null for a custom sensor. */
+  cameraId: string | null;
+  formatId: string | null;
+  /** Resolved active sensor area; source of truth for the math. */
   sensorWidthMm: number;
   sensorHeightMm: number;
   speedboosterFactor: number;

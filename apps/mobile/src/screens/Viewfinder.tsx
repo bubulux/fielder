@@ -12,6 +12,7 @@ import { PHONE } from "../phone";
 import { store } from "../storage";
 import type { Preset, Settings, ShotMetadata } from "../types";
 import { enqueue, flush } from "../uploads";
+import { syncPresets } from "../presetSync";
 import { LensSheet } from "../components/LensSheet";
 import { Overlay } from "../components/Overlay";
 import { PresetSheet } from "../components/PresetSheet";
@@ -58,8 +59,11 @@ export function Viewfinder() {
   useEffect(() => {
     if (!isConfigured) return;
     void (async () => {
-      for (const p of store.loadPresets().filter((x) => !x.synced)) {
-        try { await api.putPreset(p); setPresets((cur) => cur.map((x) => (x.id === p.id ? { ...x, synced: true } : x))); } catch { /* retry next launch */ }
+      // Rigs live on the server; pull the authoritative list after pushing offline edits.
+      const server = await syncPresets(store.loadPresets());
+      if (server) {
+        setPresets(server);
+        setActiveId((cur) => (cur && server.some((p) => p.id === cur) ? cur : server[0]?.id ?? null));
       }
       const r = await flush();
       setPendingCount(r.remaining);
@@ -122,6 +126,8 @@ export function Viewfinder() {
           schema: 1,
           framing: {
             preset_name: active.name,
+            camera_id: active.cameraId,
+            format_id: active.formatId,
             sensor_width_mm: active.sensorWidthMm,
             sensor_height_mm: active.sensorHeightMm,
             speedbooster_factor: active.speedboosterFactor,
@@ -131,6 +137,8 @@ export function Viewfinder() {
             full_frame_equivalent_mm: round(overlay.framing.fullFrameEquivalentMm),
             hfov_deg: round(overlay.framing.fov.horizontal),
             vfov_deg: round(overlay.framing.fov.vertical),
+            // Rig frame relative to the uploaded photo, centred. Lets the dashboard re-apply the mask.
+            frame: { width_fraction: round4(overlay.fractions.width), height_fraction: round4(overlay.fractions.height) },
           },
           phone: {
             model: PHONE.model,
@@ -237,6 +245,7 @@ function Ctl({ label, value, onPress }: { label: string; value: string; onPress:
 }
 
 const round = (n: number) => Math.round(n * 10) / 10;
+const round4 = (n: number) => Math.round(n * 10000) / 10000;
 
 const s = StyleSheet.create({
   root: { flex: 1, backgroundColor: "#000" },

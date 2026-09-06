@@ -24,3 +24,22 @@ export function fovLabel(s: Shot): string {
 const fmt = new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" });
 export const when = (iso: string) => fmt.format(new Date(iso));
 export const coords = (s: Shot) => `${s.lat.toFixed(5)}, ${s.lon.toFixed(5)}`;
+
+export interface FrameGeometry { width_fraction: number; height_fraction: number }
+
+/** Rig frame relative to the photo, centred. Present on shots taken with app builds from 2026-09-06 on. */
+export function frameOf(s: Shot): FrameGeometry | null {
+  const f = framingOf(s)?.frame as Partial<FrameGeometry> | undefined;
+  if (!f || typeof f.width_fraction !== "number" || typeof f.height_fraction !== "number") return null;
+  return { width_fraction: f.width_fraction, height_fraction: f.height_fraction };
+}
+
+export function rigDescription(s: Shot): string {
+  const f = framingOf(s);
+  if (!f) return "";
+  const parts: string[] = [];
+  if (typeof f.camera_id === "string" && typeof f.format_id === "string") parts.push(`${f.camera_id} / ${f.format_id}`);
+  if (typeof f.sensor_width_mm === "number" && typeof f.sensor_height_mm === "number") parts.push(`${f.sensor_width_mm} × ${f.sensor_height_mm} mm`);
+  if (typeof f.speedbooster_factor === "number" && f.speedbooster_factor !== 1) parts.push(`×${f.speedbooster_factor}`);
+  return parts.join(" · ");
+}
