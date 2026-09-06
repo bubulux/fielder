@@ -43,6 +43,23 @@ pnpm -C apps/worker dev            # http://localhost:8787
 pnpm -C apps/dashboard dev         # http://localhost:5173, proxies /api to 8787
 ```
 
+## Mobile development loop (no APK per change)
+
+Install the **dev client** APK once (EAS profile `dev-client`). Then run Metro with a tunnel,
+because WSL2 in NAT mode is not reachable from the phone over LAN:
+
+```sh
+pnpm -C apps/mobile start        # expo start --dev-client --tunnel; reads apps/mobile/.env.local
+```
+
+Open the dev client on the phone and enter the URL Metro prints (an `https://….ngrok.io` or
+`….exp.direct` host). JS changes hot-reload. Only native changes (new Expo modules, app.json
+plugins/permissions) need a new dev-client build. `.env.local` (gitignored) carries the same
+EXPO_PUBLIC_* values as the EAS production environment.
+
+If the tunnel fails with `Cannot read properties of undefined (reading 'body')`, a previous
+ngrok session is still registered; wait 30 s or set `EXPO_TUNNEL_SUBDOMAIN` to a new value.
+
 ## Data model
 
 `presets(id, name, sensor_width_mm, sensor_height_mm, speedbooster_factor, created_at)`
