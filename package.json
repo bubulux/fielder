@@ -1,0 +1,15 @@
+{
+  "name": "fielder",
+  "private": true,
+  "version": "0.0.0",
+  "packageManager": "pnpm@11.13.1",
+  "scripts": {
+    "wrangler": "wrangler"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.1",
+    "eas-cli": "^23.0.0",
+    "typescript": "^7.0.2",
+    "wrangler": "^4.127.1"
+  }
+}

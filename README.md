@@ -1,1 +1,57 @@
-# fielder
+# Fielder
+
+Personal shot-scouting viewfinder: point the phone at a scene, pick the rig (sensor + speedbooster) and lens you plan to shoot with, and see the real field of view as an overlay. Snapshots with GPS and framing metadata land in a private web dashboard with a map.
+
+Single user. Everything runs on Cloudflare; the phone app is a sideloaded Android APK built with EAS.
+
+## Layout
+
+| Path | What |
+| --- | --- |
+| `packages/fov-math` | Pure TypeScript: sensor/speedbooster/lens presets, FOV, crop factor, overlay geometry. Tested with `node --test`. |
+| `apps/worker` | Cloudflare Worker: JSON API (`/api/presets`, `/api/shots`), R2 image proxy, and the dashboard as static assets. Verifies the Cloudflare Access JWT on every request. |
+| `apps/dashboard` | Vite + Preact + Leaflet SPA. Built into `dist/` and served by the Worker. |
+| `apps/mobile` | Expo SDK 57 app. Camera preview, overlay, capture, offline upload queue. |
+
+## Infrastructure (all created, see `.secrets/` locally for identifiers)
+
+- **Worker** `fielder-api` at https://fielder-api.fielder-worker.workers.dev — API and dashboard on one hostname.
+- **R2** bucket `fielder-shots` (WEUR), **D1** database `fielder-db` (WEUR), migrations in `apps/worker/migrations/`.
+- **Cloudflare Access** (team `weathered-salad-6072`): app "Fielder" on the Worker hostname. Policies: Allow for the one allow-listed email via One-time PIN; Service Auth for the `fielder-mobile` service token used by the phone app.
+- **Expo/EAS** project `@bubulux/fielder`; production env vars `EXPO_PUBLIC_API_URL`, `EXPO_PUBLIC_CF_ACCESS_CLIENT_ID`, `EXPO_PUBLIC_CF_ACCESS_CLIENT_SECRET`.
+
+No Google Cloud project is involved. Auth is Cloudflare Access only.
+
+## Everyday commands
+
+```sh
+pnpm install                       # 7-day dependency cooldown is enforced (pnpm-workspace.yaml)
+pnpm -C packages/fov-math test
+pnpm -C apps/mobile exec tsc -p .  # mobile typecheck
+pnpm -C apps/mobile eas build --platform android --profile apk   # new APK (cloud build)
+
+pnpm -C apps/worker run deploy     # builds dashboard, deploys Worker + assets
+pnpm -C apps/worker run migrate:remote
+```
+
+Local development of API + dashboard without Access in front:
+
+```sh
+echo 'ACCESS_DEV_BYPASS="true"' > apps/worker/.dev.vars   # gitignored, dev only
+pnpm -C apps/worker run migrate:local
+pnpm -C apps/worker dev            # http://localhost:8787
+pnpm -C apps/dashboard dev         # http://localhost:5173, proxies /api to 8787
+```
+
+## Data model
+
+`presets(id, name, sensor_width_mm, sensor_height_mm, speedbooster_factor, created_at)`
+`shots(id, timestamp, lat, lon, preset_id, lens_mm, r2_object_key, extra_metadata JSON, created_at)`
+
+`extra_metadata` is additive and free-form. The phone writes `framing` (full rig/lens/FOV snapshot at capture time), `phone`, `gps`, `image`. Future tags such as time of day or weather go in here without a migration.
+
+## Secrets and rotation
+
+- Phone credentials are the Access service token (client id/secret), baked into the APK via EAS env vars. Rotate in Zero Trust → Access → Service Auth, update the EAS vars, rebuild.
+- `.secrets/` holds local copies of identifiers and the temporary Cloudflare API token used for setup. It is gitignored. Never commit it.
+- Wrangler's OAuth login lacks `account:read`; the account id is pinned in `apps/worker/wrangler.jsonc`.
