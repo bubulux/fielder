@@ -1,5 +1,58 @@
+import { useEffect, useState } from "react";
+import { Pressable, StyleSheet, Text, useWindowDimensions, View } from "react-native";
+import type { Shot } from "./src/api";
+import { colors } from "./src/components/ui";
+import { Gallery, useShots } from "./src/screens/Gallery";
+import { MapScreen } from "./src/screens/MapScreen";
 import { Viewfinder } from "./src/screens/Viewfinder";
+import { store } from "./src/storage";
+import type { Settings } from "./src/types";
+
+type Mode = "shoot" | "gallery" | "map";
+const TAB = 52;
 
 export default function App() {
-  return <Viewfinder />;
+  const { width, height } = useWindowDimensions();
+  const portrait = height >= width;
+  const [mode, setMode] = useState<Mode>("shoot");
+  const [settings, setSettings] = useState<Settings>(() => store.loadSettings());
+  const [focus, setFocus] = useState<Shot | null>(null);
+  const shots = useShots();
+
+  useEffect(() => { store.saveSettings(settings); }, [settings]);
+  // Refresh the gallery when switching to it, so new shots show up without a pull.
+  useEffect(() => { if (mode !== "shoot") void shots.load(); }, [mode]);
+
+  const tabs = (
+    <View style={[t.bar, portrait ? { height: TAB, flexDirection: "row" } : { width: TAB, flexDirection: "column" }]}>
+      {(["shoot", "gallery", "map"] as Mode[]).map((m) => (
+        <Pressable key={m} onPress={() => setMode(m)} style={t.tab} hitSlop={6}>
+          <Text style={[t.icon, mode === m && { color: colors.accent }]}>{m === "shoot" ? "◉" : m === "gallery" ? "▦" : "⌖"}</Text>
+          <Text style={[t.label, mode === m && { color: colors.accent }]}>{m}</Text>
+        </Pressable>
+      ))}
+    </View>
+  );
+
+  return (
+    <View style={[t.root, { flexDirection: portrait ? "column" : "row" }]}>
+      <View style={{ flex: 1 }}>
+        {/* Viewfinder stays mounted so state and camera warm-up survive tab switches; it releases the camera when inactive. */}
+        <View style={[{ flex: 1 }, mode !== "shoot" && { display: "none" }]}>
+          <Viewfinder settings={settings} onSettings={setSettings} active={mode === "shoot"} />
+        </View>
+        {mode === "gallery" && <Gallery settings={settings} data={shots} onShowOnMap={(s) => { setFocus(s); setMode("map"); }} />}
+        {mode === "map" && <MapScreen settings={settings} data={shots} focus={focus} />}
+      </View>
+      {tabs}
+    </View>
+  );
 }
+
+const t = StyleSheet.create({
+  root: { flex: 1, backgroundColor: colors.bg },
+  bar: { backgroundColor: colors.panel, borderColor: colors.border, borderTopWidth: StyleSheet.hairlineWidth, borderLeftWidth: StyleSheet.hairlineWidth, justifyContent: "space-evenly", alignItems: "center" },
+  tab: { alignItems: "center", minWidth: 48 },
+  icon: { color: colors.dim, fontSize: 18 },
+  label: { color: colors.dim, fontSize: 10, textTransform: "uppercase", letterSpacing: 0.5 },
+});

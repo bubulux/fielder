@@ -42,6 +42,13 @@ export function SettingsSheet({ visible, onClose, settings, onChange, pendingCou
           <Chip label="Portrait" selected={settings.rigOrientation === "portrait"} onPress={() => set("rigOrientation", "portrait")} />
         </ChipRow>
       </Row>
+      <Row label="Fit to frame (digital zoom)">
+        <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
+          <Text style={{ color: colors.text }}>Enabled</Text>
+          <Switch value={settings.fitToFrame} onValueChange={(v) => set("fitToFrame", v)} trackColor={{ true: colors.accent }} />
+        </View>
+        <Hint>Scales the live image so the rig frame fills the screen. Purely digital, so it gets soft with long lenses, but it shows the frame edges at full size. Also available as the Fit button.</Hint>
+      </Row>
       <Row label="Frame border">
         <ChipRow>
           {BORDER_COLORS.map((c) => (

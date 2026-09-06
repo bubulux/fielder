@@ -54,7 +54,41 @@ function fromServer(s: ServerPreset): Preset {
   };
 }
 
+export interface Shot {
+  id: string;
+  timestamp: string;
+  lat: number;
+  lon: number;
+  preset_id: string | null;
+  preset_name: string | null;
+  lens_mm: number;
+  image_url: string;
+  extra_metadata: Record<string, unknown> | null;
+  created_at: string;
+}
+
+type Cursor = { before: string; before_id: string } | null;
+interface ShotsPage { shots: Shot[]; next: Cursor }
+
+/** Headers for <Image> requests to the API (Access service token). */
+export const imageHeaders = (): Record<string, string> => headers();
+export const imageUri = (shot: Shot) => `${API_URL}${shot.image_url}`;
+
 export const api = {
+  listShots: async (): Promise<Shot[]> => {
+    const all: Shot[] = [];
+    let cursor: Cursor = null;
+    for (;;) {
+      const q: string = cursor ? `?limit=500&before=${encodeURIComponent(cursor.before)}&before_id=${cursor.before_id}` : "?limit=500";
+      const page: ShotsPage = await call<ShotsPage>(`/api/shots${q}`);
+      all.push(...page.shots);
+      if (!page.next) break;
+      cursor = page.next;
+    }
+    return all;
+  },
+  deleteShot: (id: string) => call<{ deleted: string }>(`/api/shots/${id}`, { method: "DELETE" }),
+
   health: () => call<{ ok: boolean; identity: string }>("/health"),
 
   listPresets: async (): Promise<Preset[]> => {

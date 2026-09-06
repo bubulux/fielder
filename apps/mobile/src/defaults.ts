@@ -9,4 +9,5 @@ export const DEFAULT_SETTINGS: Settings = {
   blackoutEnabled: OVERLAY_DEFAULTS.blackoutEnabled,
   blackoutColor: OVERLAY_DEFAULTS.blackoutColor,
   rigOrientation: "landscape",
+  fitToFrame: false,
 };

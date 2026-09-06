@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ActivityIndicator, Alert, Pressable, StyleSheet, Text, useWindowDimensions, View } from "react-native";
+import { ActivityIndicator, Alert, Pressable, StyleSheet, Text, View, type LayoutChangeEvent } from "react-native";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import * as Location from "expo-location";
 import * as Crypto from "expo-crypto";
@@ -13,6 +13,7 @@ import { store } from "../storage";
 import type { Preset, Settings, ShotMetadata } from "../types";
 import { enqueue, flush } from "../uploads";
 import { syncPresets } from "../presetSync";
+import { LensCarousel } from "../components/LensCarousel";
 import { LensSheet } from "../components/LensSheet";
 import { Overlay } from "../components/Overlay";
 import { PresetSheet } from "../components/PresetSheet";
@@ -20,19 +21,32 @@ import { SettingsSheet } from "../components/SettingsSheet";
 import { colors } from "../components/ui";
 
 const CONTROLS_SIZE = 104;
+const LENS_STRIP = 72;
 const MAX_UPLOAD_EDGE = 1280;
 
 type Sheet = "rig" | "lens" | "settings" | null;
 
-export function Viewfinder() {
-  const window = useWindowDimensions();
+interface Props {
+  settings: Settings;
+  onSettings: (s: Settings) => void;
+  /** Whether this tab is on screen; the camera is released otherwise. */
+  active: boolean;
+}
+
+export function Viewfinder({ settings, onSettings, active: tabActive }: Props) {
+  const [size, setSize] = useState<Box>({ width: 0, height: 0 });
+  const onLayout = (e: LayoutChangeEvent) => {
+    const { width, height } = e.nativeEvent.layout;
+    if (width !== size.width || height !== size.height) setSize({ width, height });
+  };
+  const window = size;
   const portrait = window.height >= window.width;
+  const setSettings = (u: Settings | ((s: Settings) => Settings)) => onSettings(typeof u === "function" ? u(settings) : u);
   const [camPerm, requestCamPerm] = useCameraPermissions();
   const [locPerm, requestLocPerm] = Location.useForegroundPermissions();
   const camera = useRef<CameraView>(null);
   const [cameraReady, setCameraReady] = useState(false);
 
-  const [settings, setSettings] = useState<Settings>(() => store.loadSettings());
   const [presets, setPresets] = useState<Preset[]>(() => store.loadPresets());
   const [activeId, setActiveId] = useState<string | null>(() => store.loadActivePresetId());
   const [lensMm, setLensMm] = useState<number>(() => store.loadLensMm());
@@ -44,7 +58,6 @@ export function Viewfinder() {
   const active = presets.find((p) => p.id === activeId) ?? presets[0] ?? null;
 
   // Persist on change.
-  useEffect(() => { store.saveSettings(settings); }, [settings]);
   useEffect(() => { store.savePresets(presets); }, [presets]);
   useEffect(() => { store.saveActivePresetId(activeId); }, [activeId]);
   useEffect(() => { store.saveLensMm(lensMm); }, [lensMm]);
@@ -77,8 +90,8 @@ export function Viewfinder() {
 
   // Layout: preview box fills the space left after the control strip.
   const area: Box = portrait
-    ? { width: window.width, height: window.height - CONTROLS_SIZE }
-    : { width: window.width - CONTROLS_SIZE, height: window.height };
+    ? { width: window.width, height: Math.max(0, window.height - CONTROLS_SIZE - 64) }
+    : { width: Math.max(0, window.width - CONTROLS_SIZE - LENS_STRIP), height: window.height };
   const preview = useMemo(() => previewBox(area), [area.width, area.height]);
   const overlay = useMemo(
     () => (active ? computeOverlay(settings, active, lensMm, preview) : null),
@@ -172,7 +185,7 @@ export function Viewfinder() {
     showToast(r.remaining === 0 ? "All uploaded" : `${r.remaining} still pending${r.lastError ? `: ${r.lastError}` : ""}`);
   }
 
-  if (!camPerm) return <View style={s.root} />;
+  if (!camPerm) return <View style={s.root} onLayout={onLayout} />;
   if (!camPerm.granted) {
     return (
       <View style={[s.root, s.center]}>
@@ -182,19 +195,27 @@ export function Viewfinder() {
     );
   }
 
+  const lensStrip = (
+    <LensCarousel lensMm={lensMm} onChange={setLensMm} vertical={!portrait} length={portrait ? window.width : window.height} />
+  );
+
   return (
-    <View style={[s.root, { flexDirection: portrait ? "column" : "row" }]}>
+    <View style={[s.root, { flexDirection: portrait ? "column" : "row" }]} onLayout={onLayout}>
       <StatusBar hidden />
+      {!portrait && lensStrip}
       <View style={[s.previewArea, { width: area.width, height: area.height }]}>
-        <View style={{ width: preview.width, height: preview.height, backgroundColor: "#000" }}>
-          <CameraView
-            ref={camera}
-            style={overlay ? { position: "absolute", ...overlay.camera } : StyleSheet.absoluteFill}
-            facing="back"
-            ratio="4:3"
-            animateShutter={false}
-            onCameraReady={() => setCameraReady(true)}
-          />
+        <View style={{ width: preview.width, height: preview.height, backgroundColor: "#000", overflow: "hidden" }}>
+          {window.width > 0 && (
+            <CameraView
+              ref={camera}
+              active={tabActive}
+              style={overlay ? { position: "absolute", ...overlay.camera } : StyleSheet.absoluteFill}
+              facing="back"
+              ratio="4:3"
+              animateShutter={false}
+              onCameraReady={() => setCameraReady(true)}
+            />
+          )}
           {overlay && <Overlay preview={preview} rect={overlay.rect} settings={settings} exceedsPreview={overlay.exceedsPreview} />}
           {/* HUD */}
           <View style={s.hud} pointerEvents="none">
@@ -205,6 +226,7 @@ export function Viewfinder() {
                   {round(overlay.framing.effectiveFocalLengthMm)} mm eff · {round(overlay.framing.fullFrameEquivalentMm)} mm FF-eq · {formatDeg(overlay.framing.fov.horizontal)} × {formatDeg(overlay.framing.fov.vertical)}
                 </Text>
                 {overlay.exceedsPreview && <Text style={s.hudWarn}>Rig sees more than the phone camera: live image shrunk to fit the frame; black areas are outside the phone's view</Text>}
+                {settings.fitToFrame && !overlay.exceedsPreview && <Text style={s.hudWarn}>Fit: digital zoom ×{(overlay.camera.width / preview.width).toFixed(2)}</Text>}
               </>
             ) : (
               <Text style={s.hudWarn}>No rig selected. Tap "Rig" to create one.</Text>
@@ -215,9 +237,11 @@ export function Viewfinder() {
         </View>
       </View>
 
+      {portrait && lensStrip}
       <View style={[s.controls, portrait ? { height: CONTROLS_SIZE, flexDirection: "row" } : { width: CONTROLS_SIZE, flexDirection: "column" }]}>
         <Ctl label="Rig" value={active ? "●" : "＋"} onPress={() => setSheet("rig")} />
-        <Ctl label="Lens" value={`${lensMm}`} onPress={() => setSheet("lens")} />
+        <Ctl label="Custom" value={`${lensMm}`} onPress={() => setSheet("lens")} />
+        <Ctl label="Fit" value={settings.fitToFrame ? "ON" : "off"} onPress={() => setSettings((x) => ({ ...x, fitToFrame: !x.fitToFrame }))} accent={settings.fitToFrame} />
         <Pressable onPress={capture} disabled={!!busy || !active || !cameraReady} style={[s.shutter, (!!busy || !active || !cameraReady) && { opacity: 0.4 }]}>
           {busy === "capture" ? <ActivityIndicator color="#000" /> : <View style={s.shutterInner} />}
         </Pressable>
@@ -235,10 +259,10 @@ export function Viewfinder() {
   );
 }
 
-function Ctl({ label, value, onPress }: { label: string; value: string; onPress: () => void }) {
+function Ctl({ label, value, onPress, accent }: { label: string; value: string; onPress: () => void; accent?: boolean }) {
   return (
     <Pressable onPress={onPress} style={s.ctl} hitSlop={8}>
-      <Text style={s.ctlValue}>{value}</Text>
+      <Text style={[s.ctlValue, accent && { color: colors.accent }]}>{value}</Text>
       <Text style={s.ctlLabel}>{label}</Text>
     </Pressable>
   );

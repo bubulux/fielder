@@ -23,6 +23,8 @@ export interface Settings {
   blackoutEnabled: boolean;
   blackoutColor: string;
   rigOrientation: RigOrientation;
+  /** Digitally scale the preview so the rig frame fills the screen. */
+  fitToFrame: boolean;
 }
 
 export interface ShotMetadata {

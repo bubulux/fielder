@@ -41,3 +41,12 @@ test("portrait rig swaps axes; very wide lens flags clipping", () => {
   const n = computeOverlay(DEFAULT_SETTINGS, ff, 50, preview);
   near(n.camera.width, preview.width); near(n.camera.left, 0);
 });
+
+test("fit mode magnifies until the frame fills the limiting axis", () => {
+  const preview = previewBox({ width: 1080, height: 2400 });
+  const fit = computeOverlay({ ...DEFAULT_SETTINGS, fitToFrame: true }, ff, 85, preview);
+  near(Math.max(fit.rect.width / preview.width, fit.rect.height / preview.height), 1);
+  assert.ok(fit.camera.width > preview.width); // magnified beyond the box, clipped by overflow
+  near(fit.camera.left + fit.camera.width / 2, preview.width / 2);
+  assert.equal(fit.exceedsPreview, false);
+});
