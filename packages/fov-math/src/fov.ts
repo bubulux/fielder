@@ -16,7 +16,7 @@ export interface FovDeg {
 }
 
 export interface FramingResult {
-  /** Lens focal length after the speedbooster (mm). */
+  /** Lens focal length after the speedbooster (mm): lens × factor. A 0.64 reducer makes an 18 mm behave like 11.5 mm. */
   effectiveFocalLengthMm: number;
   /** Crop factor of the bare sensor vs. full frame, by diagonal. */
   sensorCropFactor: number;
@@ -40,7 +40,7 @@ export function computeFraming(rig: Rig, lensMm: number): FramingResult {
   if (!(rig.speedboosterFactor > 0)) throw new RangeError("speedboosterFactor must be > 0");
   if (!(lensMm > 0)) throw new RangeError("lensMm must be > 0");
 
-  const effectiveFocalLengthMm = lensMm / rig.speedboosterFactor;
+  const effectiveFocalLengthMm = lensMm * rig.speedboosterFactor;
   const sensorCropFactor = diagonalMm(FULL_FRAME) / diagonalMm(rig.sensor);
   const effectiveCropFactor = sensorCropFactor * rig.speedboosterFactor;
 

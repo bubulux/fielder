@@ -14,7 +14,7 @@ export function Overlay({ preview, rect, settings, exceedsPreview }: Props) {
   const right = preview.width - rect.left - rect.width;
   const bottom = preview.height - rect.top - rect.height;
   const tint = settings.blackoutEnabled ? settings.blackoutColor : "transparent";
-  const borderColor = exceedsPreview ? "#FF3B30" : settings.borderColor;
+  const borderColor = settings.borderColor;
   return (
     <View pointerEvents="none" style={[StyleSheet.absoluteFill, { width: preview.width, height: preview.height }]}>
       {settings.blackoutEnabled && (
@@ -34,7 +34,7 @@ export function Overlay({ preview, rect, settings, exceedsPreview }: Props) {
           height: rect.height,
           borderWidth: settings.borderWidthPx,
           borderColor,
-          borderStyle: exceedsPreview ? "dashed" : "solid",
+          borderStyle: exceedsPreview ? "dashed" : "solid", // dashed = frame extends beyond what the phone can see
         }}
       />
     </View>

@@ -33,5 +33,11 @@ test("portrait rig swaps axes; very wide lens flags clipping", () => {
   near(port.rect.height / preview.height, expected);
   const wide = computeOverlay(DEFAULT_SETTINGS, ff, 12, preview);
   assert.equal(wide.exceedsPreview, true);
-  assert.ok(wide.rect.width <= preview.width + 1e-9);
+  // Rig frame fills the limiting axis exactly; camera image is shrunk inside it, centred.
+  near(Math.max(wide.rect.width / preview.width, wide.rect.height / preview.height), 1);
+  assert.ok(wide.camera.width < preview.width && wide.camera.height < preview.height);
+  near(wide.camera.left + wide.camera.width / 2, preview.width / 2);
+  // Not exceeding: camera image is the whole box.
+  const n = computeOverlay(DEFAULT_SETTINGS, ff, 50, preview);
+  near(n.camera.width, preview.width); near(n.camera.left, 0);
 });

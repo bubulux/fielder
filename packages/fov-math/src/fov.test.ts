@@ -20,12 +20,25 @@ test("50mm on full frame, no booster: textbook FOV", () => {
 test("MFT crop factor ≈ 2.0; 0.64 booster brings 50mm to 32mm effective", () => {
   const r = computeFraming({ sensor: mft, speedboosterFactor: 0.64 }, 50);
   near(r.sensorCropFactor, 2.0, 0.02);
-  near(r.effectiveFocalLengthMm, 78.125, 1e-6);
+  near(r.effectiveFocalLengthMm, 32, 1e-6);
   near(r.effectiveCropFactor, 1.28, 0.02);
   near(r.fullFrameEquivalentMm, 64, 1);
-  // Same FOV as a 78.125mm lens on the bare sensor.
-  const bare = computeFraming({ sensor: mft, speedboosterFactor: 1 }, 78.125);
+  // Same FOV as a 32mm lens on the bare sensor.
+  const bare = computeFraming({ sensor: mft, speedboosterFactor: 1 }, 32);
   near(r.fov.horizontal, bare.fov.horizontal, 1e-9);
+});
+
+test("FOV and full-frame equivalent agree with each other", () => {
+  // Real-world check from the field: Pocket 4K (4K DCI) + 0.64 booster + 18mm.
+  const r = computeFraming({ sensor: { widthMm: 18.96, heightMm: 10 }, speedboosterFactor: 0.64 }, 18);
+  near(r.effectiveFocalLengthMm, 11.52, 1e-6);
+  near(r.fov.horizontal, 78.9, 0.2);
+  // The FF-equivalent lens must produce the same horizontal FOV on a sensor of the same aspect and FF diagonal.
+  const ffDiag = Math.hypot(36, 24);
+  const aspect = 18.96 / 10;
+  const eqSensor = { widthMm: ffDiag * aspect / Math.hypot(aspect, 1), heightMm: ffDiag / Math.hypot(aspect, 1) };
+  const eq = computeFraming({ sensor: eqSensor, speedboosterFactor: 1 }, r.fullFrameEquivalentMm);
+  near(eq.fov.horizontal, r.fov.horizontal, 1e-9);
 });
 
 test("rejects invalid inputs", () => {

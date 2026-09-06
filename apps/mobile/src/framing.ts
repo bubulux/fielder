@@ -26,8 +26,16 @@ export function previewBox(window: Box, sensorAspect: number = PHONE.sensorAspec
 
 export interface OverlayLayout {
   framing: FramingResult;
+  /** Rig frame in preview-box coordinates. */
   rect: Rect;
+  /** True when the rig sees more than the phone in at least one axis. */
   exceedsPreview: boolean;
+  /**
+   * Live camera image, in preview-box coordinates. Equals the whole box unless the rig
+   * sees more than the phone; then the image is shrunk (and centred) so the rig frame can be
+   * drawn at true proportion around it. Everything outside the image is unknown to the phone.
+   */
+  camera: Rect;
   phoneFov: { horizontalFovDeg: number; verticalFovDeg: number };
 }
 
@@ -41,12 +49,17 @@ export function computeOverlay(settings: Settings, preset: Preset, lensMm: numbe
   // so the rig's horizontal FOV maps to the screen's horizontal axis unless the rig is held portrait.
   const rigFov = settings.rigOrientation === "portrait" ? rotateFov(framing.fov) : framing.fov;
   const r = overlayRect(rigFov, phoneFov);
-  const width = Math.min(r.widthFraction, 1) * preview.width;
-  const height = Math.min(r.heightFraction, 1) * preview.height;
+  // Shrink the camera image when the rig frame would not fit.
+  const scale = 1 / Math.max(1, r.widthFraction, r.heightFraction);
+  const camW = preview.width * scale;
+  const camH = preview.height * scale;
+  const width = r.widthFraction * camW;
+  const height = r.heightFraction * camH;
   return {
     framing,
     phoneFov,
     exceedsPreview: r.exceedsPreview,
+    camera: { left: (preview.width - camW) / 2, top: (preview.height - camH) / 2, width: camW, height: camH },
     rect: { left: (preview.width - width) / 2, top: (preview.height - height) / 2, width, height },
   };
 }

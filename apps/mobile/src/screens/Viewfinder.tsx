@@ -178,8 +178,15 @@ export function Viewfinder() {
     <View style={[s.root, { flexDirection: portrait ? "column" : "row" }]}>
       <StatusBar hidden />
       <View style={[s.previewArea, { width: area.width, height: area.height }]}>
-        <View style={{ width: preview.width, height: preview.height }}>
-          <CameraView ref={camera} style={StyleSheet.absoluteFill} facing="back" ratio="4:3" animateShutter={false} onCameraReady={() => setCameraReady(true)} />
+        <View style={{ width: preview.width, height: preview.height, backgroundColor: "#000" }}>
+          <CameraView
+            ref={camera}
+            style={overlay ? { position: "absolute", ...overlay.camera } : StyleSheet.absoluteFill}
+            facing="back"
+            ratio="4:3"
+            animateShutter={false}
+            onCameraReady={() => setCameraReady(true)}
+          />
           {overlay && <Overlay preview={preview} rect={overlay.rect} settings={settings} exceedsPreview={overlay.exceedsPreview} />}
           {/* HUD */}
           <View style={s.hud} pointerEvents="none">
@@ -189,7 +196,7 @@ export function Viewfinder() {
                 <Text style={s.hudSub}>
                   {round(overlay.framing.effectiveFocalLengthMm)} mm eff · {round(overlay.framing.fullFrameEquivalentMm)} mm FF-eq · {formatDeg(overlay.framing.fov.horizontal)} × {formatDeg(overlay.framing.fov.vertical)}
                 </Text>
-                {overlay.exceedsPreview && <Text style={s.hudWarn}>Rig sees more than the phone: frame clipped</Text>}
+                {overlay.exceedsPreview && <Text style={s.hudWarn}>Rig sees more than the phone camera: live image shrunk to fit the frame; black areas are outside the phone's view</Text>}
               </>
             ) : (
               <Text style={s.hudWarn}>No rig selected. Tap "Rig" to create one.</Text>
