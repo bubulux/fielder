@@ -83,7 +83,7 @@ export function Prep({ settings, data }: Props) {
   const navBtn = (dir: -1 | 1) => {
     const disabled = dir < 0 ? atStart : atEnd;
     return (
-      <Pressable onPress={() => setIndex((i) => i + dir)} disabled={disabled} style={[p.nav, portrait ? { flex: 1, height: NAV } : { width: NAV, flex: 1 }, disabled && { opacity: 0.25 }]} hitSlop={8}>
+      <Pressable onPress={() => setIndex((i) => i + dir)} disabled={disabled} style={[p.nav, portrait ? { flex: 1, height: NAV } : { width: NAV, alignSelf: "stretch" }, disabled && { opacity: 0.25 }]} hitSlop={8}>
         <Text style={p.navText}>{dir < 0 ? "◀" : "▶"}</Text>
       </Pressable>
     );

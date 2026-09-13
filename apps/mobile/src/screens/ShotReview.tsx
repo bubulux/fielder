@@ -65,7 +65,7 @@ export function ShotReview({ draft, settings, locations, countAt, onUpload, onDi
           </ScrollView>
         ) : (
           <View style={{ flex: 1, flexDirection: "row" }}>
-            <View style={{ padding: 16 }}>{photo}</View>
+            <ScrollView contentContainerStyle={{ padding: 16 }} style={{ flexGrow: 0 }}>{photo}</ScrollView>
             <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ padding: 16, paddingBottom: 40 }} style={{ flex: 1 }}>
               {form}
             </ScrollView>
