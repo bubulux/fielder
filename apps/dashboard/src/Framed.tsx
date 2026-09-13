@@ -11,15 +11,24 @@ const pct = (r: PctRect) => ({ left: `${r.left}%`, top: `${r.top}%`, width: `${r
  * which case the photo is shrunk inside the frame exactly like in the app.
  * "fit" crops the photo to the frame instead.
  */
-export function Framed({ shot, mode, className }: { shot: Shot; mode: MaskMode; className?: string }) {
+/**
+ * `maxHeight` (a CSS length, e.g. "88vh") sizes the box to fit both the available width and that
+ * height while keeping the photo's aspect ratio; without it the box fills its parent's width.
+ * The box always has the photo's aspect ratio (or the frame's in fit mode) so the percentage
+ * geometry of frame and tints lines up with the image.
+ */
+export function Framed({ shot, mode, className, maxHeight }: { shot: Shot; mode: MaskMode; className?: string; maxHeight?: string }) {
   const f = frameOf(shot);
   const img = shot.image_url;
-  if (!f || mode === "off") return <div class={`framed ${className ?? ""}`}><img src={img} alt="" loading="lazy" /></div>;
+  const photoAspect = imageAspect(shot);
+  const l = f && mode !== "off" ? frameLayout(f, mode, photoAspect) : null;
+  const aspect = l?.aspect ?? photoAspect;
+  const style = { aspectRatio: String(aspect), height: "auto", width: maxHeight ? `min(100%, calc(${maxHeight} * ${aspect}))` : undefined };
+  if (!l) return <div class={`framed ${className ?? ""}`} style={style}><img src={img} alt="" loading="lazy" /></div>;
 
-  const l = frameLayout(f, mode, imageAspect(shot));
   const fullImg = l.img.left === 0 && l.img.width === 100 && l.img.height === 100;
   return (
-    <div class={`framed ${className ?? ""}`} style={l.aspect ? { aspectRatio: String(l.aspect), height: "auto" } : undefined}>
+    <div class={`framed ${className ?? ""}`} style={style}>
       <img src={img} alt="" loading="lazy" style={fullImg ? undefined : { inset: "auto", ...pct(l.img) }} />
       {mode === "mask" && l.frame && (
         <>

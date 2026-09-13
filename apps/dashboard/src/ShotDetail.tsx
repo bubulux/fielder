@@ -1,4 +1,4 @@
-import { useState } from "preact/hooks";
+import { useEffect, useState } from "preact/hooks";
 import { extraLabel, label } from "@fielder/vocab";
 import { deleteShot, patchShot, type Location, type Shot, type ShotState } from "./api";
 import { coords, fovLabel, placeLabel, rigDescription, shotTitle, stateColor, when } from "./format";
@@ -19,12 +19,30 @@ interface Props {
   onDeleted: (id: string) => void;
   onShowOnMap: (s: Shot) => void;
   onClose: () => void;
+  /** The list the shot was opened from, for prev/next. */
+  list: Shot[];
+  onNavigate: (s: Shot) => void;
 }
 
-export function ShotDetail({ shot, initialMode, locations, onLocations, onUpdated, onDeleted, onShowOnMap, onClose }: Props) {
+export function ShotDetail({ shot, initialMode, locations, onLocations, onUpdated, onDeleted, onShowOnMap, onClose, list, onNavigate }: Props) {
   const [mode, setMode] = useState<MaskMode>(initialMode);
   const [editing, setEditing] = useState(false);
   const [busy, setBusy] = useState(false);
+  const index = list.findIndex((s) => s.id === shot.id);
+  const prev = index > 0 ? list[index - 1] : null;
+  const next = index >= 0 && index < list.length - 1 ? list[index + 1] : null;
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const t = e.target as HTMLElement | null;
+      if (t && (t.tagName === "INPUT" || t.tagName === "SELECT" || t.tagName === "TEXTAREA")) return;
+      if (e.key === "ArrowLeft" && prev) { e.preventDefault(); onNavigate(prev); }
+      else if (e.key === "ArrowRight" && next) { e.preventDefault(); onNavigate(next); }
+      else if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [prev, next, onNavigate, onClose]);
 
   async function setState(state: ShotState) {
     setBusy(true);
@@ -38,7 +56,12 @@ export function ShotDetail({ shot, initialMode, locations, onLocations, onUpdate
   return (
     <div class="detail-backdrop" onClick={onClose}>
       <div class="detail" onClick={(e) => e.stopPropagation()}>
-        <Framed shot={shot} mode={mode} />
+        <div class="stage">
+          <Framed shot={shot} mode={mode} maxHeight="88vh" />
+          <button class="nav left" title="Previous (←)" disabled={!prev} onClick={() => prev && onNavigate(prev)}>‹</button>
+          <button class="nav right" title="Next (→)" disabled={!next} onClick={() => next && onNavigate(next)}>›</button>
+          {index >= 0 && list.length > 1 && <span class="counter">{index + 1} / {list.length}</span>}
+        </div>
         <div class="side">
           <div class="side-top">
             <div>

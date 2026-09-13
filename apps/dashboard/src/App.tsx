@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "preact/hooks";
 import { SHOT_STATES } from "@fielder/vocab";
 import { fetchAllShots, fetchLocations, fetchPresets, fetchViews, type Location, type Preset, type SavedView, type Shot, type ShotState } from "./api";
-import { isFrameMode, placeLabel, rigLabel, shotTitle, when } from "./format";
+import { isFrameMode, placeLabel, rigLabel, shotTitle, tagsLabel, when } from "./format";
 import { Framed, type MaskMode } from "./Framed";
 import { Locations } from "./Locations";
 import { MapView } from "./MapView";
@@ -14,6 +14,8 @@ import { Views } from "./Views";
 type Tab = "gallery" | "review" | "map" | "views" | "rigs" | "locations";
 const TABS: Tab[] = ["gallery", "review", "map", "views", "rigs", "locations"];
 type Filter = ShotState | "all";
+type Layout = "grid" | "list";
+function loadLayout(): Layout { try { return localStorage.getItem("layout") === "list" ? "list" : "grid"; } catch { return "grid"; } }
 
 function loadMask(): MaskMode {
   try { const v = localStorage.getItem("maskMode"); if (isFrameMode(v)) return v; } catch { /* ignore */ }
@@ -32,6 +34,10 @@ export function App() {
   const [focus, setFocus] = useState<Shot | null>(null);
   const [filter, setFilter] = useState<Filter>("all");
   const [mask, setMaskState] = useState<MaskMode>(loadMask);
+  const [layout, setLayoutState] = useState<Layout>(loadLayout);
+  const setLayout = (l: Layout) => { setLayoutState(l); try { localStorage.setItem("layout", l); } catch { /* ignore */ } };
+  /** The list the open shot belongs to, for prev/next in the dialog. */
+  const [openList, setOpenList] = useState<Shot[]>([]);
   const setMask = (m: MaskMode) => { setMaskState(m); try { localStorage.setItem("maskMode", m); } catch { /* ignore */ } };
 
   const load = () => Promise.all([fetchAllShots().then(setShots), fetchPresets().then(setPresets), fetchLocations().then(setLocations), fetchViews().then(setViews)]).catch((e: Error) => setError(e.message));
@@ -44,7 +50,7 @@ export function App() {
 
   const updated = (s: Shot) => { setShots((cur) => (cur ?? []).map((x) => (x.id === s.id ? s : x))); setOpen((cur) => (cur?.id === s.id ? s : cur)); void fetchLocations().then(setLocations).catch(() => {}); };
   const deleted = (id: string) => { setShots((cur) => (cur ?? []).filter((x) => x.id !== id)); void fetchLocations().then(setLocations).catch(() => {}); };
-  const openShot = (s: Shot) => setOpen(s);
+  const openShot = (s: Shot, list?: Shot[]) => { setOpenList(list ?? visible); setOpen(s); };
 
   return (
     <div class="app">
@@ -57,6 +63,12 @@ export function App() {
           </div>
         )}
         {(tab === "gallery" || tab === "map" || tab === "views") && <ModeSwitch value={mask} onChange={setMask} />}
+        {tab === "gallery" && (
+          <div class="seg" title="Layout">
+            <button class={layout === "grid" ? "active" : ""} onClick={() => setLayout("grid")}>Grid</button>
+            <button class={layout === "list" ? "active" : ""} onClick={() => setLayout("list")}>List</button>
+          </div>
+        )}
         <nav class="tabs">
           {TABS.map((t) => <button key={t} class={tab === t ? "active" : ""} onClick={() => setTab(t)}>{t === "review" && unreviewed ? `Review (${unreviewed})` : t[0].toUpperCase() + t.slice(1)}</button>)}
           <button onClick={() => { setShots(null); setPresets(null); setLocations(null); void load(); }} title="Reload">↻</button>
@@ -66,7 +78,27 @@ export function App() {
         {error && <div class="status">Could not load: {error}</div>}
         {!error && !shots && <div class="status">Loading…</div>}
         {shots && tab === "gallery" && (
-          visible.length === 0 ? <div class="status">{filter === "all" ? "No shots yet. Capture one with the phone app." : `No ${filter} shots.`}</div> : (
+          visible.length === 0 ? <div class="status">{filter === "all" ? "No shots yet. Capture one with the phone app." : `No ${filter} shots.`}</div>
+          : layout === "list" ? (
+            <div class="list">
+              <table>
+                <thead><tr><th></th><th>Name</th><th>Location</th><th>Tags</th><th>Rig · lens</th><th>Date</th><th>State</th></tr></thead>
+                <tbody>
+                  {visible.map((s) => (
+                    <tr key={s.id} onClick={() => openShot(s)}>
+                      <td class="thumb"><Framed shot={s} mode={mask} /></td>
+                      <td class="name">{shotTitle(s)}</td>
+                      <td>{placeLabel(s) || "—"}</td>
+                      <td class="meta">{tagsLabel(s) || "—"}</td>
+                      <td class="meta">{rigLabel(s)}</td>
+                      <td class="meta">{when(s.timestamp)}</td>
+                      <td><Badge shot={s} /></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
             <div class="gallery">
               {visible.map((s) => (
                 <article class="card" key={s.id} onClick={() => openShot(s)}>
@@ -82,7 +114,7 @@ export function App() {
           )
         )}
         {shots && tab === "review" && <Review shots={shots} mask={mask} onUpdated={updated} onDeleted={deleted} onOpen={openShot} />}
-        {shots && tab === "map" && <MapView shots={visible} onOpen={openShot} focus={focus} mask={mask} />}
+        {shots && tab === "map" && <MapView shots={visible} onOpen={(s) => openShot(s, visible)} focus={focus} mask={mask} />}
         {shots && tab === "views" && <Views shots={shots} locations={locations ?? []} presets={presets ?? []} views={views} onViews={setViews} mask={mask} onOpen={openShot} />}
         {tab === "rigs" && <Rigs presets={presets} shots={shots ?? []} onChange={setPresets} />}
         {tab === "locations" && <Locations locations={locations} onChange={setLocations} onShotsChanged={() => void fetchAllShots().then(setShots).catch(() => {})} />}
@@ -98,6 +130,8 @@ export function App() {
           onDeleted={deleted}
           onShowOnMap={(s) => { setTab("map"); setFocus(s); setOpen(null); }}
           onClose={() => setOpen(null)}
+          list={openList.map((x) => (shots ?? []).find((y) => y.id === x.id) ?? x)}
+          onNavigate={setOpen}
         />
       )}
     </div>

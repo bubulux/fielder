@@ -5,7 +5,7 @@ import { Framed, type MaskMode } from "./Framed";
 import { MapView } from "./MapView";
 import { Badge } from "./ShotDetail";
 
-export function FilterBuilderResults({ shots, total, mask, onOpen }: { shots: Shot[]; total: number; mask: MaskMode; onOpen: (s: Shot) => void }) {
+export function FilterBuilderResults({ shots, total, mask, onOpen }: { shots: Shot[]; total: number; mask: MaskMode; onOpen: (s: Shot, list: Shot[]) => void }) {
   const [show, setShow] = useState<"grid" | "map">("grid");
   return (
     <div class="results">
@@ -17,11 +17,11 @@ export function FilterBuilderResults({ shots, total, mask, onOpen }: { shots: Sh
         </div>
       </div>
       {show === "map" ? (
-        <div class="results-map"><MapView shots={shots} onOpen={onOpen} mask={mask} /></div>
+        <div class="results-map"><MapView shots={shots} onOpen={(s) => onOpen(s, shots)} mask={mask} /></div>
       ) : shots.length === 0 ? <div class="status">No shots match.</div> : (
         <div class="gallery results-grid">
           {shots.map((s) => (
-            <article class="card" key={s.id} onClick={() => onOpen(s)}>
+            <article class="card" key={s.id} onClick={() => onOpen(s, shots)}>
               <Framed shot={s} mode={mask} />
               <div class="body">
                 <div class="title">{shotTitle(s)}</div>

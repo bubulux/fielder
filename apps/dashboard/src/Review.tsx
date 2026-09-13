@@ -10,7 +10,7 @@ interface Props {
   mask: MaskMode;
   onUpdated: (s: Shot) => void;
   onDeleted: (id: string) => void;
-  onOpen: (s: Shot) => void;
+  onOpen: (s: Shot, list: Shot[]) => void;
 }
 
 /** Unreviewed shots one at a time, oldest first. */
@@ -46,7 +46,7 @@ export function Review({ shots, mask, onUpdated, onDeleted, onOpen }: Props) {
           <div class="actions wrap" style="justify-content:flex-start">
             <button class="btn primary" disabled={busy} onClick={() => void setState(current, "approved")}>Approve</button>
             <button class="btn" disabled={busy} onClick={() => void setState(current, "archived")}>Archive</button>
-            <button class="btn" onClick={() => onOpen(current)}>Details / edit</button>
+            <button class="btn" onClick={() => onOpen(current, queue)}>Details / edit</button>
             {queue.length > 1 && <button class="btn" onClick={() => setSkipped((s) => [...s, current.id])}>Skip</button>}
             <button class="btn danger" onClick={() => void remove(current)}>Delete</button>
           </div>

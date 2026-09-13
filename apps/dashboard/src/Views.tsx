@@ -13,7 +13,7 @@ interface Props {
   views: SavedView[] | null;
   onViews: (v: SavedView[]) => void;
   mask: MaskMode;
-  onOpen: (s: Shot) => void;
+  onOpen: (s: Shot, list: Shot[]) => void;
 }
 
 /** Filter tool: build a query, see matching shots, save it as a named view on the server. */

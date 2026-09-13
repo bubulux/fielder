@@ -39,7 +39,7 @@ export function MapView({ shots, onOpen, focus, mask }: Props) {
       const box = html.querySelector(".framed") as HTMLElement;
       const p = popupFrameHtml(s, mask);
       box.innerHTML = p.html;
-      if (p.aspect) box.style.aspectRatio = String(p.aspect);
+      box.style.aspectRatio = String(p.aspect ?? imageAspect(s));
       html.querySelector(".title")!.textContent = shotTitle(s);
       html.querySelectorAll(".sub")[0]!.textContent = `${placeLabel(s) || rigLabel(s)} · ${s.state}`;
       html.querySelectorAll(".sub")[1]!.textContent = when(s.timestamp);
