@@ -10,11 +10,13 @@ function ensureDir() {
   if (!dir.exists) dir.create({ intermediates: true });
 }
 
-/** Copy the temp capture into app storage and enqueue it; returns the queue entry. */
+/** Copy the temp capture into app storage and enqueue it; returns the queue entry. Throws if the photo cannot be stored. */
 export function enqueue(metadata: ShotMetadata, tempUri: string): PendingUpload {
   ensureDir();
   const dest = new File(dir, `${metadata.id}.jpg`);
-  new File(tempUri).copy(dest);
+  // copy() is async in this SDK; the caller deletes the temp file right after, so the copy must be complete here.
+  new File(tempUri).copySync(dest, { overwrite: true });
+  if (!dest.exists) throw new Error("could not store the photo for upload");
   const entry: PendingUpload = { metadata, fileUri: dest.uri, attempts: 0 };
   store.savePending([...store.loadPending(), entry]);
   return entry;
@@ -48,6 +50,12 @@ export function flush(): Promise<FlushResult> {
       }
     }
     for (const entry of store.loadPending()) {
+      if (!new File(entry.fileUri).exists) {
+        // The photo is gone (e.g. queued by a build with the copy race); nothing can ever be uploaded for it.
+        remove(entry.metadata.id);
+        lastError = "a queued shot lost its photo and was dropped";
+        continue;
+      }
       try {
         await api.uploadShot(entry.metadata, entry.fileUri);
         remove(entry.metadata.id);

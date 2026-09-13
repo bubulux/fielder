@@ -209,7 +209,12 @@ export function Viewfinder({ settings, onSettings, active: tabActive, shots, loc
     if (!draft) return;
     if (newLocation) { setLocations([...locations, newLocation]); store.saveLocations([...locations, newLocation]); }
     const metadata: ShotMetadata = { ...draft.base, ...tags };
-    enqueue(metadata, draft.uri);
+    try {
+      enqueue(metadata, draft.uri);
+    } catch (err) {
+      Alert.alert("Could not save the shot", err instanceof Error ? err.message : String(err));
+      return; // keep the review form open so nothing is lost
+    }
     discardDraft();
     const r = await flush();
     setPendingCount(r.remaining);
