@@ -35,7 +35,8 @@
     "typecheck": "tsc -p .",
     "build:apk": "eas build --platform android --profile apk",
     "start:lan": "expo start --dev-client",
-    "build:dev-client": "eas build --platform android --profile dev-client"
+    "build:dev-client": "eas build --platform android --profile dev-client",
+    "build:apk:local": "eas build --local --platform android --profile apk --output ../../../fielder-builds/fielder-$(git rev-parse --short HEAD).apk"
   },
   "private": true
 }

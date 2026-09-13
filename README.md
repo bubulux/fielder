@@ -46,6 +46,19 @@ pnpm -C apps/worker dev            # http://localhost:8787
 pnpm -C apps/dashboard dev         # http://localhost:5173, proxies /api to 8787
 ```
 
+## Local APK builds (no EAS quota)
+
+EAS free plan allows a limited number of cloud Android builds per month. The same APK can be built locally in WSL with the same keystore (fetched from Expo):
+
+```bash
+export JAVA_HOME=$(ls -d ~/tools/jdk-17*) ANDROID_HOME=~/Android/Sdk ANDROID_SDK_ROOT=~/Android/Sdk
+export PATH=$JAVA_HOME/bin:$ANDROID_HOME/platform-tools:$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/cmake/3.22.1/bin:$PATH
+export EXPO_PUBLIC_API_URL=https://fielder-api.fielder-worker.workers.dev
+cd apps/mobile && pnpm build:apk:local     # writes ~/fielder-builds/fielder-<commit>.apk
+```
+
+Toolchain installed on 2026-09-13: Temurin JDK 17 in `~/tools`, Android SDK in `~/Android/Sdk` (platform 36, build-tools 36.0.0, NDK 27.1.12297006, cmake 3.22.1, platform-tools), installed with `sdkmanager` from the command-line tools. A build takes about 10 minutes.
+
 ## Mobile development loop (no APK per change)
 
 Install the **dev client** APK once (EAS profile `dev-client`). Then run Metro with a tunnel,
