@@ -1,4 +1,5 @@
 /** Same-origin API; the Access session cookie is sent automatically. */
+import type { FilterGroup } from "@fielder/vocab";
 export type ShotState = "unreviewed" | "approved" | "archived";
 
 export interface Shot {
@@ -44,6 +45,7 @@ export interface Location {
   shot_count: number;
   approved_count: number;
 }
+export interface SavedView { id: string; name: string; filter: FilterGroup; created_at: string; updated_at: string | null }
 export interface ShotTags { name: string; light: string; weather: string; int_ext: string; location_id: string; extra: Record<string, string> }
 
 export class ApiError extends Error {
@@ -99,3 +101,7 @@ export const fetchLocations = () => get<{ locations: Location[] }>("/api/locatio
 export const putLocation = (l: { id: string; name: string; district: string }) =>
   send<{ location: Location }>("PUT", `/api/locations/${l.id}`, { name: l.name, district: l.district }).then((r) => r.location);
 export const deleteLocation = (id: string) => send<{ deleted: string }>("DELETE", `/api/locations/${id}`).then(() => undefined);
+
+export const fetchViews = () => get<{ views: SavedView[] }>("/api/views").then((r) => r.views);
+export const putView = (v: { id: string; name: string; filter: FilterGroup }) => send<{ view: SavedView }>("PUT", `/api/views/${v.id}`, { name: v.name, filter: v.filter }).then((r) => r.view);
+export const deleteView = (id: string) => send<{ deleted: string }>("DELETE", `/api/views/${id}`).then(() => undefined);

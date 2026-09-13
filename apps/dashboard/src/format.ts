@@ -1,4 +1,4 @@
-import { extraLabel, label, STATE_COLORS } from "@fielder/vocab";
+import { extraLabel, label, STATE_COLORS, type FilterableShot } from "@fielder/vocab";
 import type { Shot } from "./api";
 
 export function framingOf(s: Shot): Record<string, unknown> | null {
@@ -86,4 +86,14 @@ export function frameLayout(f: FrameGeometry, mode: FrameMode, photoAspect: numb
   const img = scale < 1 ? { left: (1 - scale) * 50, top: (1 - scale) * 50, width: scale * 100, height: scale * 100 } : full;
   const w = f.width_fraction * scale * 100, h = f.height_fraction * scale * 100;
   return { img, frame: { left: (100 - w) / 2, top: (100 - h) / 2, width: w, height: h }, shrunk: scale < 1 };
+}
+
+/** Map a shot to the shape the shared filter evaluator expects. */
+export function filterable(s: Shot): FilterableShot {
+  const f = framingOf(s);
+  return {
+    state: s.state, name: s.name, location_id: s.location_id, district: s.district, int_ext: s.int_ext, light: s.light, weather: s.weather,
+    preset_id: s.preset_id, lens_mm: s.lens_mm, timestamp: s.timestamp, extra: s.extra ?? null,
+    ff_eq_mm: typeof f?.full_frame_equivalent_mm === "number" ? f.full_frame_equivalent_mm : null,
+  };
 }

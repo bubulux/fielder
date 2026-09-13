@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "preact/hooks";
 import { SHOT_STATES } from "@fielder/vocab";
-import { fetchAllShots, fetchLocations, fetchPresets, type Location, type Preset, type Shot, type ShotState } from "./api";
+import { fetchAllShots, fetchLocations, fetchPresets, fetchViews, type Location, type Preset, type SavedView, type Shot, type ShotState } from "./api";
 import { isFrameMode, placeLabel, rigLabel, shotTitle, when } from "./format";
 import { Framed, type MaskMode } from "./Framed";
 import { Locations } from "./Locations";
@@ -9,9 +9,10 @@ import { ModeSwitch } from "./ModeSwitch";
 import { Review } from "./Review";
 import { Rigs } from "./Rigs";
 import { Badge, ShotDetail } from "./ShotDetail";
+import { Views } from "./Views";
 
-type Tab = "gallery" | "review" | "map" | "rigs" | "locations";
-const TABS: Tab[] = ["gallery", "review", "map", "rigs", "locations"];
+type Tab = "gallery" | "review" | "map" | "views" | "rigs" | "locations";
+const TABS: Tab[] = ["gallery", "review", "map", "views", "rigs", "locations"];
 type Filter = ShotState | "all";
 
 function loadMask(): MaskMode {
@@ -25,6 +26,7 @@ export function App() {
   const [shots, setShots] = useState<Shot[] | null>(null);
   const [presets, setPresets] = useState<Preset[] | null>(null);
   const [locations, setLocations] = useState<Location[] | null>(null);
+  const [views, setViews] = useState<SavedView[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [open, setOpen] = useState<Shot | null>(null);
   const [focus, setFocus] = useState<Shot | null>(null);
@@ -32,7 +34,7 @@ export function App() {
   const [mask, setMaskState] = useState<MaskMode>(loadMask);
   const setMask = (m: MaskMode) => { setMaskState(m); try { localStorage.setItem("maskMode", m); } catch { /* ignore */ } };
 
-  const load = () => Promise.all([fetchAllShots().then(setShots), fetchPresets().then(setPresets), fetchLocations().then(setLocations)]).catch((e: Error) => setError(e.message));
+  const load = () => Promise.all([fetchAllShots().then(setShots), fetchPresets().then(setPresets), fetchLocations().then(setLocations), fetchViews().then(setViews)]).catch((e: Error) => setError(e.message));
   useEffect(() => { void load(); }, []);
   useEffect(() => { location.hash = tab === "gallery" ? "" : tab; }, [tab]);
 
@@ -54,7 +56,7 @@ export function App() {
             {(["all", ...SHOT_STATES] as Filter[]).map((f) => <button key={f} class={filter === f ? "active" : ""} onClick={() => setFilter(f)}>{f} {counts[f] ?? 0}</button>)}
           </div>
         )}
-        {(tab === "gallery" || tab === "map") && <ModeSwitch value={mask} onChange={setMask} />}
+        {(tab === "gallery" || tab === "map" || tab === "views") && <ModeSwitch value={mask} onChange={setMask} />}
         <nav class="tabs">
           {TABS.map((t) => <button key={t} class={tab === t ? "active" : ""} onClick={() => setTab(t)}>{t === "review" && unreviewed ? `Review (${unreviewed})` : t[0].toUpperCase() + t.slice(1)}</button>)}
           <button onClick={() => { setShots(null); setPresets(null); setLocations(null); void load(); }} title="Reload">↻</button>
@@ -81,6 +83,7 @@ export function App() {
         )}
         {shots && tab === "review" && <Review shots={shots} mask={mask} onUpdated={updated} onDeleted={deleted} onOpen={openShot} />}
         {shots && tab === "map" && <MapView shots={visible} onOpen={openShot} focus={focus} mask={mask} />}
+        {shots && tab === "views" && <Views shots={shots} locations={locations ?? []} presets={presets ?? []} views={views} onViews={setViews} mask={mask} onOpen={openShot} />}
         {tab === "rigs" && <Rigs presets={presets} shots={shots ?? []} onChange={setPresets} />}
         {tab === "locations" && <Locations locations={locations} onChange={setLocations} onShotsChanged={() => void fetchAllShots().then(setShots).catch(() => {})} />}
       </main>

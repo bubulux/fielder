@@ -9,6 +9,7 @@ import { HttpError, json, Router } from "./http.ts";
 import { registerLocationRoutes } from "./locations.ts";
 import { registerPresetRoutes } from "./presets.ts";
 import { registerShotRoutes } from "./shots.ts";
+import { registerViewRoutes } from "./views.ts";
 
 export interface Env {
   DB: D1Database;
@@ -52,6 +53,7 @@ registerAuthRoutes(router);
 registerPresetRoutes(router);
 registerLocationRoutes(router);
 registerShotRoutes(router);
+registerViewRoutes(router);
 
 async function authenticate(request: Request, env: Env): Promise<AccessIdentity> {
   if (env.ACCESS_DEV_BYPASS === "true") return { email: "dev@localhost", kind: "user" };
