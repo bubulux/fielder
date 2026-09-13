@@ -5,14 +5,15 @@ import * as ScreenOrientation from "expo-screen-orientation";
 import type { Shot } from "./src/api";
 import { colors } from "./src/components/ui";
 import { Gallery, useShots, type StateFilter } from "./src/screens/Gallery";
+import { Prep } from "./src/screens/Prep";
 import { Review } from "./src/screens/Review";
 import { MapScreen } from "./src/screens/MapScreen";
 import { Viewfinder } from "./src/screens/Viewfinder";
 import { store } from "./src/storage";
 import type { LocationEntry, Settings } from "./src/types";
 
-type Mode = "shoot" | "review" | "gallery" | "map";
-const ICONS: Record<Mode, string> = { shoot: "◉", review: "☑", gallery: "▦", map: "⌖" };
+type Mode = "shoot" | "review" | "gallery" | "map" | "prep";
+const ICONS: Record<Mode, string> = { shoot: "◉", review: "☑", gallery: "▦", map: "⌖", prep: "▷" };
 const TAB = 52;
 /** Minimum clearance between the UI strips and the screen edge (camera cutout, Android navigation bar). */
 export const EDGE_PAD = 32;
@@ -82,6 +83,7 @@ function App() {
         {mode === "review" && <Review settings={settings} data={shots} onOpen={(s) => { setOpen(s); setMode("gallery"); }} />}
         {mode === "gallery" && <Gallery settings={settings} data={shots} onShowOnMap={(s) => { setFocus(s); setMode("map"); }} filter={filter} onFilter={setFilter}
           locations={locations} onLocations={setLocations} countAt={countAt} open={open} onOpen={setOpen} />}
+        {mode === "prep" && <Prep settings={settings} data={shots} />}
         {mode === "map" && <MapScreen settings={settings} data={shots} focus={focus} filter={filter} locations={locations} onLocations={setLocations} countAt={countAt} open={open} onOpen={setOpen} />}
       </View>
       {tabs}
