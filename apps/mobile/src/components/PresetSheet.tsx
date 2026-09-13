@@ -25,6 +25,8 @@ interface Draft {
   w: string;
   h: string;
   sb: string;
+  lmin: string;
+  lmax: string;
 }
 
 export function PresetSheet({ visible, onClose, presets, activeId, onChange }: Props) {
@@ -32,13 +34,14 @@ export function PresetSheet({ visible, onClose, presets, activeId, onChange }: P
   const patch = (x: Partial<Draft>) => setD((cur) => (cur ? { ...cur, ...x } : cur));
 
   function startNew() {
-    setD({ id: Crypto.randomUUID(), isNew: true, name: "", cameraId: CAMERAS[0].id, formatId: null, w: "", h: "", sb: "1" });
+    setD({ id: Crypto.randomUUID(), isNew: true, name: "", cameraId: CAMERAS[0].id, formatId: null, w: "", h: "", sb: "1", lmin: "", lmax: "" });
   }
   function startEdit(p: Preset) {
     setD({
       id: p.id, isNew: false, name: p.name,
       cameraId: p.cameraId && findFormat(p.cameraId, p.formatId) ? p.cameraId : CUSTOM_CAMERA_ID,
       formatId: p.formatId, w: String(p.sensorWidthMm), h: String(p.sensorHeightMm), sb: String(p.speedboosterFactor),
+      lmin: p.lensMinMm == null ? "" : String(p.lensMinMm), lmax: p.lensMaxMm == null ? "" : String(p.lensMaxMm),
     });
   }
 
@@ -65,6 +68,9 @@ export function PresetSheet({ visible, onClose, presets, activeId, onChange }: P
     if (!d) return;
     const width = num(d.w), height = num(d.h), factor = num(d.sb);
     if (!width || !height || !factor) { Alert.alert("Incomplete", "Sensor width/height and speedbooster factor are required."); return; }
+    const lmin = d.lmin.trim() ? num(d.lmin) : null, lmax = d.lmax.trim() ? num(d.lmax) : null;
+    if ((lmin === null) !== (lmax === null) || (d.lmin.trim() && !lmin) || (d.lmax.trim() && !lmax)) { Alert.alert("Lens range", "Enter both the shortest and the longest focal length, or leave both empty."); return; }
+    if (lmin !== null && lmax !== null && lmin >= lmax) { Alert.alert("Lens range", "The shortest focal length must be smaller than the longest."); return; }
     const isCustom = d.cameraId === CUSTOM_CAMERA_ID;
     const p: Preset = {
       id: d.id,
@@ -72,6 +78,7 @@ export function PresetSheet({ visible, onClose, presets, activeId, onChange }: P
       cameraId: isCustom ? null : d.cameraId,
       formatId: isCustom ? null : d.formatId,
       sensorWidthMm: width, sensorHeightMm: height, speedboosterFactor: factor,
+      lensMinMm: lmin, lensMaxMm: lmax,
       createdAt: presets.find((x) => x.id === d.id)?.createdAt ?? new Date().toISOString(),
       synced: false,
     };
@@ -122,6 +129,7 @@ export function PresetSheet({ visible, onClose, presets, activeId, onChange }: P
               <Text style={{ color: colors.text, fontSize: 15 }}>{active.name}</Text>
               <Text style={{ color: colors.dim, marginTop: 2 }}>{describeRig(active.cameraId, active.formatId, active.sensorWidthMm, active.sensorHeightMm)}</Text>
               <Text style={{ color: colors.dim, marginTop: 2 }}>{active.sensorWidthMm} × {active.sensorHeightMm} mm · speedbooster {active.speedboosterFactor === 1 ? "none" : `×${active.speedboosterFactor}`}</Text>
+              <Text style={{ color: colors.dim, marginTop: 2 }}>lens {active.lensMinMm != null && active.lensMaxMm != null ? `${active.lensMinMm}–${active.lensMaxMm} mm` : "any focal length"}</Text>
               <Button label="Edit" kind="ghost" onPress={() => startEdit(active)} />
             </Row>
           )}
@@ -158,6 +166,13 @@ export function PresetSheet({ visible, onClose, presets, activeId, onChange }: P
               ))}
             </ChipRow>
             <Input value={d.sb} onChangeText={(sb) => patch({ sb })} placeholder="custom factor, e.g. 0.71" keyboardType="decimal-pad" style={{ marginTop: 10 }} />
+          </Row>
+          <Row label="Lens range (optional)">
+            <View style={{ flexDirection: "row", gap: 8 }}>
+              <Input value={d.lmin} onChangeText={(lmin) => patch({ lmin })} placeholder="shortest mm" keyboardType="decimal-pad" style={{ flex: 1 }} />
+              <Input value={d.lmax} onChangeText={(lmax) => patch({ lmax })} placeholder="longest mm" keyboardType="decimal-pad" style={{ flex: 1 }} />
+            </View>
+            <Hint>e.g. 18 / 35 for a Sigma 18-35. The lens stepper and custom entry then stay inside this range. Leave empty for any lens.</Hint>
           </Row>
           <Row label="Name (optional)">
             <Input value={d.name} onChangeText={(name) => patch({ name })} placeholder={autoName(d)} />

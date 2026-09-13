@@ -37,6 +37,8 @@ interface ServerPreset {
   sensor_width_mm: number;
   sensor_height_mm: number;
   speedbooster_factor: number;
+  lens_min_mm: number | null;
+  lens_max_mm: number | null;
   created_at: string;
 }
 
@@ -49,6 +51,8 @@ function fromServer(s: ServerPreset): Preset {
     sensorWidthMm: s.sensor_width_mm,
     sensorHeightMm: s.sensor_height_mm,
     speedboosterFactor: s.speedbooster_factor,
+    lensMinMm: s.lens_min_mm ?? null,
+    lensMaxMm: s.lens_max_mm ?? null,
     createdAt: s.created_at,
     synced: true,
   };
@@ -107,6 +111,8 @@ export const api = {
         sensor_width_mm: p.sensorWidthMm,
         sensor_height_mm: p.sensorHeightMm,
         speedbooster_factor: p.speedboosterFactor,
+        lens_min_mm: p.lensMinMm,
+        lens_max_mm: p.lensMaxMm,
       }),
     }),
 

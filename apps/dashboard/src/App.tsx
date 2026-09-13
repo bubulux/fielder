@@ -92,7 +92,7 @@ export function App() {
           <div class="rigs">
             {!presets ? <div class="status">Loading…</div> : presets.length === 0 ? <div class="status">No rigs saved yet. Create one in the phone app.</div> : (
               <table>
-                <thead><tr><th>Name</th><th>Camera / format</th><th>Sensor area</th><th>Speedbooster</th><th>Shots</th><th></th></tr></thead>
+                <thead><tr><th>Name</th><th>Camera / format</th><th>Sensor area</th><th>Speedbooster</th><th>Lens range</th><th>Shots</th><th></th></tr></thead>
                 <tbody>
                   {presets.map((p) => (
                     <tr key={p.id}>
@@ -100,6 +100,7 @@ export function App() {
                       <td class="meta">{p.camera_id && p.format_id ? `${p.camera_id} / ${p.format_id}` : "custom"}</td>
                       <td>{p.sensor_width_mm} × {p.sensor_height_mm} mm</td>
                       <td>{p.speedbooster_factor === 1 ? "none" : `×${p.speedbooster_factor}`}</td>
+                      <td>{p.lens_min_mm != null && p.lens_max_mm != null ? `${p.lens_min_mm}–${p.lens_max_mm} mm` : "any"}</td>
                       <td>{(shots ?? []).filter((s) => s.preset_id === p.id).length}</td>
                       <td><button class="btn danger" onClick={() => void removePreset(p)}>Delete</button></td>
                     </tr>

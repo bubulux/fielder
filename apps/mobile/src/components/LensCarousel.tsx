@@ -1,5 +1,6 @@
 import { Pressable, StyleSheet, Text, View } from "react-native";
-import { LENS_PRESETS_MM } from "@fielder/fov-math";
+import { lensList, stepLens } from "../lens";
+import type { LensRange } from "../types";
 import { colors } from "./ui";
 
 interface Props {
@@ -9,24 +10,17 @@ interface Props {
   vertical: boolean;
   /** Length of the strip along its main axis. */
   length: number;
+  /** Rig lens range; limits the list to focal lengths inside it (endpoints included). */
+  range: LensRange | null;
 }
 
-const LENSES = LENS_PRESETS_MM as readonly number[];
-
-/** Step through the built-in focal lengths. For a custom value, stepping goes to the nearest neighbour in the list. */
-function step(current: number, dir: -1 | 1): number {
-  const i = LENSES.indexOf(current);
-  if (i >= 0) return LENSES[Math.min(LENSES.length - 1, Math.max(0, i + dir))];
-  const next = dir > 0 ? LENSES.find((mm) => mm > current) : [...LENSES].reverse().find((mm) => mm < current);
-  return next ?? current;
-}
-
-export function LensCarousel({ lensMm, onChange, vertical, length }: Props) {
-  const i = LENSES.indexOf(lensMm);
-  const atStart = i === 0 || (i < 0 && lensMm <= LENSES[0]);
-  const atEnd = i === LENSES.length - 1 || (i < 0 && lensMm >= LENSES[LENSES.length - 1]);
-  const prev = () => onChange(step(lensMm, -1));
-  const next = () => onChange(step(lensMm, 1));
+export function LensCarousel({ lensMm, onChange, vertical, length, range }: Props) {
+  const list = lensList(range);
+  const i = list.indexOf(lensMm);
+  const atStart = i === 0 || (i < 0 && lensMm <= list[0]);
+  const atEnd = i === list.length - 1 || (i < 0 && lensMm >= list[list.length - 1]);
+  const prev = () => onChange(stepLens(list, lensMm, -1));
+  const next = () => onChange(stepLens(list, lensMm, 1));
   return (
     <View style={[s.strip, vertical ? { width: 72, height: length, flexDirection: "column" } : { height: 64, width: length, flexDirection: "row" }]}>
       {/* In landscape, "up" = wider (shorter focal length), like a zoom ring; in portrait, left = wider. */}

@@ -39,7 +39,7 @@ export const store = {
   saveSettings: (s: Settings) => write(KEYS.settings, s),
 
   loadPresets: (): Preset[] =>
-    readArray<Preset>(KEYS.presets).map((p) => ({ ...p, cameraId: p.cameraId ?? null, formatId: p.formatId ?? null })),
+    readArray<Preset>(KEYS.presets).map((p) => ({ ...p, cameraId: p.cameraId ?? null, formatId: p.formatId ?? null, lensMinMm: p.lensMinMm ?? null, lensMaxMm: p.lensMaxMm ?? null })),
   savePresets: (p: Preset[]) => write(KEYS.presets, p),
 
   loadActivePresetId: (): string | null => Storage.getItemSync(KEYS.activePresetId),

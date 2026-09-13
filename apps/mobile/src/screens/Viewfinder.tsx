@@ -11,10 +11,11 @@ import { API_URL, isConfigured } from "../config";
 import { computeOverlay, formatDeg, previewBox, type Box } from "../framing";
 import { PHONE } from "../phone";
 import { store } from "../storage";
-import type { Preset, Settings, ShotMetadata } from "../types";
+import { lensRangeOf, type Preset, type Settings, type ShotMetadata } from "../types";
 import { enqueue, flush } from "../uploads";
 import { syncPresets } from "../presetSync";
 import { LensCarousel } from "../components/LensCarousel";
+import { clampToRange } from "../lens";
 import { LensSheet } from "../components/LensSheet";
 import { Overlay } from "../components/Overlay";
 import { PresetSheet } from "../components/PresetSheet";
@@ -62,6 +63,9 @@ export function Viewfinder({ settings, onSettings, active: tabActive }: Props) {
   const [pendingCount, setPendingCount] = useState(() => store.loadPending().length);
 
   const active = presets.find((p) => p.id === activeId) ?? presets[0] ?? null;
+  const lensRange = lensRangeOf(active);
+  // Keep the lens inside the rig's range when the rig (or its range) changes.
+  useEffect(() => { setLensMm((mm) => clampToRange(mm, lensRange)); }, [active?.id, lensRange?.min, lensRange?.max]);
 
   // Persist on change.
   useEffect(() => { store.savePresets(presets); }, [presets]);
@@ -202,7 +206,7 @@ export function Viewfinder({ settings, onSettings, active: tabActive }: Props) {
   }
 
   const lensStrip = (
-    <LensCarousel lensMm={lensMm} onChange={setLensMm} vertical={!portrait} length={portrait ? window.width : window.height} />
+    <LensCarousel lensMm={lensMm} onChange={setLensMm} vertical={!portrait} length={portrait ? window.width : window.height} range={lensRange} />
   );
 
   return (
@@ -257,7 +261,7 @@ export function Viewfinder({ settings, onSettings, active: tabActive }: Props) {
 
       <PresetSheet visible={sheet === "rig"} onClose={() => setSheet(null)} presets={presets} activeId={active?.id ?? null}
         onChange={(p, id) => { setPresets(p); setActiveId(id); }} />
-      <LensSheet visible={sheet === "lens"} onClose={() => setSheet(null)} lensMm={lensMm} onChange={setLensMm} />
+      <LensSheet visible={sheet === "lens"} onClose={() => setSheet(null)} lensMm={lensMm} onChange={setLensMm} range={lensRange} />
       <SettingsSheet visible={sheet === "settings"} onClose={() => setSheet(null)} settings={settings} onChange={setSettings}
         pendingCount={pendingCount} onRetryUploads={() => void retryUploads()}
         buildInfo={`API: ${isConfigured ? API_URL.replace(/^https?:\/\//, "") : "not configured"}`} />

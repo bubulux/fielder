@@ -19,6 +19,8 @@ export interface Preset {
   sensor_width_mm: number;
   sensor_height_mm: number;
   speedbooster_factor: number;
+  lens_min_mm: number | null;
+  lens_max_mm: number | null;
   created_at: string;
   updated_at: string | null;
 }
