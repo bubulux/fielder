@@ -1,5 +1,6 @@
 import { File } from "expo-file-system";
-import { API_URL, CF_ACCESS_CLIENT_ID, CF_ACCESS_CLIENT_SECRET, isConfigured } from "./config";
+import { getToken, setToken } from "./auth";
+import { API_URL, isConfigured } from "./config";
 import type { LocationEntry, Preset, ShotMetadata, ShotTags } from "./types";
 
 export class ApiError extends Error {
@@ -8,20 +9,25 @@ export class ApiError extends Error {
   }
 }
 
+/** Access session token as the documented `cf-access-token` header (validated by Access at the edge). */
 function headers(extra: Record<string, string> = {}): Record<string, string> {
-  return {
-    "CF-Access-Client-Id": CF_ACCESS_CLIENT_ID,
-    "CF-Access-Client-Secret": CF_ACCESS_CLIENT_SECRET,
-    ...extra,
-  };
+  const token = getToken();
+  return token ? { "cf-access-token": token, ...extra } : { ...extra };
 }
 
 async function call<T>(path: string, init: RequestInit = {}): Promise<T> {
   if (!isConfigured) throw new ApiError(0, "API not configured in this build");
+  if (!getToken()) throw new ApiError(401, "not signed in");
   const res = await fetch(`${API_URL}${path}`, { ...init, headers: headers(init.headers as Record<string, string>) });
+  // Without a valid session Access redirects to its login page instead of reaching the Worker.
+  const html = (res.headers.get("content-type") ?? "").includes("text/html");
+  if (res.status === 401 || res.status === 403 || res.redirected || html || (res.url && !res.url.startsWith(API_URL))) {
+    setToken(null); // the session is gone; the app shows the login screen
+    throw new ApiError(401, "session expired, please sign in again");
+  }
   const text = await res.text();
   let body: unknown = null;
-  try { body = text ? JSON.parse(text) : null; } catch { /* non-JSON error page, e.g. Access login HTML */ }
+  try { body = text ? JSON.parse(text) : null; } catch { /* non-JSON body */ }
   if (!res.ok) {
     const msg = (body as { error?: string } | null)?.error ?? `HTTP ${res.status}`;
     throw new ApiError(res.status, msg, body);
@@ -93,7 +99,7 @@ const locationFromServer = (l: ServerLocation): LocationEntry => ({ id: l.id, na
 type Cursor = { before: string; before_id: string } | null;
 interface ShotsPage { shots: Shot[]; next: Cursor }
 
-/** Headers for <Image> requests to the API (Access service token). */
+/** Headers for <Image> requests to the API (Access session token). */
 export const imageHeaders = (): Record<string, string> => headers();
 export const imageUri = (shot: Shot) => `${API_URL}${shot.image_url}`;
 

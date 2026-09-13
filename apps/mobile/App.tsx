@@ -4,7 +4,10 @@ import { SafeAreaProvider, useSafeAreaInsets } from "react-native-safe-area-cont
 import * as ScreenOrientation from "expo-screen-orientation";
 import type { Shot } from "./src/api";
 import { colors } from "./src/components/ui";
+import { isSignedIn, onAuthChange } from "./src/auth";
+import { isConfigured } from "./src/config";
 import { Gallery, useShots, type StateFilter } from "./src/screens/Gallery";
+import { Login } from "./src/screens/Login";
 import { Prep } from "./src/screens/Prep";
 import { Review } from "./src/screens/Review";
 import { MapScreen } from "./src/screens/MapScreen";
@@ -37,6 +40,9 @@ function App() {
   const [filter, setFilter] = useState<StateFilter>("all");
   const [locations, setLocations] = useState<LocationEntry[]>(() => store.loadLocations());
   const shots = useShots();
+  // Login sheet: on launch when there is no session, and again whenever a request finds the session gone.
+  const [login, setLogin] = useState<boolean>(() => isConfigured && !isSignedIn());
+  useEffect(() => onAuthChange(() => { if (!isSignedIn()) setLogin(true); else void shots.load(); }), []);
   const unreviewed = (shots.shots ?? []).filter((s) => s.state === "unreviewed").length;
   const countAt = useCallback(
     (locationId: string) =>
@@ -78,7 +84,7 @@ function App() {
       <View style={{ flex: 1, paddingTop: portrait ? insets.top : 0, paddingLeft: portrait ? 0 : insets.left }}>
         {/* Viewfinder stays mounted so state and camera warm-up survive tab switches; it releases the camera when inactive. */}
         <View style={[{ flex: 1 }, mode !== "shoot" && { display: "none" }]}>
-          <Viewfinder settings={settings} onSettings={setSettings} active={mode === "shoot"} shots={shots.shots} locations={locations} onLocations={setLocations} />
+          <Viewfinder settings={settings} onSettings={setSettings} active={mode === "shoot"} shots={shots.shots} locations={locations} onLocations={setLocations} onSignIn={() => setLogin(true)} />
         </View>
         {mode === "review" && <Review settings={settings} data={shots} onOpen={(s) => { setOpen(s); setMode("gallery"); }} />}
         {mode === "gallery" && <Gallery settings={settings} data={shots} onShowOnMap={(s) => { setFocus(s); setMode("map"); }} filter={filter} onFilter={setFilter}
@@ -87,6 +93,7 @@ function App() {
         {mode === "map" && <MapScreen settings={settings} data={shots} focus={focus} filter={filter} locations={locations} onLocations={setLocations} countAt={countAt} open={open} onOpen={setOpen} />}
       </View>
       {tabs}
+      <Login visible={login} onDone={() => setLogin(false)} onSkip={() => setLogin(false)} />
     </View>
   );
 }

@@ -4,6 +4,7 @@
  * Access JWT here before touching any route.
  */
 import { AccessError, verifyAccessJwt, type AccessIdentity } from "./access.ts";
+import { registerAuthRoutes } from "./auth.ts";
 import { HttpError, json, Router } from "./http.ts";
 import { registerLocationRoutes } from "./locations.ts";
 import { registerPresetRoutes } from "./presets.ts";
@@ -47,6 +48,7 @@ router.on("GET", "/health", async ({ env, identity }) => {
     ok ? 200 : 503,
   );
 });
+registerAuthRoutes(router);
 registerPresetRoutes(router);
 registerLocationRoutes(router);
 registerShotRoutes(router);

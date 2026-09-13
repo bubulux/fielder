@@ -11,6 +11,10 @@ interface Props {
   pendingCount: number;
   onRetryUploads: () => void;
   buildInfo: string;
+  /** Signed-in email, or null. */
+  authEmail: string | null;
+  onSignIn: () => void;
+  onSignOut: () => void;
 }
 
 const BORDER_COLORS = ["#FFFFFF", "#FFB300", "#00E676", "#00B0FF", "#FF3B30", "#000000"];
@@ -21,7 +25,7 @@ const TINTS: { label: string; value: string }[] = [
   { label: "White 50%", value: "rgba(255,255,255,0.5)" },
 ];
 
-export function SettingsSheet({ visible, onClose, settings, onChange, pendingCount, onRetryUploads, buildInfo }: Props) {
+export function SettingsSheet({ visible, onClose, settings, onChange, pendingCount, onRetryUploads, buildInfo, authEmail, onSignIn, onSignOut }: Props) {
   const set = <K extends keyof Settings>(k: K, v: Settings[K]) => onChange({ ...settings, [k]: v });
   return (
     <Sheet visible={visible} title="Settings" onClose={onClose}>
@@ -91,6 +95,11 @@ export function SettingsSheet({ visible, onClose, settings, onChange, pendingCou
             <Chip key={t.value} label={t.label} selected={t.value === settings.blackoutColor} onPress={() => set("blackoutColor", t.value)} />
           ))}
         </ChipRow>
+      </Row>
+      <Row label="Account">
+        <Text style={{ color: colors.text }}>{authEmail ? `Signed in as ${authEmail}` : "Not signed in: shots stay on the phone until you sign in."}</Text>
+        {authEmail ? <Button label="Sign out" kind="ghost" onPress={onSignOut} /> : <Button label="Sign in with email PIN" onPress={onSignIn} />}
+        <Hint>Same login as the web dashboard (Cloudflare Access one-time PIN). The session lasts up to 30 days.</Hint>
       </Row>
       <Row label="Uploads">
         <Text style={{ color: colors.text }}>{pendingCount === 0 ? "All shots uploaded." : `${pendingCount} shot(s) waiting for upload.`}</Text>

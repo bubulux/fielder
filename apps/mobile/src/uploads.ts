@@ -55,8 +55,8 @@ export function flush(): Promise<FlushResult> {
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         lastError = msg;
-        // 4xx other than 401/408/429 means the payload itself is rejected; retrying won't help.
-        const permanent = err instanceof ApiError && err.status >= 400 && err.status < 500 && ![401, 408, 429].includes(err.status);
+        // 4xx other than 401/403/408/429 means the payload itself is rejected; retrying won't help.
+        const permanent = err instanceof ApiError && err.status >= 400 && err.status < 500 && ![401, 403, 408, 429].includes(err.status);
         const q = store.loadPending();
         const i = q.findIndex((p) => p.metadata.id === entry.metadata.id);
         if (i >= 0) {

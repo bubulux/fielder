@@ -8,6 +8,7 @@ import { File } from "expo-file-system";
 import { StatusBar } from "expo-status-bar";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { api, type Shot } from "../api";
+import { isSignedIn, onAuthChange, setToken, signedInEmail } from "../auth";
 import { API_URL, isConfigured } from "../config";
 import { computeOverlay, formatDeg, previewBox, type Box } from "../framing";
 import { PHONE } from "../phone";
@@ -41,9 +42,10 @@ interface Props {
   shots: Shot[] | null;
   locations: LocationEntry[];
   onLocations: (l: LocationEntry[]) => void;
+  onSignIn: () => void;
 }
 
-export function Viewfinder({ settings, onSettings, active: tabActive, shots, locations, onLocations }: Props) {
+export function Viewfinder({ settings, onSettings, active: tabActive, shots, locations, onLocations, onSignIn }: Props) {
   const [size, setSize] = useState<Box>({ width: 0, height: 0 });
   const onLayout = (e: LayoutChangeEvent) => {
     const { width, height } = e.nativeEvent.layout;
@@ -88,9 +90,11 @@ export function Viewfinder({ settings, onSettings, active: tabActive, shots, loc
   useEffect(() => {
     if (locPerm && !locPerm.granted && locPerm.canAskAgain) void requestLocPerm();
   }, [locPerm, requestLocPerm]);
+  const [authEmail, setAuthEmail] = useState<string | null>(() => signedInEmail());
   useEffect(() => {
     if (!isConfigured) return;
-    void (async () => {
+    const sync = async () => {
+      if (!isSignedIn()) return;
       // Rigs live on the server; pull the authoritative list after pushing offline edits.
       const server = await syncPresets(store.loadPresets());
       if (server) {
@@ -100,7 +104,10 @@ export function Viewfinder({ settings, onSettings, active: tabActive, shots, loc
       const r = await flush(); // also pulls the server's location list
       setPendingCount(r.remaining);
       setLocations(store.loadLocations());
-    })();
+    };
+    void sync();
+    // Re-run after a sign-in so queued shots go out right away.
+    return onAuthChange(() => { setAuthEmail(signedInEmail()); void sync(); });
   }, []);
 
   const showToast = useCallback((msg: string) => {
@@ -283,6 +290,7 @@ export function Viewfinder({ settings, onSettings, active: tabActive, shots, loc
               <Text style={s.hudWarn}>No rig selected. Tap "Rig" to create one.</Text>
             )}
             {!isConfigured && <Text style={s.hudWarn}>Build has no API configuration; shots stay on device.</Text>}
+            {isConfigured && !authEmail && <Text style={s.hudWarn}>Not signed in: shots are kept on the phone. Sign in via Setup.</Text>}
           </View>
           {toast && <View style={s.toast}><Text style={s.toastText}>{toast}</Text></View>}
         </View>
@@ -306,7 +314,8 @@ export function Viewfinder({ settings, onSettings, active: tabActive, shots, loc
       <LensSheet visible={sheet === "lens"} onClose={() => setSheet(null)} lensMm={lensMm} onChange={setLensMm} range={lensRange} />
       <SettingsSheet visible={sheet === "settings"} onClose={() => setSheet(null)} settings={settings} onChange={setSettings}
         pendingCount={pendingCount} onRetryUploads={() => void retryUploads()}
-        buildInfo={`API: ${isConfigured ? API_URL.replace(/^https?:\/\//, "") : "not configured"}`} />
+        buildInfo={`API: ${isConfigured ? API_URL.replace(/^https?:\/\//, "") : "not configured"}`}
+        authEmail={authEmail} onSignIn={() => { setSheet(null); onSignIn(); }} onSignOut={() => setToken(null)} />
     </View>
   );
 }
