@@ -1,3 +1,4 @@
+import { label, STATE_COLORS } from "@fielder/vocab";
 import type { Shot } from "./api";
 
 export function framingOf(s: Shot): Record<string, unknown> | null {
@@ -11,6 +12,12 @@ export function rigLabel(s: Shot): string {
   const sb = f?.speedbooster_factor as number | undefined;
   return `${name} · ${s.lens_mm} mm${sb && sb !== 1 ? ` ×${sb}` : ""}`;
 }
+
+/** "Name" or, for shots without tags, the rig label. */
+export const shotTitle = (s: Shot): string => s.name?.trim() || rigLabel(s);
+export const placeLabel = (s: Shot): string => [s.location_name, s.district].filter(Boolean).join(" · ");
+export const tagsLabel = (s: Shot): string => [s.int_ext, s.light, s.weather].filter(Boolean).map((v) => label(v)).join(" · ");
+export const stateColor = (s: Shot): string => STATE_COLORS[s.state] ?? "#9a9aa5";
 
 export function fovLabel(s: Shot): string {
   const f = framingOf(s);

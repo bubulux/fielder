@@ -40,6 +40,11 @@ export function assertString(v: unknown, field: string, maxLen = 200): string {
   return v.trim();
 }
 
+export function assertEnum<T extends readonly string[]>(v: unknown, field: string, list: T): T[number] {
+  if (typeof v !== "string" || !(list as readonly string[]).includes(v)) throw new HttpError(400, `${field} must be one of: ${list.join(", ")}`);
+  return v;
+}
+
 export function assertIsoTimestamp(v: unknown, field: string): string {
   if (typeof v !== "string" || Number.isNaN(Date.parse(v))) throw new HttpError(400, `${field} must be an ISO 8601 timestamp`);
   return new Date(v).toISOString();

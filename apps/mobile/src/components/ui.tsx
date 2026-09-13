@@ -59,6 +59,15 @@ export function Button({ label, onPress, kind = "primary", disabled }: { label: 
   );
 }
 
+/** Coloured review-state tag (colours shared with the dashboard via @fielder/vocab). */
+export function StateBadge({ state, color }: { state: string; color: string }) {
+  return (
+    <View style={[s.badge, { borderColor: color }]}>
+      <Text style={[s.badgeText, { color }]}>{state}</Text>
+    </View>
+  );
+}
+
 export function Hint({ children }: { children: ReactNode }) {
   return <Text style={s.hint}>{children}</Text>;
 }
@@ -82,4 +91,6 @@ const s = StyleSheet.create({
   btnDanger: { backgroundColor: "transparent", borderWidth: 1, borderColor: colors.danger },
   btnText: { color: "#000", fontSize: 16, fontWeight: "600" },
   hint: { color: colors.dim, fontSize: 12, marginTop: 6, lineHeight: 16 },
+  badge: { alignSelf: "flex-start", borderWidth: 1, borderRadius: 999, paddingHorizontal: 7, paddingVertical: 1 },
+  badgeText: { fontSize: 10, fontWeight: "600", textTransform: "uppercase", letterSpacing: 0.5 },
 });

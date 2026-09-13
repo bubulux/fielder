@@ -1,6 +1,6 @@
 import Storage from "expo-sqlite/kv-store";
 import { DEFAULT_SETTINGS } from "./defaults";
-import type { PendingUpload, Preset, Settings } from "./types";
+import type { LocationEntry, PendingUpload, Preset, Settings } from "./types";
 
 export { DEFAULT_SETTINGS };
 
@@ -10,6 +10,7 @@ const KEYS = {
   activePresetId: "activePresetId.v1",
   lensMm: "lensMm.v1",
   pending: "pendingUploads.v1",
+  locations: "locations.v1",
 } as const;
 
 
@@ -51,4 +52,7 @@ export const store = {
 
   loadPending: (): PendingUpload[] => readArray<PendingUpload>(KEYS.pending),
   savePending: (q: PendingUpload[]) => write(KEYS.pending, q),
+
+  loadLocations: (): LocationEntry[] => readArray<LocationEntry>(KEYS.locations),
+  saveLocations: (l: LocationEntry[]) => write(KEYS.locations, l),
 };

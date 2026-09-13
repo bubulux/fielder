@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "preact/hooks";
 import { deletePreset, deleteShot, fetchAllShots, fetchPresets, type Preset, type Shot } from "./api";
-import { coords, fovLabel, FRAME_MODES, frameModeLabel, framingOf, isFrameMode, rigDescription, rigLabel, when } from "./format";
+import { label } from "@fielder/vocab";
+import { coords, fovLabel, FRAME_MODES, frameModeLabel, framingOf, isFrameMode, placeLabel, rigDescription, rigLabel, shotTitle, stateColor, when } from "./format";
 import { downloadCrop, Framed, type MaskMode } from "./Framed";
 import { MapView } from "./MapView";
 
@@ -9,6 +10,10 @@ type Tab = "gallery" | "map" | "rigs";
 function loadMask(): MaskMode {
   try { const v = localStorage.getItem("maskMode"); if (isFrameMode(v)) return v; } catch { /* ignore */ }
   return "mask";
+}
+
+function Badge({ shot }: { shot: Shot }) {
+  return <span class="badge" style={{ color: stateColor(shot), borderColor: stateColor(shot) }}>{shot.state}</span>;
 }
 
 function ModeSwitch({ value, onChange }: { value: MaskMode; onChange: (m: MaskMode) => void }) {
@@ -78,9 +83,9 @@ export function App() {
                 <article class="card" key={s.id} onClick={() => openShot(s)}>
                   <Framed shot={s} mode={mask} />
                   <div class="body">
-                    <div class="title">{rigLabel(s)}</div>
-                    <div class="sub">{when(s.timestamp)}</div>
-                    <div class="sub">{fovLabel(s)}</div>
+                    <div class="title">{shotTitle(s)}</div>
+                    <div class="sub">{placeLabel(s) || rigLabel(s)}</div>
+                    <div class="sub row"><span>{when(s.timestamp)}</span><Badge shot={s} /></div>
                   </div>
                 </article>
               ))}
@@ -119,11 +124,15 @@ export function App() {
             <div class="side">
               <ModeSwitch value={detailMask} onChange={setDetailMask} />
               <div>
-                <div style="font-weight:600;font-size:15px">{rigLabel(open)}</div>
+                <div style="font-weight:600;font-size:15px">{shotTitle(open)} <Badge shot={open} /></div>
                 <div class="meta">{when(open.timestamp)}</div>
-                <div class="meta">{rigDescription(open)}</div>
+                <div class="meta">{rigLabel(open)} · {rigDescription(open)}</div>
               </div>
               <dl>
+                <dt>Location</dt><dd>{placeLabel(open) || "—"}</dd>
+                <dt>Int/Ext</dt><dd>{label(open.int_ext) || "—"}</dd>
+                <dt>Light</dt><dd>{label(open.light) || "—"}</dd>
+                <dt>Weather</dt><dd>{label(open.weather) || "—"}</dd>
                 <dt>FOV</dt><dd>{fovLabel(open) || "n/a"}</dd>
                 <dt>Position</dt><dd><a style="color:var(--accent)" href={`https://www.openstreetmap.org/?mlat=${open.lat}&mlon=${open.lon}#map=17/${open.lat}/${open.lon}`} target="_blank" rel="noreferrer">{coords(open)}</a></dd>
                 <dt>Lens</dt><dd>{open.lens_mm} mm</dd>

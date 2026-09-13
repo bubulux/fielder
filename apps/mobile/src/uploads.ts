@@ -1,5 +1,6 @@
 import { Directory, File, Paths } from "expo-file-system";
 import { api, ApiError } from "./api";
+import { syncLocations } from "./locationSync";
 import { store } from "./storage";
 import type { PendingUpload, ShotMetadata } from "./types";
 
@@ -37,6 +38,15 @@ export function flush(): Promise<FlushResult> {
   flushing = (async () => {
     let uploaded = 0;
     let lastError: string | undefined;
+    // Locations first, so a shot never arrives before the location it references.
+    const sync = await syncLocations(store.loadLocations());
+    if (sync) {
+      store.saveLocations(sync.locations);
+      if (Object.keys(sync.remap).length) {
+        store.savePending(store.loadPending().map((p) =>
+          sync.remap[p.metadata.location_id] ? { ...p, metadata: { ...p.metadata, location_id: sync.remap[p.metadata.location_id] } } : p));
+      }
+    }
     for (const entry of store.loadPending()) {
       try {
         await api.uploadShot(entry.metadata, entry.fileUri);

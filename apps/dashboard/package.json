@@ -9,6 +9,7 @@
     "typecheck": "tsc -p ."
   },
   "dependencies": {
+    "@fielder/vocab": "workspace:*",
     "leaflet": "^1.9.4",
     "preact": "^10.27.0"
   },

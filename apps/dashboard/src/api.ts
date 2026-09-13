@@ -10,6 +10,14 @@ export interface Shot {
   image_url: string;
   extra_metadata: Record<string, unknown> | null;
   created_at: string;
+  name: string | null;
+  light: string | null;
+  weather: string | null;
+  int_ext: string | null;
+  location_id: string | null;
+  location_name: string | null;
+  district: string | null;
+  state: "unreviewed" | "approved" | "archived";
 }
 export interface Preset {
   id: string;

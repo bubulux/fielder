@@ -1,9 +1,9 @@
 import { File } from "expo-file-system";
 import { API_URL, CF_ACCESS_CLIENT_ID, CF_ACCESS_CLIENT_SECRET, isConfigured } from "./config";
-import type { Preset, ShotMetadata } from "./types";
+import type { LocationEntry, Preset, ShotMetadata, ShotTags } from "./types";
 
 export class ApiError extends Error {
-  constructor(public status: number, message: string) {
+  constructor(public status: number, message: string, public body: unknown = null) {
     super(message);
   }
 }
@@ -24,7 +24,7 @@ async function call<T>(path: string, init: RequestInit = {}): Promise<T> {
   try { body = text ? JSON.parse(text) : null; } catch { /* non-JSON error page, e.g. Access login HTML */ }
   if (!res.ok) {
     const msg = (body as { error?: string } | null)?.error ?? `HTTP ${res.status}`;
-    throw new ApiError(res.status, msg);
+    throw new ApiError(res.status, msg, body);
   }
   return body as T;
 }
@@ -69,7 +69,26 @@ export interface Shot {
   image_url: string;
   extra_metadata: Record<string, unknown> | null;
   created_at: string;
+  name: string | null;
+  light: string | null;
+  weather: string | null;
+  int_ext: string | null;
+  location_id: string | null;
+  location_name: string | null;
+  district: string | null;
+  state: "unreviewed" | "approved" | "archived";
 }
+
+interface ServerLocation {
+  id: string;
+  name: string;
+  district: string;
+  created_at: string;
+  updated_at: string | null;
+  shot_count: number;
+  approved_count: number;
+}
+const locationFromServer = (l: ServerLocation): LocationEntry => ({ id: l.id, name: l.name, district: l.district, createdAt: l.created_at, synced: true });
 
 type Cursor = { before: string; before_id: string } | null;
 interface ShotsPage { shots: Shot[]; next: Cursor }
@@ -92,6 +111,21 @@ export const api = {
     return all;
   },
   deleteShot: (id: string) => call<{ deleted: string }>(`/api/shots/${id}`, { method: "DELETE" }),
+  patchShot: (id: string, patch: Partial<ShotTags> & { state?: Shot["state"] }) =>
+    call<{ shot: Shot }>(`/api/shots/${id}`, { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify(patch) }).then((r) => r.shot),
+
+  listLocations: async (): Promise<LocationEntry[]> => {
+    const r = await call<{ locations: ServerLocation[] }>("/api/locations");
+    return r.locations.map(locationFromServer);
+  },
+  /** Upsert; a 409 means another location already has this name (ApiError.body.existing_id). */
+  putLocation: (l: LocationEntry) =>
+    call<{ location: ServerLocation }>(`/api/locations/${l.id}`, {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ name: l.name, district: l.district }),
+    }),
+  deleteLocation: (id: string) => call<{ deleted: string }>(`/api/locations/${id}`, { method: "DELETE" }),
 
   health: () => call<{ ok: boolean; identity: string }>("/health"),
 

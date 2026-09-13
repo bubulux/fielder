@@ -1,4 +1,5 @@
-import { assertIsoTimestamp, assertNumber, assertUuid, HttpError, json, type Router } from "./http.ts";
+import { INT_EXT, LIGHT, SHOT_STATES, WEATHER } from "@fielder/vocab";
+import { assertEnum, assertIsoTimestamp, assertNumber, assertString, assertUuid, HttpError, json, readJson, type Router } from "./http.ts";
 import type { Ctx } from "./index.ts";
 
 export interface ShotRow {
@@ -11,7 +12,15 @@ export interface ShotRow {
   r2_object_key: string;
   extra_metadata: string | null;
   created_at: string;
+  name: string | null;
+  light: string | null;
+  weather: string | null;
+  int_ext: string | null;
+  location_id: string | null;
+  state: string;
   preset_name?: string | null;
+  location_name?: string | null;
+  district?: string | null;
 }
 
 const MAX_IMAGE_BYTES = 3 * 1024 * 1024; // "low-res reference" — generous ceiling
@@ -34,22 +43,57 @@ function toApi(row: ShotRow) {
     image_url: `/api/shots/${row.id}/image`,
     extra_metadata: row.extra_metadata ? (JSON.parse(row.extra_metadata) as unknown) : null,
     created_at: row.created_at,
+    name: row.name ?? null,
+    light: row.light ?? null,
+    weather: row.weather ?? null,
+    int_ext: row.int_ext ?? null,
+    location_id: row.location_id ?? null,
+    location_name: row.location_name ?? null,
+    district: row.district ?? null,
+    state: row.state ?? "unreviewed",
   };
 }
 
-const LIST_SQL = `SELECT s.*, p.name AS preset_name
-  FROM shots s LEFT JOIN presets p ON p.id = s.preset_id`;
+const LIST_SQL = `SELECT s.*, p.name AS preset_name, l.name AS location_name, l.district AS district
+  FROM shots s LEFT JOIN presets p ON p.id = s.preset_id LEFT JOIN locations l ON l.id = s.location_id`;
+
+/** Scouting tags; all required on upload, editable afterwards. */
+interface Tags { name: string; light: string; weather: string; int_ext: string; location_id: string }
+
+function parseTags(m: Record<string, unknown>, required: true): Tags;
+function parseTags(m: Record<string, unknown>, required: false): Partial<Tags>;
+function parseTags(m: Record<string, unknown>, required: boolean): Partial<Tags> {
+  const out: Partial<Tags> = {};
+  const want = (k: keyof Tags) => required || m[k] !== undefined;
+  if (want("name")) out.name = assertString(m.name, "name", 120);
+  if (want("light")) out.light = assertEnum(m.light, "light", LIGHT);
+  if (want("weather")) out.weather = assertEnum(m.weather, "weather", WEATHER);
+  if (want("int_ext")) out.int_ext = assertEnum(m.int_ext, "int_ext", INT_EXT);
+  if (want("location_id")) out.location_id = assertUuid(m.location_id, "location_id");
+  return out;
+}
+
+async function assertLocationExists(env: Ctx["env"], id: string) {
+  const l = await env.DB.prepare("SELECT 1 FROM locations WHERE id = ?1").bind(id).first();
+  if (!l) throw new HttpError(400, "location_id does not exist");
+}
 
 export function registerShotRoutes(r: Router<Ctx>) {
   // Newest first, keyset-paginated on (timestamp, id). Pass ?before=<timestamp>&before_id=<id>.
+  // Optional filters: ?state=approved&location_id=<uuid>
   r.on("GET", "/api/shots", async ({ env, url }) => {
     const limit = Math.min(Math.max(Number(url.searchParams.get("limit") ?? 100) || 100, 1), 500);
     const before = url.searchParams.get("before");
     const beforeId = url.searchParams.get("before_id") ?? "";
-    const stmt = before
-      ? env.DB.prepare(`${LIST_SQL} WHERE (s.timestamp < ?1 OR (s.timestamp = ?1 AND s.id < ?2))
-                        ORDER BY s.timestamp DESC, s.id DESC LIMIT ?3`).bind(before, beforeId, limit)
-      : env.DB.prepare(`${LIST_SQL} ORDER BY s.timestamp DESC, s.id DESC LIMIT ?1`).bind(limit);
+    const where: string[] = [];
+    const args: unknown[] = [];
+    if (before) { args.push(before, beforeId); where.push(`(s.timestamp < ?${args.length - 1} OR (s.timestamp = ?${args.length - 1} AND s.id < ?${args.length}))`); }
+    const state = url.searchParams.get("state");
+    if (state) { args.push(assertEnum(state, "state", SHOT_STATES)); where.push(`s.state = ?${args.length}`); }
+    const loc = url.searchParams.get("location_id");
+    if (loc) { args.push(assertUuid(loc, "location_id")); where.push(`s.location_id = ?${args.length}`); }
+    args.push(limit);
+    const stmt = env.DB.prepare(`${LIST_SQL}${where.length ? ` WHERE ${where.join(" AND ")}` : ""} ORDER BY s.timestamp DESC, s.id DESC LIMIT ?${args.length}`).bind(...args);
     const { results } = await stmt.all<ShotRow>();
     const last = results.at(-1);
     return json({
@@ -86,9 +130,11 @@ export function registerShotRoutes(r: Router<Ctx>) {
    * multipart/form-data:
    *   image     file (jpeg/webp/png, <= 3 MB)
    *   metadata  JSON string:
-   *     { id, timestamp, lat, lon, lens_mm, preset_id?, extra_metadata? }
+   *     { id, timestamp, lat, lon, lens_mm, preset_id?, extra_metadata?,
+   *       name, light, weather, int_ext, location_id }   (tags are required)
    *     extra_metadata is free-form; the client puts the framing snapshot in
-   *     extra_metadata.framing. Future tags (time_of_day, weather, ...) go here too.
+   *     extra_metadata.framing.
+   * New shots always start in state "unreviewed".
    * Idempotent on id: re-uploading an existing id returns 200 with the stored row.
    */
   r.on("POST", "/api/shots", async ({ env, request }) => {
@@ -115,6 +161,7 @@ export function registerShotRoutes(r: Router<Ctx>) {
     if (extra !== null && (typeof extra !== "object" || Array.isArray(extra))) throw new HttpError(400, "extra_metadata must be an object");
     const extraJson = extra === null ? null : JSON.stringify(extra);
     if (extraJson && extraJson.length > 64 * 1024) throw new HttpError(413, "extra_metadata too large");
+    const tags = parseTags(m, true);
 
     const existing = await env.DB.prepare(`${LIST_SQL} WHERE s.id = ?1`).bind(id).first<ShotRow>();
     if (existing) return json({ shot: toApi(existing), duplicate: true });
@@ -123,6 +170,7 @@ export function registerShotRoutes(r: Router<Ctx>) {
       const p = await env.DB.prepare("SELECT 1 FROM presets WHERE id = ?1").bind(presetId).first();
       if (!p) throw new HttpError(400, "preset_id does not exist");
     }
+    await assertLocationExists(env, tags.location_id);
 
     const key = objectKey(id, image.type);
     await env.SHOTS_BUCKET.put(key, image.stream(), {
@@ -131,9 +179,10 @@ export function registerShotRoutes(r: Router<Ctx>) {
     });
     try {
       await env.DB.prepare(
-        `INSERT INTO shots (id, timestamp, lat, lon, preset_id, lens_mm, r2_object_key, extra_metadata)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)`,
-      ).bind(id, timestamp, lat, lon, presetId, lensMm, key, extraJson).run();
+        `INSERT INTO shots (id, timestamp, lat, lon, preset_id, lens_mm, r2_object_key, extra_metadata,
+                            name, light, weather, int_ext, location_id, state)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, 'unreviewed')`,
+      ).bind(id, timestamp, lat, lon, presetId, lensMm, key, extraJson, tags.name, tags.light, tags.weather, tags.int_ext, tags.location_id).run();
     } catch (err) {
       await env.SHOTS_BUCKET.delete(key).catch(() => {});
       throw err;
@@ -141,6 +190,24 @@ export function registerShotRoutes(r: Router<Ctx>) {
 
     const row = await env.DB.prepare(`${LIST_SQL} WHERE s.id = ?1`).bind(id).first<ShotRow>();
     return json({ shot: toApi(row!) }, 201);
+  });
+
+  /** Edit tags and/or review state. JSON body with any of name, light, weather, int_ext, location_id, state. */
+  r.on("PATCH", "/api/shots/:id", async ({ env, request }, { id }) => {
+    const sid = assertUuid(id, "id");
+    const b = await readJson<Record<string, unknown>>(request);
+    const tags = parseTags(b, false);
+    const sets: string[] = [];
+    const args: unknown[] = [];
+    for (const [k, v] of Object.entries(tags)) { args.push(v); sets.push(`${k} = ?${args.length}`); }
+    if (b.state !== undefined) { args.push(assertEnum(b.state, "state", SHOT_STATES)); sets.push(`state = ?${args.length}`); }
+    if (sets.length === 0) throw new HttpError(400, "nothing to update");
+    if (tags.location_id) await assertLocationExists(env, tags.location_id);
+    args.push(sid);
+    const res = await env.DB.prepare(`UPDATE shots SET ${sets.join(", ")} WHERE id = ?${args.length}`).bind(...args).run();
+    if (!res.meta.changes) throw new HttpError(404, "shot not found");
+    const row = await env.DB.prepare(`${LIST_SQL} WHERE s.id = ?1`).bind(sid).first<ShotRow>();
+    return json({ shot: toApi(row!) });
   });
 
   r.on("DELETE", "/api/shots/:id", async ({ env }, { id }) => {

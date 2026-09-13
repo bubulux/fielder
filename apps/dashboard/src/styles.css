@@ -60,3 +60,6 @@ main { min-height: 0; position: relative; }
 .rigs table { width: 100%; border-collapse: collapse; font-size: 13px; }
 .rigs th, .rigs td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--border); }
 .rigs th { color: var(--dim); font-weight: 500; font-size: 12px; text-transform: uppercase; letter-spacing: .5px; }
+
+.badge { display: inline-block; border: 1px solid; border-radius: 999px; padding: 0 7px; font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: .5px; line-height: 16px; vertical-align: middle; }
+.card .sub.row { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-top: 4px; }

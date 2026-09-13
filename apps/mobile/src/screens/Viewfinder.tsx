@@ -4,14 +4,15 @@ import { CameraView, useCameraPermissions } from "expo-camera";
 import * as Location from "expo-location";
 import * as Crypto from "expo-crypto";
 import { ImageManipulator, SaveFormat } from "expo-image-manipulator";
+import { File } from "expo-file-system";
 import { StatusBar } from "expo-status-bar";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { api } from "../api";
+import { api, type Shot } from "../api";
 import { API_URL, isConfigured } from "../config";
 import { computeOverlay, formatDeg, previewBox, type Box } from "../framing";
 import { PHONE } from "../phone";
 import { store } from "../storage";
-import { lensRangeOf, type Preset, type Settings, type ShotMetadata } from "../types";
+import { lensRangeOf, type LocationEntry, type Preset, type Settings, type ShotMetadata, type ShotTags } from "../types";
 import { enqueue, flush } from "../uploads";
 import { syncPresets } from "../presetSync";
 import { LensCarousel } from "../components/LensCarousel";
@@ -20,6 +21,7 @@ import { LensSheet } from "../components/LensSheet";
 import { HUMAN_COLOR, Overlay } from "../components/Overlay";
 import { PresetSheet } from "../components/PresetSheet";
 import { SettingsSheet } from "../components/SettingsSheet";
+import { ShotReview, type Draft } from "./ShotReview";
 import { colors } from "../components/ui";
 
 const CONTROLS_SIZE = 104;
@@ -35,9 +37,11 @@ interface Props {
   onSettings: (s: Settings) => void;
   /** Whether this tab is on screen; the camera is released otherwise. */
   active: boolean;
+  /** Uploaded shots (for per-location counters in the review form). */
+  shots: Shot[] | null;
 }
 
-export function Viewfinder({ settings, onSettings, active: tabActive }: Props) {
+export function Viewfinder({ settings, onSettings, active: tabActive, shots }: Props) {
   const [size, setSize] = useState<Box>({ width: 0, height: 0 });
   const onLayout = (e: LayoutChangeEvent) => {
     const { width, height } = e.nativeEvent.layout;
@@ -61,6 +65,9 @@ export function Viewfinder({ settings, onSettings, active: tabActive }: Props) {
   const [busy, setBusy] = useState<"capture" | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [pendingCount, setPendingCount] = useState(() => store.loadPending().length);
+  const [locations, setLocations] = useState<LocationEntry[]>(() => store.loadLocations());
+  /** Captured photo waiting in the review form (base metadata without the tags). */
+  const [draft, setDraft] = useState<(Draft & { base: Omit<ShotMetadata, keyof ShotTags> }) | null>(null);
 
   const active = presets.find((p) => p.id === activeId) ?? presets[0] ?? null;
   const lensRange = lensRangeOf(active);
@@ -71,6 +78,7 @@ export function Viewfinder({ settings, onSettings, active: tabActive }: Props) {
   useEffect(() => { store.savePresets(presets); }, [presets]);
   useEffect(() => { store.saveActivePresetId(activeId); }, [activeId]);
   useEffect(() => { store.saveLensMm(lensMm); }, [lensMm]);
+  useEffect(() => { store.saveLocations(locations); }, [locations]);
 
   // Permissions and background sync on launch.
   useEffect(() => {
@@ -88,8 +96,9 @@ export function Viewfinder({ settings, onSettings, active: tabActive }: Props) {
         setPresets(server);
         setActiveId((cur) => (cur && server.some((p) => p.id === cur) ? cur : server[0]?.id ?? null));
       }
-      const r = await flush();
+      const r = await flush(); // also pulls the server's location list
       setPendingCount(r.remaining);
+      setLocations(store.loadLocations());
     })();
   }, []);
 
@@ -138,7 +147,8 @@ export function Viewfinder({ settings, onSettings, active: tabActive }: Props) {
       const small = await rendered.saveAsync({ compress: 0.72, format: SaveFormat.JPEG });
 
       const exif = (pic.exif ?? {}) as Record<string, unknown>;
-      const metadata: ShotMetadata = {
+      const frame = { width: round4(overlay.fractions.width), height: round4(overlay.fractions.height) };
+      const base: Omit<ShotMetadata, keyof ShotTags> = {
         id: Crypto.randomUUID(),
         timestamp: new Date(pos.timestamp || Date.now()).toISOString(),
         lat: pos.coords.latitude,
@@ -161,7 +171,7 @@ export function Viewfinder({ settings, onSettings, active: tabActive }: Props) {
             hfov_deg: round(overlay.framing.fov.horizontal),
             vfov_deg: round(overlay.framing.fov.vertical),
             // Rig frame relative to the uploaded photo, centred. Lets the dashboard re-apply the mask.
-            frame: { width_fraction: round4(overlay.fractions.width), height_fraction: round4(overlay.fractions.height) },
+            frame: { width_fraction: frame.width, height_fraction: frame.height },
           },
           phone: {
             model: PHONE.model,
@@ -174,20 +184,41 @@ export function Viewfinder({ settings, onSettings, active: tabActive }: Props) {
           image: { width: small.width, height: small.height },
         },
       };
-      enqueue(metadata, small.uri);
       if (!active.synced) {
         // Preset unknown to the server: try once more now so the FK can be set on the row later.
         try { await api.putPreset(active); setPresets((c) => c.map((x) => (x.id === active.id ? { ...x, synced: true } : x))); } catch { /* snapshot in extra_metadata still preserves it */ }
       }
-      const r = await flush();
-      setPendingCount(r.remaining);
-      showToast(r.remaining === 0 ? "Saved & uploaded" : `Saved locally (${r.remaining} pending)`);
+      // Hand over to the review form; nothing is queued until the user taps Upload.
+      setDraft({ uri: small.uri, width: small.width, height: small.height, frame, base });
     } catch (err) {
       Alert.alert("Capture failed", err instanceof Error ? err.message : String(err));
     } finally {
       setBusy(null);
     }
   }
+
+  async function uploadDraft(tags: ShotTags, newLocation: LocationEntry | null) {
+    if (!draft) return;
+    if (newLocation) setLocations((cur) => [...cur, newLocation]);
+    const metadata: ShotMetadata = { ...draft.base, ...tags };
+    enqueue(metadata, draft.uri);
+    discardDraft();
+    const r = await flush();
+    setPendingCount(r.remaining);
+    setLocations(store.loadLocations());
+    showToast(r.remaining === 0 ? "Uploaded" : `Saved locally (${r.remaining} pending)`);
+  }
+
+  function discardDraft() {
+    if (draft) { try { const f = new File(draft.uri); if (f.exists) f.delete(); } catch { /* temp file */ } }
+    setDraft(null);
+  }
+
+  const countAt = useCallback(
+    (locationId: string) =>
+      (shots ?? []).filter((x) => x.location_id === locationId).length + store.loadPending().filter((p) => p.metadata.location_id === locationId).length,
+    [shots],
+  );
 
   async function retryUploads() {
     const r = await flush();
@@ -268,6 +299,7 @@ export function Viewfinder({ settings, onSettings, active: tabActive }: Props) {
         <Ctl label="Setup" value="⚙" onPress={() => setSheet("settings")} />
       </View>
 
+      <ShotReview draft={draft} settings={settings} locations={locations} countAt={countAt} onUpload={(t, l) => void uploadDraft(t, l)} onDiscard={discardDraft} />
       <PresetSheet visible={sheet === "rig"} onClose={() => setSheet(null)} presets={presets} activeId={active?.id ?? null}
         onChange={(p, id) => { setPresets(p); setActiveId(id); }} />
       <LensSheet visible={sheet === "lens"} onClose={() => setSheet(null)} lensMm={lensMm} onChange={setLensMm} range={lensRange} />

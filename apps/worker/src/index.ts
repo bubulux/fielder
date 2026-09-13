@@ -5,6 +5,7 @@
  */
 import { AccessError, verifyAccessJwt, type AccessIdentity } from "./access.ts";
 import { HttpError, json, Router } from "./http.ts";
+import { registerLocationRoutes } from "./locations.ts";
 import { registerPresetRoutes } from "./presets.ts";
 import { registerShotRoutes } from "./shots.ts";
 
@@ -47,6 +48,7 @@ router.on("GET", "/health", async ({ env, identity }) => {
   );
 });
 registerPresetRoutes(router);
+registerLocationRoutes(router);
 registerShotRoutes(router);
 
 async function authenticate(request: Request, env: Env): Promise<AccessIdentity> {

@@ -9,5 +9,8 @@
     "types": "wrangler types",
     "migrate:local": "wrangler d1 migrations apply DB --local",
     "migrate:remote": "wrangler d1 migrations apply DB --remote"
+  },
+  "dependencies": {
+    "@fielder/vocab": "workspace:*"
   }
 }

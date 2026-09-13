@@ -65,7 +65,7 @@ function App() {
       <View style={{ flex: 1, paddingTop: portrait ? insets.top : 0, paddingLeft: portrait ? 0 : insets.left }}>
         {/* Viewfinder stays mounted so state and camera warm-up survive tab switches; it releases the camera when inactive. */}
         <View style={[{ flex: 1 }, mode !== "shoot" && { display: "none" }]}>
-          <Viewfinder settings={settings} onSettings={setSettings} active={mode === "shoot"} />
+          <Viewfinder settings={settings} onSettings={setSettings} active={mode === "shoot"} shots={shots.shots} />
         </View>
         {mode === "gallery" && <Gallery settings={settings} data={shots} onShowOnMap={(s) => { setFocus(s); setMode("map"); }} />}
         {mode === "map" && <MapScreen settings={settings} data={shots} focus={focus} />}

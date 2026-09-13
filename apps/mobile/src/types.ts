@@ -40,7 +40,16 @@ export interface Settings {
   humanViewFocalMm: number;
 }
 
-export interface ShotMetadata {
+/** Scouting tags entered in the review form after capture. Values are @fielder/vocab ids. */
+export interface ShotTags {
+  name: string;
+  light: string;
+  weather: string;
+  int_ext: string;
+  location_id: string;
+}
+
+export interface ShotMetadata extends ShotTags {
   id: string;
   timestamp: string;
   lat: number;
@@ -48,6 +57,16 @@ export interface ShotMetadata {
   lens_mm: number;
   preset_id: string | null;
   extra_metadata: Record<string, unknown>;
+}
+
+/** A named place; lives on the server, cached locally so the form works offline. */
+export interface LocationEntry {
+  id: string;
+  name: string;
+  district: string;
+  createdAt: string;
+  /** false until the Worker has acknowledged the PUT. */
+  synced: boolean;
 }
 
 export interface PendingUpload {

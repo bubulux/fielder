@@ -6,7 +6,7 @@ import { WebView as RNWebView, type WebViewMessageEvent, type WebViewProps } fro
 const WebView = RNWebView as unknown as ComponentType<WebViewProps>;
 import type { Shot } from "../api";
 import { colors } from "../components/ui";
-import { rigLabel, ShotDetail, type useShots } from "./Gallery";
+import { placeLabel, rigLabel, ShotDetail, shotTitle, type useShots } from "./Gallery";
 import type { Settings } from "../types";
 
 interface Props { settings: Settings; data: ReturnType<typeof useShots>; focus: Shot | null }
@@ -17,7 +17,7 @@ export function MapScreen({ settings, data, focus }: Props) {
   const { shots, remove } = data;
 
   const markers = useMemo(
-    () => (shots ?? []).map((s) => ({ id: s.id, lat: s.lat, lon: s.lon, title: rigLabel(s), sub: new Date(s.timestamp).toLocaleString() })),
+    () => (shots ?? []).map((s) => ({ id: s.id, lat: s.lat, lon: s.lon, title: shotTitle(s), sub: [placeLabel(s) || rigLabel(s), new Date(s.timestamp).toLocaleString()].join(" · ") })),
     [shots],
   );
   const html = useMemo(() => buildHtml(markers, focus ? { lat: focus.lat, lon: focus.lon } : null), [markers, focus]);
