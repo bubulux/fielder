@@ -57,6 +57,18 @@ export function SettingsSheet({ visible, onClose, settings, onChange, pendingCou
         </View>
         <Hint>Scales the live image so the rig frame fills the screen. Purely digital, so it gets soft with long lenses, but it shows the frame edges at full size. Also available as the Fit button.</Hint>
       </Row>
+      <Row label="Human view reference frame">
+        <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
+          <Text style={{ color: colors.text }}>Show second frame</Text>
+          <Switch value={settings.humanViewEnabled} onValueChange={(v) => set("humanViewEnabled", v)} trackColor={{ true: colors.accent }} />
+        </View>
+        <ChipRow>
+          {[35, 43, 50].map((mm) => (
+            <Chip key={mm} label={`${mm} mm-eq`} selected={settings.humanViewFocalMm === mm} onPress={() => set("humanViewFocalMm", mm)} />
+          ))}
+        </ChipRow>
+        <Hint>Draws a thin cyan frame for roughly what a person sees. There is no single "human field of view"; 43–50 mm full-frame-equivalent is the film convention for the region of attention, 35 mm is a wider take. The HUD says whether the rig is wider or narrower than it.</Hint>
+      </Row>
       <Row label="Frame border">
         <ChipRow>
           {BORDER_COLORS.map((c) => (

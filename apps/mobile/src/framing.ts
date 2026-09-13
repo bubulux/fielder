@@ -24,8 +24,20 @@ export function previewBox(window: Box, sensorAspect: number = PHONE.sensorAspec
   return { width, height };
 }
 
+export interface HumanView {
+  /** Human-view frame in preview-box coordinates (same centre and scale as the rig frame). */
+  rect: Rect;
+  /** False when the frame is larger than the preview box (drawn dashed, partly off screen). */
+  fits: boolean;
+  /** How the rig's field of view compares to the human reference. */
+  relation: "wider" | "narrower" | "equal";
+  focalMm: number;
+}
+
 export interface OverlayLayout {
   framing: FramingResult;
+  /** Human-view reference frame, when enabled in settings. */
+  human: HumanView | null;
   /** Rig frame in preview-box coordinates. */
   rect: Rect;
   /** True when the rig sees more than the phone in at least one axis. */
@@ -42,10 +54,8 @@ export interface OverlayLayout {
 }
 
 export function computeOverlay(settings: Settings, preset: Preset, lensMm: number, preview: Box, fit = settings.fitToFrame): OverlayLayout {
-  const framing = computeFraming(
-    { sensor: { widthMm: preset.sensorWidthMm, heightMm: preset.sensorHeightMm }, speedboosterFactor: preset.speedboosterFactor },
-    lensMm,
-  );
+  const rig = { sensor: { widthMm: preset.sensorWidthMm, heightMm: preset.sensorHeightMm }, speedboosterFactor: preset.speedboosterFactor };
+  const framing = computeFraming(rig, lensMm);
   const phoneFov = phoneViewFromEquivalent(settings.phoneEquivalentFocalMm, preview.width / preview.height, PHONE.sensorAspect);
   // On screen, horizontal always means world-horizontal (the preview rotates with the device),
   // so the rig's horizontal FOV maps to the screen's horizontal axis unless the rig is held portrait.
@@ -59,8 +69,26 @@ export function computeOverlay(settings: Settings, preset: Preset, lensMm: numbe
   const camH = preview.height * scale;
   const width = r.widthFraction * camW;
   const height = r.heightFraction * camH;
+
+  let human: HumanView | null = null;
+  if (settings.humanViewEnabled && settings.humanViewFocalMm > 0) {
+    // Same sensor and booster as the rig, lens chosen so the FF-equivalent equals the human
+    // reference: the two frames then nest with the same aspect ratio and only differ in size.
+    const hFraming = computeFraming(rig, settings.humanViewFocalMm / framing.effectiveCropFactor);
+    const hFov = settings.rigOrientation === "portrait" ? rotateFov(hFraming.fov) : hFraming.fov;
+    const h = overlayRect(hFov, phoneFov);
+    const hw = h.widthFraction * camW, hh = h.heightFraction * camH;
+    const ffEq = framing.fullFrameEquivalentMm;
+    human = {
+      rect: { left: (preview.width - hw) / 2, top: (preview.height - hh) / 2, width: hw, height: hh },
+      fits: hw <= preview.width + 0.5 && hh <= preview.height + 0.5,
+      relation: Math.abs(ffEq - settings.humanViewFocalMm) < 0.5 ? "equal" : ffEq < settings.humanViewFocalMm ? "wider" : "narrower",
+      focalMm: settings.humanViewFocalMm,
+    };
+  }
   return {
     framing,
+    human,
     phoneFov,
     exceedsPreview: r.exceedsPreview,
     fractions: { width: r.widthFraction, height: r.heightFraction },

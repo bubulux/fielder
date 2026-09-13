@@ -35,6 +35,9 @@ export interface Settings {
   /** Digitally scale the preview so the rig frame fills the screen. */
   fitToFrame: boolean;
   orientationLock: OrientationLock;
+  /** Draw a second, thin frame showing roughly what a human sees (a "normal" lens, in FF-equivalent mm). */
+  humanViewEnabled: boolean;
+  humanViewFocalMm: number;
 }
 
 export interface ShotMetadata {

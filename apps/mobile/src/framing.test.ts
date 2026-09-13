@@ -50,3 +50,33 @@ test("fit mode magnifies until the frame fills the limiting axis", () => {
   near(fit.camera.left + fit.camera.width / 2, preview.width / 2);
   assert.equal(fit.exceedsPreview, false);
 });
+
+test("human view: wider rig nests the human frame inside; narrower rig puts it outside", () => {
+  const preview = previewBox({ width: 2400, height: 1080 });
+  const settings = { ...DEFAULT_SETTINGS, humanViewEnabled: true, humanViewFocalMm: 50 };
+  // 24 mm on FF = 24 mm-eq: wider than the 50 mm human reference.
+  const wide = computeOverlay(settings, ff, 24, preview);
+  assert.ok(wide.human);
+  assert.equal(wide.human!.relation, "wider");
+  assert.ok(wide.human!.rect.width < wide.rect.width && wide.human!.rect.height < wide.rect.height);
+  assert.equal(wide.human!.fits, true);
+  near(wide.human!.rect.left + wide.human!.rect.width / 2, preview.width / 2);
+  // 100 mm on FF: narrower than human; the human frame is larger than the rig frame but still fits (phone is 25 mm-eq).
+  const tele = computeOverlay(settings, ff, 100, preview);
+  assert.equal(tele.human!.relation, "narrower");
+  assert.ok(tele.human!.rect.width > tele.rect.width);
+  assert.equal(tele.human!.fits, true);
+  // With fit zoom the rig frame fills the box, so the (larger) human frame no longer fits.
+  const fit = computeOverlay({ ...settings, fitToFrame: true }, ff, 100, preview);
+  assert.equal(fit.human!.fits, false);
+  // 50 mm on FF equals the reference exactly.
+  assert.equal(computeOverlay(settings, ff, 50, preview).human!.relation, "equal");
+  // A cropped sensor with a booster: the human frame still corresponds to 50 mm-eq. Equal FF-equivalent
+  // means equal diagonal field of view, so the on-screen diagonals match (widths differ with the aspect ratio).
+  const p4k = { ...ff, sensorWidthMm: 18.96, sensorHeightMm: 10, speedboosterFactor: 0.64 };
+  const o = computeOverlay(settings, p4k, 24, preview); // 31 mm-eq: inside the phone view, wider than 50
+  assert.equal(o.human!.relation, "wider");
+  const ffHuman = computeOverlay(settings, ff, 50, preview);
+  near(Math.hypot(o.human!.rect.width, o.human!.rect.height), Math.hypot(ffHuman.rect.width, ffHuman.rect.height), 1e-6);
+  assert.equal(computeOverlay({ ...settings, humanViewEnabled: false }, ff, 50, preview).human, null);
+});

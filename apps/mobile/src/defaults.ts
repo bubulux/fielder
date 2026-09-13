@@ -11,4 +11,6 @@ export const DEFAULT_SETTINGS: Settings = {
   rigOrientation: "landscape",
   fitToFrame: false,
   orientationLock: "auto",
+  humanViewEnabled: false,
+  humanViewFocalMm: 50,
 };

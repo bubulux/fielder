@@ -17,7 +17,7 @@ import { syncPresets } from "../presetSync";
 import { LensCarousel } from "../components/LensCarousel";
 import { clampToRange } from "../lens";
 import { LensSheet } from "../components/LensSheet";
-import { Overlay } from "../components/Overlay";
+import { HUMAN_COLOR, Overlay } from "../components/Overlay";
 import { PresetSheet } from "../components/PresetSheet";
 import { SettingsSheet } from "../components/SettingsSheet";
 import { colors } from "../components/ui";
@@ -226,7 +226,7 @@ export function Viewfinder({ settings, onSettings, active: tabActive }: Props) {
               onCameraReady={() => setCameraReady(true)}
             />
           )}
-          {overlay && <Overlay preview={preview} rect={overlay.rect} settings={settings} exceedsPreview={overlay.exceedsPreview} />}
+          {overlay && <Overlay preview={preview} rect={overlay.rect} settings={settings} exceedsPreview={overlay.exceedsPreview} human={overlay.human} />}
           {/* HUD */}
           <View style={s.hud} pointerEvents="none">
             {active && overlay ? (
@@ -237,6 +237,15 @@ export function Viewfinder({ settings, onSettings, active: tabActive }: Props) {
                 </Text>
                 {overlay.exceedsPreview && <Text style={s.hudWarn}>Rig sees more than the phone camera: live image shrunk to fit the frame; black areas are outside the phone's view</Text>}
                 {settings.fitToFrame && !overlay.exceedsPreview && <Text style={s.hudWarn}>Fit: digital zoom ×{(overlay.camera.width / preview.width).toFixed(2)}</Text>}
+                {overlay.human && (
+                  <Text style={[s.hudSub, { color: HUMAN_COLOR }]}>
+                    {overlay.human.relation === "equal"
+                      ? `Rig matches the human view (${overlay.human.focalMm} mm-eq)`
+                      : overlay.human.relation === "wider"
+                        ? `Rig is wider than the human view (${overlay.human.focalMm} mm-eq): cyan frame inside`
+                        : `Rig is narrower than the human view (${overlay.human.focalMm} mm-eq)${overlay.human.fits ? ": cyan frame around it" : "; the cyan frame is outside the preview"}`}
+                  </Text>
+                )}
               </>
             ) : (
               <Text style={s.hudWarn}>No rig selected. Tap "Rig" to create one.</Text>
