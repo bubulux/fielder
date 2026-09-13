@@ -46,7 +46,8 @@ export interface Location {
   approved_count: number;
 }
 export interface SavedView { id: string; name: string; filter: FilterGroup; created_at: string; updated_at: string | null }
-export interface ShotTags { name: string; light: string; weather: string; int_ext: string; location_id: string; extra: Record<string, string> }
+/** null = not specified. */
+export interface ShotTags { name: string | null; light: string | null; weather: string | null; int_ext: string | null; location_id: string | null; extra: Record<string, string> }
 
 export class ApiError extends Error {
   constructor(public status: number, message: string, public body: unknown = null) { super(message); }

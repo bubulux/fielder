@@ -45,8 +45,10 @@ export function flush(): Promise<FlushResult> {
     if (sync) {
       store.saveLocations(sync.locations);
       if (Object.keys(sync.remap).length) {
-        store.savePending(store.loadPending().map((p) =>
-          sync.remap[p.metadata.location_id] ? { ...p, metadata: { ...p.metadata, location_id: sync.remap[p.metadata.location_id] } } : p));
+        store.savePending(store.loadPending().map((p) => {
+          const to = p.metadata.location_id ? sync.remap[p.metadata.location_id] : undefined;
+          return to ? { ...p, metadata: { ...p.metadata, location_id: to } } : p;
+        }));
       }
     }
     for (const entry of store.loadPending()) {

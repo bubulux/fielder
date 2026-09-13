@@ -44,7 +44,7 @@ export function ShotReview({ draft, settings, locations, countAt, onUpload, onDi
   const form = (
     <TagsForm
       key={draft.uri}
-      initial={{ ...lastTags, name: "" }}
+      initial={{ ...lastTags, name: null }}
       locations={locations}
       countAt={countAt}
       submitLabel="Upload"

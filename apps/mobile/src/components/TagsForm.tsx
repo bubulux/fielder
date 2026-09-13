@@ -43,7 +43,8 @@ export function TagsForm({ initial, locations, countAt, submitLabel, onSubmit, c
   const addLocation = () => { setPicked(null); setNewLoc({ name: query.trim(), district: null }); };
   const clearLocation = () => { setPicked(null); setNewLoc(null); setQuery(""); };
 
-  const valid = !!name.trim() && !!light && !!weather && !!intExt && (!!picked || (!!newLoc && !!newLoc.district));
+  // Everything is optional; only a new location needs its district before it can be created.
+  const valid = !newLoc || !!newLoc.district;
   const isEdit = !!initial?.location_id;
   const count = picked ? countAt(picked.id) : 0;
 
@@ -55,12 +56,12 @@ export function TagsForm({ initial, locations, countAt, submitLabel, onSubmit, c
       created = { id: Crypto.randomUUID(), name: newLoc.name, district: newLoc.district, createdAt: new Date().toISOString(), synced: false };
       id = created.id;
     }
-    onSubmit({ name: name.trim(), light: light!, weather: weather!, int_ext: intExt!, location_id: id!, extra }, created);
+    onSubmit({ name: name.trim() || null, light, weather, int_ext: intExt, location_id: id, extra }, created);
   };
 
   return (
     <>
-      <Row label="Name">
+      <Row label="Name (optional, like everything below)">
         <Input value={name} onChangeText={setName} placeholder="e.g. Bridge from the east bank" autoCapitalize="sentences" />
       </Row>
       <Row label="Location">
@@ -99,13 +100,13 @@ export function TagsForm({ initial, locations, countAt, submitLabel, onSubmit, c
         </Row>
       )}
       <Row label="Int / Ext">
-        <ChipRow>{INT_EXT.map((v) => <Chip key={v} label={label(v)} selected={intExt === v} onPress={() => setIntExt(v)} />)}</ChipRow>
+        <ChipRow>{INT_EXT.map((v) => <Chip key={v} label={label(v)} selected={intExt === v} onPress={() => setIntExt(intExt === v ? null : v)} />)}</ChipRow>
       </Row>
       <Row label="Light">
-        <ChipRow>{LIGHT.map((v) => <Chip key={v} label={label(v)} selected={light === v} onPress={() => setLight(v)} />)}</ChipRow>
+        <ChipRow>{LIGHT.map((v) => <Chip key={v} label={label(v)} selected={light === v} onPress={() => setLight(light === v ? null : v)} />)}</ChipRow>
       </Row>
       <Row label="Weather">
-        <ChipRow>{WEATHER.map((v) => <Chip key={v} label={label(v)} selected={weather === v} onPress={() => setWeather(v)} />)}</ChipRow>
+        <ChipRow>{WEATHER.map((v) => <Chip key={v} label={label(v)} selected={weather === v} onPress={() => setWeather(weather === v ? null : v)} />)}</ChipRow>
       </Row>
       <Row label="Extra (optional)">
         <ChipRow>
@@ -139,7 +140,7 @@ export function TagsForm({ initial, locations, countAt, submitLabel, onSubmit, c
         {onCancel && <View style={{ flex: 1 }}><Button label={cancelLabel ?? "Cancel"} kind={cancelLabel === "Discard" ? "danger" : "ghost"} onPress={onCancel} /></View>}
         <View style={{ flex: 2 }}><Button label={submitLabel} onPress={submit} disabled={!valid || busy} /></View>
       </View>
-      {!valid && <Hint>All fields are required.</Hint>}
+      {!valid && <Hint>Pick a district for the new location.</Hint>}
     </>
   );
 }

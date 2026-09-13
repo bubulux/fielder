@@ -42,13 +42,13 @@ export interface Settings {
   hudEnabled: boolean;
 }
 
-/** Scouting tags entered in the review form after capture. Values are @fielder/vocab ids. */
+/** Scouting tags entered in the review form after capture. Values are @fielder/vocab ids; null = not specified. */
 export interface ShotTags {
-  name: string;
-  light: string;
-  weather: string;
-  int_ext: string;
-  location_id: string;
+  name: string | null;
+  light: string | null;
+  weather: string | null;
+  int_ext: string | null;
+  location_id: string | null;
   /** Optional named collections, e.g. { ubahn: "U1 - Kurfürstendamm" }; see EXTRA_COLLECTIONS in @fielder/vocab. */
   extra: Record<string, string>;
 }

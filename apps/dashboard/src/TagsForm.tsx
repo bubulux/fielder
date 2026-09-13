@@ -26,7 +26,8 @@ export function TagsForm({ initial, locations, onLocations, submitLabel, onSubmi
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const valid = !!name.trim() && !!light && !!weather && !!intExt && (locationId === NEW ? !!newName.trim() && !!newDistrict : !!locationId);
+  // Everything is optional; a new location needs a name and a district.
+  const valid = locationId !== NEW || (!!newName.trim() && !!newDistrict);
 
   async function submit(e: Event) {
     e.preventDefault();
@@ -46,13 +47,13 @@ export function TagsForm({ initial, locations, onLocations, submitLabel, onSubmi
           id = existing;
         }
       }
-      await onSubmit({ name: name.trim(), light, weather, int_ext: intExt, location_id: id, extra });
+      await onSubmit({ name: name.trim() || null, light: light || null, weather: weather || null, int_ext: intExt || null, location_id: id || null, extra });
     } catch (err) { setError((err as Error).message); } finally { setBusy(false); }
   }
 
   return (
     <form class="tags-form" onSubmit={submit}>
-      <label>Name<input value={name} onInput={(e) => setName((e.target as HTMLInputElement).value)} placeholder="e.g. Bridge from the east bank" /></label>
+      <label>Name (optional, like everything below)<input value={name} onInput={(e) => setName((e.target as HTMLInputElement).value)} placeholder="e.g. Bridge from the east bank" /></label>
       <label>Location
         <select value={locationId} onChange={(e) => setLocationId((e.target as HTMLSelectElement).value)}>
           <option value="">— choose —</option>

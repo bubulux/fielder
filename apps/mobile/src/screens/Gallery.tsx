@@ -110,7 +110,7 @@ export function ShotDetail({ shot, onClose, settings, mode: initialMode, onDelet
       <Text style={d.dim}>{shot.lat.toFixed(5)}, {shot.lon.toFixed(5)}</Text>
       {editing ? (
         <TagsForm
-          initial={{ name: shot.name ?? "", light: shot.light ?? undefined, weather: shot.weather ?? undefined, int_ext: shot.int_ext ?? undefined, location_id: shot.location_id ?? undefined, extra: shot.extra ?? {} }}
+          initial={{ name: shot.name, light: shot.light, weather: shot.weather, int_ext: shot.int_ext, location_id: shot.location_id, extra: shot.extra ?? {} }}
           locations={locations}
           countAt={countAt}
           submitLabel="Save"

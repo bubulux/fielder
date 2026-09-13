@@ -59,25 +59,30 @@ function toApi(row: ShotRow) {
 const LIST_SQL = `SELECT s.*, p.name AS preset_name, l.name AS location_name, l.district AS district
   FROM shots s LEFT JOIN presets p ON p.id = s.preset_id LEFT JOIN locations l ON l.id = s.location_id`;
 
-/** Scouting tags; all required on upload (extra is optional), editable afterwards. */
-interface Tags { name: string; light: string; weather: string; int_ext: string; location_id: string; extra: string }
+/**
+ * Scouting tags. All optional: a missing or empty field is stored as NULL so shots can be
+ * uploaded untagged and completed later (PATCH). `all` = every key present (upload);
+ * otherwise only the keys given are returned (patch), where null/"" clears a field.
+ */
+interface Tags { name: string | null; light: string | null; weather: string | null; int_ext: string | null; location_id: string | null; extra: string }
 
-function parseTags(m: Record<string, unknown>, required: true): Tags;
-function parseTags(m: Record<string, unknown>, required: false): Partial<Tags>;
-function parseTags(m: Record<string, unknown>, required: boolean): Partial<Tags> {
+function parseTags(m: Record<string, unknown>, all: true): Tags;
+function parseTags(m: Record<string, unknown>, all: false): Partial<Tags>;
+function parseTags(m: Record<string, unknown>, all: boolean): Partial<Tags> {
   const out: Partial<Tags> = {};
-  const want = (k: keyof Tags) => required || m[k] !== undefined;
-  if (want("name")) out.name = assertString(m.name, "name", 120);
-  if (want("light")) out.light = assertEnum(m.light, "light", LIGHT);
-  if (want("weather")) out.weather = assertEnum(m.weather, "weather", WEATHER);
-  if (want("int_ext")) out.int_ext = assertEnum(m.int_ext, "int_ext", INT_EXT);
-  if (want("location_id")) out.location_id = assertUuid(m.location_id, "location_id");
-  if (m.extra !== undefined) {
-    const extra = m.extra ?? {};
+  const want = (k: keyof Tags) => all || m[k] !== undefined;
+  const blank = (v: unknown) => v === undefined || v === null || v === "";
+  if (want("name")) out.name = blank(m.name) ? null : assertString(m.name, "name", 120);
+  if (want("light")) out.light = blank(m.light) ? null : assertEnum(m.light, "light", LIGHT);
+  if (want("weather")) out.weather = blank(m.weather) ? null : assertEnum(m.weather, "weather", WEATHER);
+  if (want("int_ext")) out.int_ext = blank(m.int_ext) ? null : assertEnum(m.int_ext, "int_ext", INT_EXT);
+  if (want("location_id")) out.location_id = blank(m.location_id) ? null : assertUuid(m.location_id, "location_id");
+  if (want("extra")) {
+    const extra = blank(m.extra) ? {} : m.extra;
     const err = validateExtra(extra);
     if (err) throw new HttpError(400, err);
     out.extra = JSON.stringify(extra);
-  } else if (required) out.extra = "{}";
+  }
   return out;
 }
 
@@ -139,7 +144,7 @@ export function registerShotRoutes(r: Router<Ctx>) {
    *   image     file (jpeg/webp/png, <= 3 MB)
    *   metadata  JSON string:
    *     { id, timestamp, lat, lon, lens_mm, preset_id?, extra_metadata?,
-   *       name, light, weather, int_ext, location_id }   (tags are required)
+   *       name?, light?, weather?, int_ext?, location_id?, extra? }   (tags are optional, NULL when absent)
    *     extra_metadata is free-form; the client puts the framing snapshot in
    *     extra_metadata.framing.
    * New shots always start in state "unreviewed".
@@ -178,7 +183,7 @@ export function registerShotRoutes(r: Router<Ctx>) {
       const p = await env.DB.prepare("SELECT 1 FROM presets WHERE id = ?1").bind(presetId).first();
       if (!p) throw new HttpError(400, "preset_id does not exist");
     }
-    await assertLocationExists(env, tags.location_id);
+    if (tags.location_id) await assertLocationExists(env, tags.location_id);
 
     const key = objectKey(id, image.type);
     await env.SHOTS_BUCKET.put(key, image.stream(), {
