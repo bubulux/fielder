@@ -5,6 +5,7 @@ import * as Location from "expo-location";
 import * as Crypto from "expo-crypto";
 import { ImageManipulator, SaveFormat } from "expo-image-manipulator";
 import { StatusBar } from "expo-status-bar";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { api } from "../api";
 import { API_URL, isConfigured } from "../config";
 import { computeOverlay, formatDeg, previewBox, type Box } from "../framing";
@@ -22,6 +23,8 @@ import { colors } from "../components/ui";
 
 const CONTROLS_SIZE = 104;
 const LENS_STRIP = 72;
+/** Minimum clearance between the lens strip and the screen edge (camera cutout in landscape). */
+const EDGE_PAD = 32;
 const MAX_UPLOAD_EDGE = 1280;
 
 type Sheet = "rig" | "lens" | "settings" | null;
@@ -41,6 +44,9 @@ export function Viewfinder({ settings, onSettings, active: tabActive }: Props) {
   };
   const window = size;
   const portrait = window.height >= window.width;
+  const insets = useSafeAreaInsets();
+  // App.tsx already pads the content by the cutout inset; top up to EDGE_PAD so the strip never touches the edge.
+  const lensPad = portrait ? 0 : Math.max(0, EDGE_PAD - insets.left);
   const setSettings = (u: Settings | ((s: Settings) => Settings)) => onSettings(typeof u === "function" ? u(settings) : u);
   const [camPerm, requestCamPerm] = useCameraPermissions();
   const [locPerm, requestLocPerm] = Location.useForegroundPermissions();
@@ -91,7 +97,7 @@ export function Viewfinder({ settings, onSettings, active: tabActive }: Props) {
   // Layout: preview box fills the space left after the control strip.
   const area: Box = portrait
     ? { width: window.width, height: Math.max(0, window.height - CONTROLS_SIZE - 64) }
-    : { width: Math.max(0, window.width - CONTROLS_SIZE - LENS_STRIP), height: window.height };
+    : { width: Math.max(0, window.width - CONTROLS_SIZE - LENS_STRIP - lensPad), height: window.height };
   const preview = useMemo(() => previewBox(area), [area.width, area.height]);
   const overlay = useMemo(
     () => (active ? computeOverlay(settings, active, lensMm, preview) : null),
@@ -202,7 +208,7 @@ export function Viewfinder({ settings, onSettings, active: tabActive }: Props) {
   return (
     <View style={[s.root, { flexDirection: portrait ? "column" : "row" }]} onLayout={onLayout}>
       <StatusBar hidden />
-      {!portrait && lensStrip}
+      {!portrait && <View style={{ paddingLeft: lensPad, backgroundColor: colors.bg }}>{lensStrip}</View>}
       <View style={[s.previewArea, { width: area.width, height: area.height }]}>
         <View style={{ width: preview.width, height: preview.height, backgroundColor: "#000", overflow: "hidden" }}>
           {window.width > 0 && (

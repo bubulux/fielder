@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
 import { Pressable, StyleSheet, Text, useWindowDimensions, View } from "react-native";
+import { SafeAreaProvider, useSafeAreaInsets } from "react-native-safe-area-context";
+import * as ScreenOrientation from "expo-screen-orientation";
 import type { Shot } from "./src/api";
 import { colors } from "./src/components/ui";
 import { Gallery, useShots } from "./src/screens/Gallery";
@@ -10,9 +12,20 @@ import type { Settings } from "./src/types";
 
 type Mode = "shoot" | "gallery" | "map";
 const TAB = 52;
+/** Minimum clearance between the UI strips and the screen edge (camera cutout, Android navigation bar). */
+export const EDGE_PAD = 32;
 
-export default function App() {
+export default function Root() {
+  return (
+    <SafeAreaProvider>
+      <App />
+    </SafeAreaProvider>
+  );
+}
+
+function App() {
   const { width, height } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
   const portrait = height >= width;
   const [mode, setMode] = useState<Mode>("shoot");
   const [settings, setSettings] = useState<Settings>(() => store.loadSettings());
@@ -23,8 +36,20 @@ export default function App() {
   // Refresh the gallery when switching to it, so new shots show up without a pull.
   useEffect(() => { if (mode !== "shoot") void shots.load(); }, [mode]);
 
+  useEffect(() => {
+    const lock = settings.orientationLock;
+    const p = lock === "landscape"
+      ? ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.LANDSCAPE)
+      : lock === "portrait"
+        ? ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP)
+        : ScreenOrientation.unlockAsync();
+    p.catch((e) => console.warn("orientation lock failed", e));
+  }, [settings.orientationLock]);
+
+  // The tab bar sits on the navigation-bar edge; keep at least EDGE_PAD clear of it.
+  const barPad = portrait ? Math.max(insets.bottom, EDGE_PAD) : Math.max(insets.right, EDGE_PAD);
   const tabs = (
-    <View style={[t.bar, portrait ? { height: TAB, flexDirection: "row" } : { width: TAB, flexDirection: "column" }]}>
+    <View style={[t.bar, portrait ? { height: TAB + barPad, paddingBottom: barPad, flexDirection: "row" } : { width: TAB + barPad, paddingRight: barPad, flexDirection: "column" }]}>
       {(["shoot", "gallery", "map"] as Mode[]).map((m) => (
         <Pressable key={m} onPress={() => setMode(m)} style={t.tab} hitSlop={6}>
           <Text style={[t.icon, mode === m && { color: colors.accent }]}>{m === "shoot" ? "◉" : m === "gallery" ? "▦" : "⌖"}</Text>
@@ -36,7 +61,8 @@ export default function App() {
 
   return (
     <View style={[t.root, { flexDirection: portrait ? "column" : "row" }]}>
-      <View style={{ flex: 1 }}>
+      {/* Content stays clear of the camera cutout (top in portrait, left in landscape). */}
+      <View style={{ flex: 1, paddingTop: portrait ? insets.top : 0, paddingLeft: portrait ? 0 : insets.left }}>
         {/* Viewfinder stays mounted so state and camera warm-up survive tab switches; it releases the camera when inactive. */}
         <View style={[{ flex: 1 }, mode !== "shoot" && { display: "none" }]}>
           <Viewfinder settings={settings} onSettings={setSettings} active={mode === "shoot"} />

@@ -1,11 +1,9 @@
 import { useCallback, useEffect, useState } from "react";
-import { ActivityIndicator, Alert, FlatList, Pressable, RefreshControl, ScrollView, StyleSheet, Text, useWindowDimensions, View } from "react-native";
+import { ActivityIndicator, Alert, FlatList, Pressable, RefreshControl, StyleSheet, Text, useWindowDimensions, View } from "react-native";
 import { api, type Shot } from "../api";
-import { ShotFrame } from "../components/ShotFrame";
+import { FRAME_MODES, frameModeLabel, ShotFrame, type FrameMode } from "../components/ShotFrame";
 import { Button, Chip, ChipRow, colors, Sheet } from "../components/ui";
 import type { Settings } from "../types";
-
-type Mode = "mask" | "frame" | "off";
 
 export function useShots() {
   const [shots, setShots] = useState<Shot[] | null>(null);
@@ -35,10 +33,12 @@ function fovLabel(s: Shot): string {
   return parts.join(" · ");
 }
 
-interface DetailProps { shot: Shot | null; onClose: () => void; settings: Settings; mode: Mode; onDeleted: (id: string) => void; onShowOnMap: (shot: Shot) => void }
+interface DetailProps { shot: Shot | null; onClose: () => void; settings: Settings; /** Initial display mode; the sheet has its own switch. */ mode: FrameMode; onDeleted: (id: string) => void; onShowOnMap: (shot: Shot) => void }
 
-export function ShotDetail({ shot, onClose, settings, mode, onDeleted, onShowOnMap }: DetailProps) {
+export function ShotDetail({ shot, onClose, settings, mode: initialMode, onDeleted, onShowOnMap }: DetailProps) {
   const { width } = useWindowDimensions();
+  const [mode, setMode] = useState<FrameMode>(initialMode);
+  useEffect(() => { setMode(initialMode); }, [initialMode, shot?.id]);
   if (!shot) return null;
   const del = () =>
     Alert.alert("Delete shot", "Removes the image and its metadata permanently.", [
@@ -48,6 +48,11 @@ export function ShotDetail({ shot, onClose, settings, mode, onDeleted, onShowOnM
   return (
     <Sheet visible title={rigLabel(shot)} onClose={onClose}>
       <ShotFrame shot={shot} width={Math.min(width - 32, 720)} settings={settings} mode={mode} style={{ borderRadius: 8, alignSelf: "center" }} />
+      <View style={{ marginTop: 10 }}>
+        <ChipRow>
+          {FRAME_MODES.map((m) => <Chip key={m} label={frameModeLabel(m)} selected={mode === m} onPress={() => setMode(m)} />)}
+        </ChipRow>
+      </View>
       <Text style={d.line}>{fmt(shot.timestamp)}</Text>
       <Text style={d.dim}>{fovLabel(shot)}</Text>
       <Text style={d.dim}>{shot.lat.toFixed(5)}, {shot.lon.toFixed(5)}</Text>
@@ -65,7 +70,7 @@ interface Props {
 
 export function Gallery({ settings, data, onShowOnMap }: Props) {
   const { width, height } = useWindowDimensions();
-  const [mode, setMode] = useState<Mode>("mask");
+  const [mode, setMode] = useState<FrameMode>("mask");
   const [open, setOpen] = useState<Shot | null>(null);
   const cols = width > height ? 4 : 2;
   const gap = 8;
@@ -77,7 +82,7 @@ export function Gallery({ settings, data, onShowOnMap }: Props) {
       <View style={g.bar}>
         <Text style={g.title}>{shots ? `${shots.length} shots` : "Gallery"}</Text>
         <ChipRow>
-          {(["mask", "frame", "off"] as Mode[]).map((m) => <Chip key={m} label={m === "off" ? "raw" : m} selected={mode === m} onPress={() => setMode(m)} />)}
+          {FRAME_MODES.map((m) => <Chip key={m} label={frameModeLabel(m)} selected={mode === m} onPress={() => setMode(m)} />)}
         </ChipRow>
       </View>
       {error && <Text style={g.error}>Could not load: {error}</Text>}
@@ -122,5 +127,3 @@ const d = StyleSheet.create({
   line: { color: colors.text, marginTop: 12, fontSize: 15 },
   dim: { color: colors.dim, marginTop: 4 },
 });
-// Keep ScrollView import used for type parity with Sheet children on some RN versions.
-void ScrollView;

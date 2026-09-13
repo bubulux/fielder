@@ -1,36 +1,35 @@
 import type { Shot } from "./api";
-import { frameOf } from "./format";
+import { frameLayout, frameOf, imageAspect, type FrameMode, type PctRect } from "./format";
 
-export type MaskMode = "mask" | "frame" | "off";
+export type MaskMode = FrameMode;
+
+const pct = (r: PctRect) => ({ left: `${r.left}%`, top: `${r.top}%`, width: `${r.width}%`, height: `${r.height}%` });
 
 /**
  * Renders a shot with its rig frame re-applied from the stored geometry.
  * The frame is centred; fractions > 1 mean the rig saw more than the phone, in
  * which case the photo is shrunk inside the frame exactly like in the app.
+ * "fit" crops the photo to the frame instead.
  */
 export function Framed({ shot, mode, className }: { shot: Shot; mode: MaskMode; className?: string }) {
   const f = frameOf(shot);
   const img = shot.image_url;
   if (!f || mode === "off") return <div class={`framed ${className ?? ""}`}><img src={img} alt="" loading="lazy" /></div>;
 
-  const scale = 1 / Math.max(1, f.width_fraction, f.height_fraction);
-  const rectW = f.width_fraction * scale * 100;
-  const rectH = f.height_fraction * scale * 100;
-  const rect = { left: `${(100 - rectW) / 2}%`, top: `${(100 - rectH) / 2}%`, width: `${rectW}%`, height: `${rectH}%` };
-  const imgStyle = scale < 1 ? { width: `${scale * 100}%`, height: `${scale * 100}%`, left: `${(1 - scale) * 50}%`, top: `${(1 - scale) * 50}%` } : {};
-
+  const l = frameLayout(f, mode, imageAspect(shot));
+  const fullImg = l.img.left === 0 && l.img.width === 100 && l.img.height === 100;
   return (
-    <div class={`framed ${className ?? ""}`}>
-      <img src={img} alt="" loading="lazy" style={imgStyle} class={scale < 1 ? "shrunk" : ""} />
-      {mode === "mask" && (
+    <div class={`framed ${className ?? ""}`} style={l.aspect ? { aspectRatio: String(l.aspect), height: "auto" } : undefined}>
+      <img src={img} alt="" loading="lazy" style={fullImg ? undefined : { inset: "auto", ...pct(l.img) }} />
+      {mode === "mask" && l.frame && (
         <>
-          <div class="tint" style={{ left: 0, top: 0, right: 0, height: rect.top }} />
-          <div class="tint" style={{ left: 0, bottom: 0, right: 0, height: rect.top }} />
-          <div class="tint" style={{ left: 0, top: rect.top, width: rect.left, height: rect.height }} />
-          <div class="tint" style={{ right: 0, top: rect.top, width: rect.left, height: rect.height }} />
+          <div class="tint" style={{ left: 0, top: 0, right: 0, height: `${l.frame.top}%` }} />
+          <div class="tint" style={{ left: 0, bottom: 0, right: 0, height: `${l.frame.top}%` }} />
+          <div class="tint" style={{ left: 0, top: `${l.frame.top}%`, width: `${l.frame.left}%`, height: `${l.frame.height}%` }} />
+          <div class="tint" style={{ right: 0, top: `${l.frame.top}%`, width: `${l.frame.left}%`, height: `${l.frame.height}%` }} />
         </>
       )}
-      <div class={`frame ${scale < 1 ? "dashed" : ""}`} style={rect} />
+      {l.frame && <div class={`frame ${l.shrunk ? "dashed" : ""}`} style={pct(l.frame)} />}
     </div>
   );
 }

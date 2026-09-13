@@ -4,6 +4,11 @@ import { imageHeaders, imageUri, type Shot } from "../api";
 import type { Settings } from "../types";
 import { Overlay } from "./Overlay";
 
+/** "mask" = tint outside the frame, "frame" = border only, "fit" = crop to the frame, "off" = raw photo. */
+export type FrameMode = "mask" | "frame" | "fit" | "off";
+export const FRAME_MODES: readonly FrameMode[] = ["mask", "frame", "fit", "off"];
+export const frameModeLabel = (m: FrameMode) => (m === "off" ? "raw" : m);
+
 export function frameOf(shot: Shot): { width: number; height: number } | null {
   const fr = (shot.extra_metadata?.framing as Record<string, unknown> | undefined)?.frame as
     | { width_fraction?: unknown; height_fraction?: unknown }
@@ -21,21 +26,30 @@ interface Props {
   shot: Shot;
   width: number;
   settings: Settings;
-  /** "mask" = tint outside the frame, "frame" = border only, "off" = raw photo. */
-  mode: "mask" | "frame" | "off";
+  mode: FrameMode;
   style?: StyleProp<ViewStyle>;
 }
 
 /** Photo with the rig frame re-applied from the stored geometry (same layout rules as the live view). */
 export function ShotFrame({ shot, width, settings, mode, style }: Props) {
   const aspect = imageAspect(shot);
-  const box = { width, height: width / aspect };
   const f = frameOf(shot);
-  const scale = f ? 1 / Math.max(1, f.width, f.height) : 1;
-  const img = { width: box.width * scale, height: box.height * scale };
-  const rect = f
-    ? { width: f.width * img.width, height: f.height * img.height, left: (box.width - f.width * img.width) / 2, top: (box.height - f.height * img.height) / 2 }
-    : null;
+  // Fit = crop to the frame. Only possible when the frame lies inside the photo; a rig that saw
+  // more than the phone falls back to the shrunk photo with a dashed frame (nothing more to show).
+  const fit = mode === "fit" && !!f && f.width <= 1 && f.height <= 1;
+  const box = fit && f
+    ? { width, height: width / (aspect * (f.width / f.height)) }
+    : { width, height: width / aspect };
+  let img: { width: number; height: number };
+  let rect: { left: number; top: number; width: number; height: number } | null = null;
+  if (fit && f) {
+    img = { width: box.width / f.width, height: box.height / f.height };
+  } else {
+    const scale = f ? 1 / Math.max(1, f.width, f.height) : 1;
+    img = { width: box.width * scale, height: box.height * scale };
+    if (f) rect = { width: f.width * img.width, height: f.height * img.height, left: (box.width - f.width * img.width) / 2, top: (box.height - f.height * img.height) / 2 };
+  }
+  const shrunk = img.width < box.width - 0.5 || img.height < box.height - 0.5;
   return (
     <View style={[{ width: box.width, height: box.height, backgroundColor: "#000", overflow: "hidden" }, style]}>
       <Image
@@ -46,7 +60,7 @@ export function ShotFrame({ shot, width, settings, mode, style }: Props) {
         transition={120}
       />
       {rect && mode !== "off" && (
-        <Overlay preview={box} rect={rect} settings={{ ...settings, blackoutEnabled: mode === "mask" }} exceedsPreview={scale < 1} />
+        <Overlay preview={box} rect={rect} settings={{ ...settings, blackoutEnabled: mode === "mask" }} exceedsPreview={shrunk} />
       )}
     </View>
   );

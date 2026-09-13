@@ -1,14 +1,22 @@
 import { useEffect, useMemo, useState } from "preact/hooks";
 import { deletePreset, deleteShot, fetchAllShots, fetchPresets, type Preset, type Shot } from "./api";
-import { coords, fovLabel, framingOf, rigDescription, rigLabel, when } from "./format";
+import { coords, fovLabel, FRAME_MODES, frameModeLabel, framingOf, isFrameMode, rigDescription, rigLabel, when } from "./format";
 import { downloadCrop, Framed, type MaskMode } from "./Framed";
 import { MapView } from "./MapView";
 
 type Tab = "gallery" | "map" | "rigs";
 
 function loadMask(): MaskMode {
-  try { const v = localStorage.getItem("maskMode"); if (v === "mask" || v === "frame" || v === "off") return v; } catch { /* ignore */ }
+  try { const v = localStorage.getItem("maskMode"); if (isFrameMode(v)) return v; } catch { /* ignore */ }
   return "mask";
+}
+
+function ModeSwitch({ value, onChange }: { value: MaskMode; onChange: (m: MaskMode) => void }) {
+  return (
+    <div class="seg" title="How to show the rig frame on photos">
+      {FRAME_MODES.map((m) => <button key={m} class={value === m ? "active" : ""} onClick={() => onChange(m)}>{frameModeLabel(m)}</button>)}
+    </div>
+  );
 }
 
 export function App() {
@@ -20,6 +28,9 @@ export function App() {
   const [focus, setFocus] = useState<Shot | null>(null);
   const [mask, setMaskState] = useState<MaskMode>(loadMask);
   const setMask = (m: MaskMode) => { setMaskState(m); try { localStorage.setItem("maskMode", m); } catch { /* ignore */ } };
+  // The detail view has its own switch, seeded from the gallery mode each time a shot is opened.
+  const [detailMask, setDetailMask] = useState<MaskMode>(mask);
+  const openShot = (s: Shot) => { setDetailMask(mask); setOpen(s); };
 
   const load = () => Promise.all([fetchAllShots().then(setShots), fetchPresets().then(setPresets)]).catch((e: Error) => setError(e.message));
   useEffect(() => { void load(); }, []);
@@ -49,13 +60,7 @@ export function App() {
       <header>
         <h1><span>▣</span> Fielder</h1>
         <span class="meta">{shots ? `${shots.length} shots · ${rigCount} rigs` : "loading…"}</span>
-        {tab !== "rigs" && (
-          <div class="seg" title="How to show the rig frame on photos">
-            <button class={mask === "mask" ? "active" : ""} onClick={() => setMask("mask")}>Mask</button>
-            <button class={mask === "frame" ? "active" : ""} onClick={() => setMask("frame")}>Frame</button>
-            <button class={mask === "off" ? "active" : ""} onClick={() => setMask("off")}>Raw</button>
-          </div>
-        )}
+        {tab !== "rigs" && <ModeSwitch value={mask} onChange={setMask} />}
         <nav class="tabs">
           <button class={tab === "gallery" ? "active" : ""} onClick={() => setTab("gallery")}>Gallery</button>
           <button class={tab === "map" ? "active" : ""} onClick={() => setTab("map")}>Map</button>
@@ -70,7 +75,7 @@ export function App() {
           shots.length === 0 ? <div class="status">No shots yet. Capture one with the phone app.</div> : (
             <div class="gallery">
               {shots.map((s) => (
-                <article class="card" key={s.id} onClick={() => setOpen(s)}>
+                <article class="card" key={s.id} onClick={() => openShot(s)}>
                   <Framed shot={s} mode={mask} />
                   <div class="body">
                     <div class="title">{rigLabel(s)}</div>
@@ -82,7 +87,7 @@ export function App() {
             </div>
           )
         )}
-        {shots && tab === "map" && <MapView shots={shots} onOpen={setOpen} focus={focus} mask={mask} />}
+        {shots && tab === "map" && <MapView shots={shots} onOpen={openShot} focus={focus} mask={mask} />}
         {tab === "rigs" && (
           <div class="rigs">
             {!presets ? <div class="status">Loading…</div> : presets.length === 0 ? <div class="status">No rigs saved yet. Create one in the phone app.</div> : (
@@ -109,8 +114,9 @@ export function App() {
       {open && (
         <div class="detail-backdrop" onClick={() => setOpen(null)}>
           <div class="detail" onClick={(e) => e.stopPropagation()}>
-            <Framed shot={open} mode={mask} />
+            <Framed shot={open} mode={detailMask} />
             <div class="side">
+              <ModeSwitch value={detailMask} onChange={setDetailMask} />
               <div>
                 <div style="font-weight:600;font-size:15px">{rigLabel(open)}</div>
                 <div class="meta">{when(open.timestamp)}</div>

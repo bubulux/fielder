@@ -42,6 +42,14 @@ export function SettingsSheet({ visible, onClose, settings, onChange, pendingCou
           <Chip label="Portrait" selected={settings.rigOrientation === "portrait"} onPress={() => set("rigOrientation", "portrait")} />
         </ChipRow>
       </Row>
+      <Row label="Screen orientation on launch">
+        <ChipRow>
+          <Chip label="Auto" selected={settings.orientationLock === "auto"} onPress={() => set("orientationLock", "auto")} />
+          <Chip label="Lock landscape" selected={settings.orientationLock === "landscape"} onPress={() => set("orientationLock", "landscape")} />
+          <Chip label="Lock portrait" selected={settings.orientationLock === "portrait"} onPress={() => set("orientationLock", "portrait")} />
+        </ChipRow>
+        <Hint>Locks the whole app to that orientation, so it opens ready to shoot. Applies immediately.</Hint>
+      </Row>
       <Row label="Fit to frame (digital zoom)">
         <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
           <Text style={{ color: colors.text }}>Enabled</Text>

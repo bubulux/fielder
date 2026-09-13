@@ -14,6 +14,8 @@ export interface Preset {
 }
 
 export type RigOrientation = "landscape" | "portrait";
+/** Screen orientation the app locks to on launch; "auto" follows the sensor. */
+export type OrientationLock = "auto" | "landscape" | "portrait";
 
 export interface Settings {
   /** 35mm-equivalent focal length of the phone's main camera. Calibrate from EXIF or edit. */
@@ -25,6 +27,7 @@ export interface Settings {
   rigOrientation: RigOrientation;
   /** Digitally scale the preview so the rig frame fills the screen. */
   fitToFrame: boolean;
+  orientationLock: OrientationLock;
 }
 
 export interface ShotMetadata {
