@@ -39,9 +39,11 @@ interface Props {
   active: boolean;
   /** Uploaded shots (for per-location counters in the review form). */
   shots: Shot[] | null;
+  locations: LocationEntry[];
+  onLocations: (l: LocationEntry[]) => void;
 }
 
-export function Viewfinder({ settings, onSettings, active: tabActive, shots }: Props) {
+export function Viewfinder({ settings, onSettings, active: tabActive, shots, locations, onLocations }: Props) {
   const [size, setSize] = useState<Box>({ width: 0, height: 0 });
   const onLayout = (e: LayoutChangeEvent) => {
     const { width, height } = e.nativeEvent.layout;
@@ -65,7 +67,7 @@ export function Viewfinder({ settings, onSettings, active: tabActive, shots }: P
   const [busy, setBusy] = useState<"capture" | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [pendingCount, setPendingCount] = useState(() => store.loadPending().length);
-  const [locations, setLocations] = useState<LocationEntry[]>(() => store.loadLocations());
+  const setLocations = (l: LocationEntry[]) => onLocations(l);
   /** Captured photo waiting in the review form (base metadata without the tags). */
   const [draft, setDraft] = useState<(Draft & { base: Omit<ShotMetadata, keyof ShotTags> }) | null>(null);
 
@@ -78,7 +80,6 @@ export function Viewfinder({ settings, onSettings, active: tabActive, shots }: P
   useEffect(() => { store.savePresets(presets); }, [presets]);
   useEffect(() => { store.saveActivePresetId(activeId); }, [activeId]);
   useEffect(() => { store.saveLensMm(lensMm); }, [lensMm]);
-  useEffect(() => { store.saveLocations(locations); }, [locations]);
 
   // Permissions and background sync on launch.
   useEffect(() => {
@@ -199,7 +200,7 @@ export function Viewfinder({ settings, onSettings, active: tabActive, shots }: P
 
   async function uploadDraft(tags: ShotTags, newLocation: LocationEntry | null) {
     if (!draft) return;
-    if (newLocation) setLocations((cur) => [...cur, newLocation]);
+    if (newLocation) { setLocations([...locations, newLocation]); store.saveLocations([...locations, newLocation]); }
     const metadata: ShotMetadata = { ...draft.base, ...tags };
     enqueue(metadata, draft.uri);
     discardDraft();

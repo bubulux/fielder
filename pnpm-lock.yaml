@@ -23,6 +23,9 @@ importers:
 
   apps/dashboard:
     dependencies:
+      '@fielder/fov-math':
+        specifier: workspace:*
+        version: link:../../packages/fov-math
       '@fielder/vocab':
         specifier: workspace:*
         version: link:../../packages/vocab

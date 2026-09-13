@@ -2,7 +2,7 @@ import { useEffect, useRef } from "preact/hooks";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import type { Shot } from "./api";
-import { fovLabel, frameLayout, frameOf, imageAspect, rigLabel, when } from "./format";
+import { frameLayout, frameOf, imageAspect, placeLabel, rigLabel, shotTitle, stateColor, when } from "./format";
 import type { MaskMode } from "./Framed";
 
 interface Props { shots: Shot[]; onOpen: (shot: Shot) => void; focus?: Shot | null; mask: MaskMode }
@@ -31,7 +31,8 @@ export function MapView({ shots, onOpen, focus, mask }: Props) {
     const bounds: L.LatLngTuple[] = [];
     for (const s of shots) {
       bounds.push([s.lat, s.lon]);
-      const marker = L.circleMarker([s.lat, s.lon], { radius: 8, color: "#ffb300", weight: 2, fillColor: "#ffb300", fillOpacity: 0.6 });
+      const c = stateColor(s);
+      const marker = L.circleMarker([s.lat, s.lon], { radius: 8, color: c, weight: 2, fillColor: c, fillOpacity: 0.6 });
       const html = document.createElement("div");
       html.className = "popup";
       html.innerHTML = `<div class="framed popup-img"></div><div class="title"></div><div class="sub"></div><div class="sub"></div><a href="#">Open details</a>`;
@@ -39,9 +40,9 @@ export function MapView({ shots, onOpen, focus, mask }: Props) {
       const p = popupFrameHtml(s, mask);
       box.innerHTML = p.html;
       if (p.aspect) box.style.aspectRatio = String(p.aspect);
-      html.querySelector(".title")!.textContent = rigLabel(s);
-      html.querySelectorAll(".sub")[0]!.textContent = when(s.timestamp);
-      html.querySelectorAll(".sub")[1]!.textContent = fovLabel(s);
+      html.querySelector(".title")!.textContent = shotTitle(s);
+      html.querySelectorAll(".sub")[0]!.textContent = `${placeLabel(s) || rigLabel(s)} · ${s.state}`;
+      html.querySelectorAll(".sub")[1]!.textContent = when(s.timestamp);
       html.querySelector("a")!.addEventListener("click", (e) => { e.preventDefault(); onOpen(s); });
       marker.bindPopup(html, { maxWidth: 280 });
       marker.addTo(g);

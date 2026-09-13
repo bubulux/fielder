@@ -63,3 +63,27 @@ main { min-height: 0; position: relative; }
 
 .badge { display: inline-block; border: 1px solid; border-radius: 999px; padding: 0 7px; font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: .5px; line-height: 16px; vertical-align: middle; }
 .card .sub.row { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-top: 4px; }
+
+.btn.primary { background: var(--accent); color: #000; border-color: var(--accent); }
+.btn:disabled { opacity: .4; cursor: default; }
+.actions.wrap { flex-wrap: wrap; justify-content: flex-start; margin-top: 0; }
+.rigs td.actions { display: flex; gap: 6px; }
+.error { color: var(--danger); font-size: 13px; }
+.tags-form, .rig-form { display: flex; flex-direction: column; gap: 10px; }
+.tags-form label, .rig-form label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--dim); }
+.tags-form input, .tags-form select, .rig-form input, .rig-form select, .rigs input, .rigs select { background: var(--bg); color: var(--text); border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; font: inherit; font-size: 14px; }
+.row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.row3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { background: var(--bg); color: var(--text); border: 1px solid var(--border); border-radius: 999px; padding: 6px 12px; cursor: pointer; font: inherit; font-size: 13px; }
+.chip.active { background: var(--accent); color: #000; border-color: var(--accent); }
+.rig-form { max-width: 720px; margin-top: 16px; padding: 16px; background: var(--panel); border: 1px solid var(--border); border-radius: 10px; }
+.rig-form h3 { margin: 0; font-size: 15px; }
+.review { padding: 16px; height: 100%; overflow: auto; display: flex; flex-direction: column; gap: 12px; }
+.review-head { display: flex; align-items: center; justify-content: space-between; }
+.review-body { display: grid; grid-template-columns: minmax(0, 2fr) minmax(280px, 1fr); gap: 16px; }
+.review-body .side { display: flex; flex-direction: column; gap: 12px; }
+.review-img { max-height: 75vh; }
+@media (max-width: 720px) { .review-body { grid-template-columns: 1fr; } .row3 { grid-template-columns: 1fr; } }
+.detail details pre { margin-top: 6px; }
+.detail .side .seg { align-self: flex-start; }

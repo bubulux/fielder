@@ -1,10 +1,17 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { ActivityIndicator, Alert, FlatList, Pressable, RefreshControl, StyleSheet, Text, useWindowDimensions, View } from "react-native";
 import { api, type Shot } from "../api";
 import { FRAME_MODES, frameModeLabel, ShotFrame, type FrameMode } from "../components/ShotFrame";
-import { label, STATE_COLORS } from "@fielder/vocab";
+import { label, SHOT_STATES, STATE_COLORS, type ShotState } from "@fielder/vocab";
 import { Button, Chip, ChipRow, colors, Sheet, StateBadge } from "../components/ui";
+import { TagsForm } from "../components/TagsForm";
+import { ensureLocation } from "../locationSync";
+import type { LocationEntry, ShotTags } from "../types";
 import type { Settings } from "../types";
+
+export type StateFilter = ShotState | "all";
+export const STATE_FILTERS: readonly StateFilter[] = ["all", ...SHOT_STATES];
+export const applyFilter = (shots: Shot[] | null, f: StateFilter): Shot[] => (shots ?? []).filter((s) => f === "all" || s.state === f);
 
 export function useShots() {
   const [shots, setShots] = useState<Shot[] | null>(null);
@@ -16,7 +23,8 @@ export function useShots() {
   }, []);
   useEffect(() => { void load(); }, [load]);
   const remove = useCallback((id: string) => setShots((cur) => (cur ?? []).filter((s) => s.id !== id)), []);
-  return { shots, error, refreshing, load, remove };
+  const update = useCallback((shot: Shot) => setShots((cur) => (cur ?? []).map((s) => (s.id === shot.id ? shot : s))), []);
+  return { shots, error, refreshing, load, remove, update };
 }
 
 const fmt = (iso: string) => new Date(iso).toLocaleString();
@@ -41,13 +49,43 @@ function fovLabel(s: Shot): string {
   return parts.join(" · ");
 }
 
-interface DetailProps { shot: Shot | null; onClose: () => void; settings: Settings; /** Initial display mode; the sheet has its own switch. */ mode: FrameMode; onDeleted: (id: string) => void; onShowOnMap: (shot: Shot) => void }
+interface DetailProps {
+  shot: Shot | null;
+  onClose: () => void;
+  settings: Settings;
+  /** Initial display mode; the sheet has its own switch. */
+  mode: FrameMode;
+  onDeleted: (id: string) => void;
+  onUpdated: (shot: Shot) => void;
+  onShowOnMap: (shot: Shot) => void;
+  locations: LocationEntry[];
+  onLocations: (l: LocationEntry[]) => void;
+  countAt: (locationId: string) => number;
+}
 
-export function ShotDetail({ shot, onClose, settings, mode: initialMode, onDeleted, onShowOnMap }: DetailProps) {
+export function ShotDetail({ shot, onClose, settings, mode: initialMode, onDeleted, onUpdated, onShowOnMap, locations, onLocations, countAt }: DetailProps) {
   const { width } = useWindowDimensions();
   const [mode, setMode] = useState<FrameMode>(initialMode);
-  useEffect(() => { setMode(initialMode); }, [initialMode, shot?.id]);
+  const [editing, setEditing] = useState(false);
+  const [busy, setBusy] = useState(false);
+  useEffect(() => { setMode(initialMode); setEditing(false); }, [initialMode, shot?.id]);
   if (!shot) return null;
+  const setState = async (state: Shot["state"]) => {
+    setBusy(true);
+    try { onUpdated(await api.patchShot(shot.id, { state })); } catch (e) { Alert.alert("Update failed", String(e)); } finally { setBusy(false); }
+  };
+  const saveTags = async (tags: ShotTags, newLoc: LocationEntry | null) => {
+    setBusy(true);
+    try {
+      if (newLoc) {
+        const id = await ensureLocation(newLoc);
+        onLocations([...locations.filter((l) => l.id !== newLoc.id && l.id !== id), { ...newLoc, id, synced: true }]);
+        tags = { ...tags, location_id: id };
+      }
+      onUpdated(await api.patchShot(shot.id, tags));
+      setEditing(false);
+    } catch (e) { Alert.alert("Save failed", String(e)); } finally { setBusy(false); }
+  };
   const del = () =>
     Alert.alert("Delete shot", "Removes the image and its metadata permanently.", [
       { text: "Cancel", style: "cancel" },
@@ -70,31 +108,62 @@ export function ShotDetail({ shot, onClose, settings, mode: initialMode, onDelet
       <Text style={d.dim}>{rigLabel(shot)}</Text>
       <Text style={d.dim}>{fovLabel(shot)}</Text>
       <Text style={d.dim}>{shot.lat.toFixed(5)}, {shot.lon.toFixed(5)}</Text>
-      <Button label="Show on map" kind="ghost" onPress={() => onShowOnMap(shot)} />
-      <Button label="Delete shot" kind="danger" onPress={del} />
+      {editing ? (
+        <TagsForm
+          initial={{ name: shot.name ?? "", light: shot.light ?? undefined, weather: shot.weather ?? undefined, int_ext: shot.int_ext ?? undefined, location_id: shot.location_id ?? undefined }}
+          locations={locations}
+          countAt={countAt}
+          submitLabel="Save"
+          onSubmit={(t, l) => void saveTags(t, l)}
+          onCancel={() => setEditing(false)}
+          busy={busy}
+        />
+      ) : (
+        <>
+          <View style={{ flexDirection: "row", gap: 12 }}>
+            {shot.state !== "approved" && <View style={{ flex: 1 }}><Button label="Approve" onPress={() => void setState("approved")} disabled={busy} /></View>}
+            {shot.state !== "archived" && <View style={{ flex: 1 }}><Button label="Archive" kind="ghost" onPress={() => void setState("archived")} disabled={busy} /></View>}
+            {shot.state !== "unreviewed" && <View style={{ flex: 1 }}><Button label="Back to review" kind="ghost" onPress={() => void setState("unreviewed")} disabled={busy} /></View>}
+          </View>
+          <Button label="Edit tags" kind="ghost" onPress={() => setEditing(true)} />
+          <Button label="Show on map" kind="ghost" onPress={() => onShowOnMap(shot)} />
+          <Button label="Delete shot" kind="danger" onPress={del} />
+        </>
+      )}
     </Sheet>
   );
 }
 
-interface Props {
+export interface ShotListProps {
   settings: Settings;
   data: ReturnType<typeof useShots>;
   onShowOnMap: (shot: Shot) => void;
+  filter: StateFilter;
+  onFilter: (f: StateFilter) => void;
+  locations: LocationEntry[];
+  onLocations: (l: LocationEntry[]) => void;
+  countAt: (locationId: string) => number;
+  /** Shot to open on mount (e.g. from the review tab). */
+  open: Shot | null;
+  onOpen: (shot: Shot | null) => void;
 }
 
-export function Gallery({ settings, data, onShowOnMap }: Props) {
+export function Gallery({ settings, data, onShowOnMap, filter, onFilter, locations, onLocations, countAt, open, onOpen }: ShotListProps) {
   const { width, height } = useWindowDimensions();
   const [mode, setMode] = useState<FrameMode>("mask");
-  const [open, setOpen] = useState<Shot | null>(null);
   const cols = width > height ? 4 : 2;
   const gap = 8;
   const cell = (width - gap * (cols + 1)) / cols;
-  const { shots, error, refreshing, load, remove } = data;
+  const { shots, error, refreshing, load, remove, update } = data;
+  const visible = useMemo(() => applyFilter(shots, filter), [shots, filter]);
+  const counts = useMemo(() => Object.fromEntries(STATE_FILTERS.map((f) => [f, applyFilter(shots, f).length])), [shots]);
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.bg }}>
       <View style={g.bar}>
-        <Text style={g.title}>{shots ? `${shots.length} shots` : "Gallery"}</Text>
+        <ChipRow>
+          {STATE_FILTERS.map((f) => <Chip key={f} label={`${f} ${counts[f] ?? 0}`} selected={filter === f} onPress={() => onFilter(f)} />)}
+        </ChipRow>
         <ChipRow>
           {FRAME_MODES.map((m) => <Chip key={m} label={frameModeLabel(m)} selected={mode === m} onPress={() => setMode(m)} />)}
         </ChipRow>
@@ -104,16 +173,16 @@ export function Gallery({ settings, data, onShowOnMap }: Props) {
       {shots && (
         <FlatList
           key={cols}
-          data={shots}
+          data={visible}
           numColumns={cols}
           keyExtractor={(s) => s.id}
           contentContainerStyle={{ padding: gap }}
           columnWrapperStyle={{ gap }}
           ItemSeparatorComponent={() => <View style={{ height: gap }} />}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => void load()} tintColor={colors.accent} />}
-          ListEmptyComponent={<Text style={g.empty}>No shots yet.</Text>}
+          ListEmptyComponent={<Text style={g.empty}>{filter === "all" ? "No shots yet." : `No ${filter} shots.`}</Text>}
           renderItem={({ item }) => (
-            <Pressable onPress={() => setOpen(item)} style={[g.card, { width: cell }]}>
+            <Pressable onPress={() => onOpen(item)} style={[g.card, { width: cell }]}>
               <ShotFrame shot={item} width={cell} settings={settings} mode={mode} />
               <View style={{ padding: 8 }}>
                 <Text style={g.cardTitle} numberOfLines={1}>{shotTitle(item)}</Text>
@@ -127,14 +196,14 @@ export function Gallery({ settings, data, onShowOnMap }: Props) {
           )}
         />
       )}
-      <ShotDetail shot={open} onClose={() => setOpen(null)} settings={settings} mode={mode} onDeleted={remove} onShowOnMap={(s) => { setOpen(null); onShowOnMap(s); }} />
+      <ShotDetail shot={open} onClose={() => onOpen(null)} settings={settings} mode={mode} onDeleted={remove} onUpdated={update}
+        onShowOnMap={(s) => { onOpen(null); onShowOnMap(s); }} locations={locations} onLocations={onLocations} countAt={countAt} />
     </View>
   );
 }
 
 const g = StyleSheet.create({
-  bar: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 12, paddingVertical: 8, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border },
-  title: { color: colors.text, fontSize: 16, fontWeight: "600" },
+  bar: { gap: 8, paddingHorizontal: 12, paddingVertical: 8, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border },
   error: { color: colors.danger, padding: 16 },
   empty: { color: colors.dim, textAlign: "center", marginTop: 40 },
   card: { backgroundColor: colors.panel, borderRadius: 10, overflow: "hidden", borderWidth: 1, borderColor: colors.border },

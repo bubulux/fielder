@@ -1,4 +1,4 @@
-import { useMemo, useState, type ComponentType } from "react";
+import { useMemo, type ComponentType } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { WebView as RNWebView, type WebViewMessageEvent, type WebViewProps } from "react-native-webview";
 
@@ -6,19 +6,18 @@ import { WebView as RNWebView, type WebViewMessageEvent, type WebViewProps } fro
 const WebView = RNWebView as unknown as ComponentType<WebViewProps>;
 import type { Shot } from "../api";
 import { colors } from "../components/ui";
-import { placeLabel, rigLabel, ShotDetail, shotTitle, type useShots } from "./Gallery";
-import type { Settings } from "../types";
+import { STATE_COLORS } from "@fielder/vocab";
+import { applyFilter, placeLabel, rigLabel, ShotDetail, shotTitle, type ShotListProps } from "./Gallery";
 
-interface Props { settings: Settings; data: ReturnType<typeof useShots>; focus: Shot | null }
+type Props = Omit<ShotListProps, "onFilter" | "onShowOnMap"> & { focus: Shot | null };
 
-/** Leaflet + OpenStreetMap inside a WebView: no API key, no native map SDK. */
-export function MapScreen({ settings, data, focus }: Props) {
-  const [open, setOpen] = useState<Shot | null>(null);
-  const { shots, remove } = data;
+/** Leaflet + OpenStreetMap inside a WebView: no API key, no native map SDK. Markers are coloured by review state. */
+export function MapScreen({ settings, data, focus, filter, locations, onLocations, countAt, open, onOpen }: Props) {
+  const { shots, remove, update } = data;
 
   const markers = useMemo(
-    () => (shots ?? []).map((s) => ({ id: s.id, lat: s.lat, lon: s.lon, title: shotTitle(s), sub: [placeLabel(s) || rigLabel(s), new Date(s.timestamp).toLocaleString()].join(" · ") })),
-    [shots],
+    () => applyFilter(shots, filter).map((s) => ({ id: s.id, lat: s.lat, lon: s.lon, color: STATE_COLORS[s.state] ?? "#ffb300", title: shotTitle(s), sub: [placeLabel(s) || rigLabel(s), new Date(s.timestamp).toLocaleString()].join(" · ") })),
+    [shots, filter],
   );
   const html = useMemo(() => buildHtml(markers, focus ? { lat: focus.lat, lon: focus.lon } : null), [markers, focus]);
 
@@ -32,18 +31,19 @@ export function MapScreen({ settings, data, focus }: Props) {
         onMessage={(e: WebViewMessageEvent) => {
           const id = e.nativeEvent.data;
           const s = shots?.find((x) => x.id === id);
-          if (s) setOpen(s);
+          if (s) onOpen(s);
         }}
         javaScriptEnabled
         domStorageEnabled
         setSupportMultipleWindows={false}
       />
-      <ShotDetail shot={open} onClose={() => setOpen(null)} settings={settings} mode="mask" onDeleted={remove} onShowOnMap={() => setOpen(null)} />
+      <ShotDetail shot={open} onClose={() => onOpen(null)} settings={settings} mode="mask" onDeleted={remove} onUpdated={update} onShowOnMap={() => onOpen(null)}
+        locations={locations} onLocations={onLocations} countAt={countAt} />
     </View>
   );
 }
 
-function buildHtml(markers: { id: string; lat: number; lon: number; title: string; sub: string }[], focus: { lat: number; lon: number } | null): string {
+function buildHtml(markers: { id: string; lat: number; lon: number; color: string; title: string; sub: string }[], focus: { lat: number; lon: number } | null): string {
   const data = JSON.stringify(markers).replace(/</g, "\\u003c");
   const focusJson = JSON.stringify(focus);
   return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
@@ -56,7 +56,7 @@ var map=L.map('m',{zoomControl:true});
 L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'&copy; OpenStreetMap'}).addTo(map);
 var b=[];
 shots.forEach(function(s){b.push([s.lat,s.lon]);
-  var mk=L.circleMarker([s.lat,s.lon],{radius:9,color:'#ffb300',weight:2,fillColor:'#ffb300',fillOpacity:.6}).addTo(map);
+  var mk=L.circleMarker([s.lat,s.lon],{radius:9,color:s.color,weight:2,fillColor:s.color,fillOpacity:.6}).addTo(map);
   var el=document.createElement('div');
   var t=document.createElement('div');t.className='t';t.textContent=s.title;
   var su=document.createElement('div');su.className='s';su.textContent=s.sub;

@@ -30,3 +30,19 @@ export async function syncLocations(local: LocationEntry[]): Promise<LocationSyn
     return null;
   }
 }
+
+/**
+ * Make sure a location exists on the server before something references it (edits, not uploads).
+ * Returns the id to use: the location's own id, or the existing one on a name clash.
+ */
+export async function ensureLocation(l: LocationEntry): Promise<string> {
+  if (l.synced) return l.id;
+  try {
+    await api.putLocation(l);
+    return l.id;
+  } catch (err) {
+    const existing = err instanceof ApiError && err.status === 409 ? (err.body as { existing_id?: unknown } | null)?.existing_id : undefined;
+    if (typeof existing === "string") return existing;
+    throw err;
+  }
+}

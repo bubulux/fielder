@@ -1,4 +1,6 @@
 /** Same-origin API; the Access session cookie is sent automatically. */
+export type ShotState = "unreviewed" | "approved" | "archived";
+
 export interface Shot {
   id: string;
   timestamp: string;
@@ -17,7 +19,7 @@ export interface Shot {
   location_id: string | null;
   location_name: string | null;
   district: string | null;
-  state: "unreviewed" | "approved" | "archived";
+  state: ShotState;
 }
 export interface Preset {
   id: string;
@@ -32,17 +34,37 @@ export interface Preset {
   created_at: string;
   updated_at: string | null;
 }
+export interface Location {
+  id: string;
+  name: string;
+  district: string;
+  created_at: string;
+  updated_at: string | null;
+  shot_count: number;
+  approved_count: number;
+}
+export interface ShotTags { name: string; light: string; weather: string; int_ext: string; location_id: string }
 
-async function get<T>(path: string): Promise<T> {
-  const res = await fetch(path, { headers: { accept: "application/json" }, credentials: "same-origin" });
+export class ApiError extends Error {
+  constructor(public status: number, message: string, public body: unknown = null) { super(message); }
+}
+
+async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
+  const res = await fetch(path, { ...init, headers: { accept: "application/json", ...(init.headers ?? {}) }, credentials: "same-origin" });
   if (res.status === 401 || res.redirected) {
     // Access session expired: reload to trigger the login redirect.
     location.reload();
-    throw new Error("session expired");
+    throw new ApiError(401, "session expired");
   }
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  return (await res.json()) as T;
+  const text = await res.text();
+  let body: unknown = null;
+  try { body = text ? JSON.parse(text) : null; } catch { /* not JSON */ }
+  if (!res.ok) throw new ApiError(res.status, (body as { error?: string } | null)?.error ?? `HTTP ${res.status}`, body);
+  return body as T;
 }
+const get = <T,>(path: string) => request<T>(path);
+const send = <T,>(method: string, path: string, body?: unknown) =>
+  request<T>(path, { method, headers: body === undefined ? {} : { "content-type": "application/json" }, body: body === undefined ? undefined : JSON.stringify(body) });
 
 type Cursor = { before: string; before_id: string } | null;
 interface ShotsPage { shots: Shot[]; next: Cursor }
@@ -61,13 +83,18 @@ export async function fetchAllShots(): Promise<Shot[]> {
 }
 
 export const fetchPresets = () => get<{ presets: Preset[] }>("/api/presets").then((r) => r.presets);
+export const putPreset = (p: Omit<Preset, "created_at" | "updated_at">) =>
+  send<{ preset: Preset }>("PUT", `/api/presets/${p.id}`, {
+    name: p.name, camera_id: p.camera_id, format_id: p.format_id, sensor_width_mm: p.sensor_width_mm, sensor_height_mm: p.sensor_height_mm,
+    speedbooster_factor: p.speedbooster_factor, lens_min_mm: p.lens_min_mm, lens_max_mm: p.lens_max_mm,
+  }).then((r) => r.preset);
+export const deletePreset = (id: string) => send<{ deleted: string }>("DELETE", `/api/presets/${id}`).then(() => undefined);
 
-export async function deleteShot(id: string): Promise<void> {
-  const res = await fetch(`/api/shots/${id}`, { method: "DELETE", credentials: "same-origin" });
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
-}
+export const deleteShot = (id: string) => send<{ deleted: string }>("DELETE", `/api/shots/${id}`).then(() => undefined);
+export const patchShot = (id: string, patch: Partial<ShotTags> & { state?: ShotState }) => send<{ shot: Shot }>("PATCH", `/api/shots/${id}`, patch).then((r) => r.shot);
 
-export async function deletePreset(id: string): Promise<void> {
-  const res = await fetch(`/api/presets/${id}`, { method: "DELETE", credentials: "same-origin" });
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
-}
+export const fetchLocations = () => get<{ locations: Location[] }>("/api/locations").then((r) => r.locations);
+/** Upsert; a 409 carries body.existing_id when another location already has the name. */
+export const putLocation = (l: { id: string; name: string; district: string }) =>
+  send<{ location: Location }>("PUT", `/api/locations/${l.id}`, { name: l.name, district: l.district }).then((r) => r.location);
+export const deleteLocation = (id: string) => send<{ deleted: string }>("DELETE", `/api/locations/${id}`).then(() => undefined);

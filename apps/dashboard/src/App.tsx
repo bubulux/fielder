@@ -1,85 +1,72 @@
 import { useEffect, useMemo, useState } from "preact/hooks";
-import { deletePreset, deleteShot, fetchAllShots, fetchPresets, type Preset, type Shot } from "./api";
-import { label } from "@fielder/vocab";
-import { coords, fovLabel, FRAME_MODES, frameModeLabel, framingOf, isFrameMode, placeLabel, rigDescription, rigLabel, shotTitle, stateColor, when } from "./format";
-import { downloadCrop, Framed, type MaskMode } from "./Framed";
+import { SHOT_STATES } from "@fielder/vocab";
+import { fetchAllShots, fetchLocations, fetchPresets, type Location, type Preset, type Shot, type ShotState } from "./api";
+import { isFrameMode, placeLabel, rigLabel, shotTitle, when } from "./format";
+import { Framed, type MaskMode } from "./Framed";
+import { Locations } from "./Locations";
 import { MapView } from "./MapView";
+import { ModeSwitch } from "./ModeSwitch";
+import { Review } from "./Review";
+import { Rigs } from "./Rigs";
+import { Badge, ShotDetail } from "./ShotDetail";
 
-type Tab = "gallery" | "map" | "rigs";
+type Tab = "gallery" | "review" | "map" | "rigs" | "locations";
+const TABS: Tab[] = ["gallery", "review", "map", "rigs", "locations"];
+type Filter = ShotState | "all";
 
 function loadMask(): MaskMode {
   try { const v = localStorage.getItem("maskMode"); if (isFrameMode(v)) return v; } catch { /* ignore */ }
   return "mask";
 }
-
-function Badge({ shot }: { shot: Shot }) {
-  return <span class="badge" style={{ color: stateColor(shot), borderColor: stateColor(shot) }}>{shot.state}</span>;
-}
-
-function ModeSwitch({ value, onChange }: { value: MaskMode; onChange: (m: MaskMode) => void }) {
-  return (
-    <div class="seg" title="How to show the rig frame on photos">
-      {FRAME_MODES.map((m) => <button key={m} class={value === m ? "active" : ""} onClick={() => onChange(m)}>{frameModeLabel(m)}</button>)}
-    </div>
-  );
-}
+const tabFromHash = (): Tab => (TABS as string[]).includes(location.hash.slice(1)) ? (location.hash.slice(1) as Tab) : "gallery";
 
 export function App() {
-  const [tab, setTab] = useState<Tab>(() => (location.hash === "#map" ? "map" : location.hash === "#rigs" ? "rigs" : "gallery"));
+  const [tab, setTab] = useState<Tab>(tabFromHash);
   const [shots, setShots] = useState<Shot[] | null>(null);
   const [presets, setPresets] = useState<Preset[] | null>(null);
+  const [locations, setLocations] = useState<Location[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [open, setOpen] = useState<Shot | null>(null);
   const [focus, setFocus] = useState<Shot | null>(null);
+  const [filter, setFilter] = useState<Filter>("all");
   const [mask, setMaskState] = useState<MaskMode>(loadMask);
   const setMask = (m: MaskMode) => { setMaskState(m); try { localStorage.setItem("maskMode", m); } catch { /* ignore */ } };
-  // The detail view has its own switch, seeded from the gallery mode each time a shot is opened.
-  const [detailMask, setDetailMask] = useState<MaskMode>(mask);
-  const openShot = (s: Shot) => { setDetailMask(mask); setOpen(s); };
 
-  const load = () => Promise.all([fetchAllShots().then(setShots), fetchPresets().then(setPresets)]).catch((e: Error) => setError(e.message));
+  const load = () => Promise.all([fetchAllShots().then(setShots), fetchPresets().then(setPresets), fetchLocations().then(setLocations)]).catch((e: Error) => setError(e.message));
   useEffect(() => { void load(); }, []);
   useEffect(() => { location.hash = tab === "gallery" ? "" : tab; }, [tab]);
 
-  const rigCount = useMemo(() => new Set((shots ?? []).map((s) => s.preset_name ?? (framingOf(s)?.preset_name as string) ?? "?")).size, [shots]);
+  const visible = useMemo(() => (shots ?? []).filter((s) => filter === "all" || s.state === filter), [shots, filter]);
+  const counts = useMemo(() => Object.fromEntries((["all", ...SHOT_STATES] as Filter[]).map((f) => [f, (shots ?? []).filter((s) => f === "all" || s.state === f).length])), [shots]);
+  const unreviewed = counts.unreviewed ?? 0;
 
-  async function remove(s: Shot) {
-    if (!confirm(`Delete this shot from ${when(s.timestamp)}? This removes the image and its metadata permanently.`)) return;
-    try {
-      await deleteShot(s.id);
-      setShots((cur) => (cur ?? []).filter((x) => x.id !== s.id));
-      setOpen(null);
-    } catch (e) { alert(`Delete failed: ${(e as Error).message}`); }
-  }
-  async function removePreset(p: Preset) {
-    const used = (shots ?? []).filter((s) => s.preset_id === p.id).length;
-    if (!confirm(`Delete rig "${p.name}"?${used ? ` ${used} shot(s) reference it; they keep their framing snapshot.` : ""} The phone drops it on next launch.`)) return;
-    try {
-      await deletePreset(p.id);
-      setPresets((cur) => (cur ?? []).filter((x) => x.id !== p.id));
-    } catch (e) { alert(`Delete failed: ${(e as Error).message}`); }
-  }
+  const updated = (s: Shot) => { setShots((cur) => (cur ?? []).map((x) => (x.id === s.id ? s : x))); setOpen((cur) => (cur?.id === s.id ? s : cur)); void fetchLocations().then(setLocations).catch(() => {}); };
+  const deleted = (id: string) => { setShots((cur) => (cur ?? []).filter((x) => x.id !== id)); void fetchLocations().then(setLocations).catch(() => {}); };
+  const openShot = (s: Shot) => setOpen(s);
 
   return (
     <div class="app">
       <header>
         <h1><span>▣</span> Fielder</h1>
-        <span class="meta">{shots ? `${shots.length} shots · ${rigCount} rigs` : "loading…"}</span>
-        {tab !== "rigs" && <ModeSwitch value={mask} onChange={setMask} />}
+        <span class="meta">{shots ? `${shots.length} shots · ${presets?.length ?? 0} rigs · ${locations?.length ?? 0} locations` : "loading…"}</span>
+        {(tab === "gallery" || tab === "map") && (
+          <div class="seg" title="Review state">
+            {(["all", ...SHOT_STATES] as Filter[]).map((f) => <button key={f} class={filter === f ? "active" : ""} onClick={() => setFilter(f)}>{f} {counts[f] ?? 0}</button>)}
+          </div>
+        )}
+        {(tab === "gallery" || tab === "map") && <ModeSwitch value={mask} onChange={setMask} />}
         <nav class="tabs">
-          <button class={tab === "gallery" ? "active" : ""} onClick={() => setTab("gallery")}>Gallery</button>
-          <button class={tab === "map" ? "active" : ""} onClick={() => setTab("map")}>Map</button>
-          <button class={tab === "rigs" ? "active" : ""} onClick={() => setTab("rigs")}>Rigs</button>
-          <button onClick={() => { setShots(null); setPresets(null); void load(); }} title="Reload">↻</button>
+          {TABS.map((t) => <button key={t} class={tab === t ? "active" : ""} onClick={() => setTab(t)}>{t === "review" && unreviewed ? `Review (${unreviewed})` : t[0].toUpperCase() + t.slice(1)}</button>)}
+          <button onClick={() => { setShots(null); setPresets(null); setLocations(null); void load(); }} title="Reload">↻</button>
         </nav>
       </header>
       <main>
         {error && <div class="status">Could not load: {error}</div>}
         {!error && !shots && <div class="status">Loading…</div>}
         {shots && tab === "gallery" && (
-          shots.length === 0 ? <div class="status">No shots yet. Capture one with the phone app.</div> : (
+          visible.length === 0 ? <div class="status">{filter === "all" ? "No shots yet. Capture one with the phone app." : `No ${filter} shots.`}</div> : (
             <div class="gallery">
-              {shots.map((s) => (
+              {visible.map((s) => (
                 <article class="card" key={s.id} onClick={() => openShot(s)}>
                   <Framed shot={s} mode={mask} />
                   <div class="body">
@@ -92,64 +79,23 @@ export function App() {
             </div>
           )
         )}
-        {shots && tab === "map" && <MapView shots={shots} onOpen={openShot} focus={focus} mask={mask} />}
-        {tab === "rigs" && (
-          <div class="rigs">
-            {!presets ? <div class="status">Loading…</div> : presets.length === 0 ? <div class="status">No rigs saved yet. Create one in the phone app.</div> : (
-              <table>
-                <thead><tr><th>Name</th><th>Camera / format</th><th>Sensor area</th><th>Speedbooster</th><th>Lens range</th><th>Shots</th><th></th></tr></thead>
-                <tbody>
-                  {presets.map((p) => (
-                    <tr key={p.id}>
-                      <td>{p.name}</td>
-                      <td class="meta">{p.camera_id && p.format_id ? `${p.camera_id} / ${p.format_id}` : "custom"}</td>
-                      <td>{p.sensor_width_mm} × {p.sensor_height_mm} mm</td>
-                      <td>{p.speedbooster_factor === 1 ? "none" : `×${p.speedbooster_factor}`}</td>
-                      <td>{p.lens_min_mm != null && p.lens_max_mm != null ? `${p.lens_min_mm}–${p.lens_max_mm} mm` : "any"}</td>
-                      <td>{(shots ?? []).filter((s) => s.preset_id === p.id).length}</td>
-                      <td><button class="btn danger" onClick={() => void removePreset(p)}>Delete</button></td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            )}
-            <p class="meta" style="margin-top:12px">Rigs are created and edited on the phone; the server copy is the source of truth and the phone pulls it on every launch.</p>
-          </div>
-        )}
+        {shots && tab === "review" && <Review shots={shots} mask={mask} onUpdated={updated} onDeleted={deleted} onOpen={openShot} />}
+        {shots && tab === "map" && <MapView shots={visible} onOpen={openShot} focus={focus} mask={mask} />}
+        {tab === "rigs" && <Rigs presets={presets} shots={shots ?? []} onChange={setPresets} />}
+        {tab === "locations" && <Locations locations={locations} onChange={setLocations} onShotsChanged={() => void fetchAllShots().then(setShots).catch(() => {})} />}
       </main>
       {open && (
-        <div class="detail-backdrop" onClick={() => setOpen(null)}>
-          <div class="detail" onClick={(e) => e.stopPropagation()}>
-            <Framed shot={open} mode={detailMask} />
-            <div class="side">
-              <ModeSwitch value={detailMask} onChange={setDetailMask} />
-              <div>
-                <div style="font-weight:600;font-size:15px">{shotTitle(open)} <Badge shot={open} /></div>
-                <div class="meta">{when(open.timestamp)}</div>
-                <div class="meta">{rigLabel(open)} · {rigDescription(open)}</div>
-              </div>
-              <dl>
-                <dt>Location</dt><dd>{placeLabel(open) || "—"}</dd>
-                <dt>Int/Ext</dt><dd>{label(open.int_ext) || "—"}</dd>
-                <dt>Light</dt><dd>{label(open.light) || "—"}</dd>
-                <dt>Weather</dt><dd>{label(open.weather) || "—"}</dd>
-                <dt>FOV</dt><dd>{fovLabel(open) || "n/a"}</dd>
-                <dt>Position</dt><dd><a style="color:var(--accent)" href={`https://www.openstreetmap.org/?mlat=${open.lat}&mlon=${open.lon}#map=17/${open.lat}/${open.lon}`} target="_blank" rel="noreferrer">{coords(open)}</a></dd>
-                <dt>Lens</dt><dd>{open.lens_mm} mm</dd>
-                <dt>Rig</dt><dd>{open.preset_name ?? "deleted / unsynced"}</dd>
-                <dt>ID</dt><dd class="meta">{open.id}</dd>
-              </dl>
-              {open.extra_metadata && <pre>{JSON.stringify(open.extra_metadata, null, 2)}</pre>}
-              <div class="actions">
-                <button class="btn" onClick={() => void downloadCrop(open)} title="Download the photo cropped to the rig frame">Download crop</button>
-                <a class="btn" href={open.image_url} download target="_blank" rel="noreferrer" style="text-decoration:none">Original</a>
-                <button class="btn" onClick={() => { setTab("map"); setFocus(open); setOpen(null); }}>Show on map</button>
-                <button class="btn danger" onClick={() => void remove(open)}>Delete</button>
-                <button class="btn" onClick={() => setOpen(null)}>Close</button>
-              </div>
-            </div>
-          </div>
-        </div>
+        <ShotDetail
+          key={open.id}
+          shot={open}
+          initialMode={mask}
+          locations={locations ?? []}
+          onLocations={setLocations}
+          onUpdated={updated}
+          onDeleted={deleted}
+          onShowOnMap={(s) => { setTab("map"); setFocus(s); setOpen(null); }}
+          onClose={() => setOpen(null)}
+        />
       )}
     </div>
   );
