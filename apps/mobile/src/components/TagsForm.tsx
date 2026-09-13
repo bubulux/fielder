@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import * as Crypto from "expo-crypto";
-import { BERLIN_DISTRICTS, INT_EXT, label, LIGHT, WEATHER } from "@fielder/vocab";
+import { BERLIN_DISTRICTS, EXTRA_COLLECTIONS, INT_EXT, label, LIGHT, WEATHER } from "@fielder/vocab";
 import type { LocationEntry, ShotTags } from "../types";
 import { Button, Chip, ChipRow, colors, Hint, Input, Row } from "./ui";
 
@@ -28,6 +28,10 @@ export function TagsForm({ initial, locations, countAt, submitLabel, onSubmit, c
   const [query, setQuery] = useState(initialLoc?.name ?? "");
   const [picked, setPicked] = useState<LocationEntry | null>(initialLoc);
   const [newLoc, setNewLoc] = useState<{ name: string; district: string | null } | null>(null);
+  const [extra, setExtra] = useState<Record<string, string>>(initial?.extra ?? {});
+  /** Collection whose value picker is open. */
+  const [extraOpen, setExtraOpen] = useState<string | null>(null);
+  const [extraQuery, setExtraQuery] = useState("");
 
   const matches = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -51,7 +55,7 @@ export function TagsForm({ initial, locations, countAt, submitLabel, onSubmit, c
       created = { id: Crypto.randomUUID(), name: newLoc.name, district: newLoc.district, createdAt: new Date().toISOString(), synced: false };
       id = created.id;
     }
-    onSubmit({ name: name.trim(), light: light!, weather: weather!, int_ext: intExt!, location_id: id! }, created);
+    onSubmit({ name: name.trim(), light: light!, weather: weather!, int_ext: intExt!, location_id: id!, extra }, created);
   };
 
   return (
@@ -102,6 +106,34 @@ export function TagsForm({ initial, locations, countAt, submitLabel, onSubmit, c
       </Row>
       <Row label="Weather">
         <ChipRow>{WEATHER.map((v) => <Chip key={v} label={label(v)} selected={weather === v} onPress={() => setWeather(v)} />)}</ChipRow>
+      </Row>
+      <Row label="Extra (optional)">
+        <ChipRow>
+          {EXTRA_COLLECTIONS.map((c) => (
+            <Chip key={c.id} label={extra[c.id] ? `${c.name}: ${extra[c.id]}` : c.name} selected={!!extra[c.id] || extraOpen === c.id}
+              onPress={() => { if (extra[c.id]) { const { [c.id]: _, ...rest } = extra; setExtra(rest); setExtraOpen(null); } else { setExtraOpen(extraOpen === c.id ? null : c.id); setExtraQuery(""); } }} />
+          ))}
+        </ChipRow>
+        {extraOpen && (() => {
+          const c = EXTRA_COLLECTIONS.find((x) => x.id === extraOpen)!;
+          const q = extraQuery.trim().toLowerCase();
+          const hits = (q ? c.values.filter((v) => v.toLowerCase().includes(q)) : c.values).slice(0, 12);
+          return (
+            <View style={{ marginTop: 8 }}>
+              <Input value={extraQuery} onChangeText={setExtraQuery} placeholder={`Search ${c.name}…`} autoFocus />
+              <View style={s.list}>
+                {hits.map((v) => (
+                  <Pressable key={v} onPress={() => { setExtra({ ...extra, [c.id]: v }); setExtraOpen(null); }} style={s.item}>
+                    <Text style={s.itemName}>{v}</Text>
+                  </Pressable>
+                ))}
+                {hits.length === 0 && <Hint>No match.</Hint>}
+                {hits.length === 12 && <Hint>Type more to narrow the list.</Hint>}
+              </View>
+            </View>
+          );
+        })()}
+        <Hint>Tap a collection to pick a value; tap it again to remove it.</Hint>
       </Row>
       <View style={{ flexDirection: "row", gap: 12, marginTop: 8 }}>
         {onCancel && <View style={{ flex: 1 }}><Button label={cancelLabel ?? "Cancel"} kind={cancelLabel === "Discard" ? "danger" : "ghost"} onPress={onCancel} /></View>}

@@ -13,4 +13,5 @@ export const DEFAULT_SETTINGS: Settings = {
   orientationLock: "auto",
   humanViewEnabled: false,
   humanViewFocalMm: 50,
+  hudEnabled: true,
 };

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { ActivityIndicator, Alert, FlatList, Pressable, RefreshControl, StyleSheet, Text, useWindowDimensions, View } from "react-native";
 import { api, type Shot } from "../api";
 import { FRAME_MODES, frameModeLabel, ShotFrame, type FrameMode } from "../components/ShotFrame";
-import { label, SHOT_STATES, STATE_COLORS, type ShotState } from "@fielder/vocab";
+import { extraLabel, label, SHOT_STATES, STATE_COLORS, type ShotState } from "@fielder/vocab";
 import { Button, Chip, ChipRow, colors, Sheet, StateBadge } from "../components/ui";
 import { TagsForm } from "../components/TagsForm";
 import { ensureLocation } from "../locationSync";
@@ -38,7 +38,7 @@ export function rigLabel(s: Shot): string {
 export const shotTitle = (s: Shot): string => s.name?.trim() || rigLabel(s);
 /** "Location · District" or "" for untagged shots. */
 export const placeLabel = (s: Shot): string => [s.location_name, s.district].filter(Boolean).join(" · ");
-export const tagsLabel = (s: Shot): string => [s.int_ext, s.light, s.weather].filter(Boolean).map((v) => label(v)).join(" · ");
+export const tagsLabel = (s: Shot): string => [...[s.int_ext, s.light, s.weather].filter(Boolean).map((v) => label(v)), extraLabel(s.extra)].filter(Boolean).join(" · ");
 export const badgeOf = (s: Shot) => <StateBadge state={s.state} color={STATE_COLORS[s.state] ?? colors.dim} />;
 
 function fovLabel(s: Shot): string {
@@ -110,7 +110,7 @@ export function ShotDetail({ shot, onClose, settings, mode: initialMode, onDelet
       <Text style={d.dim}>{shot.lat.toFixed(5)}, {shot.lon.toFixed(5)}</Text>
       {editing ? (
         <TagsForm
-          initial={{ name: shot.name ?? "", light: shot.light ?? undefined, weather: shot.weather ?? undefined, int_ext: shot.int_ext ?? undefined, location_id: shot.location_id ?? undefined }}
+          initial={{ name: shot.name ?? "", light: shot.light ?? undefined, weather: shot.weather ?? undefined, int_ext: shot.int_ext ?? undefined, location_id: shot.location_id ?? undefined, extra: shot.extra ?? {} }}
           locations={locations}
           countAt={countAt}
           submitLabel="Save"
@@ -156,6 +156,8 @@ export function Gallery({ settings, data, onShowOnMap, filter, onFilter, locatio
   const cell = (width - gap * (cols + 1)) / cols;
   const { shots, error, refreshing, load, remove, update } = data;
   const visible = useMemo(() => applyFilter(shots, filter), [shots, filter]);
+  // The opened shot is a snapshot; always render the latest copy from the list so state changes show immediately.
+  const openLatest = open ? (shots ?? []).find((s) => s.id === open.id) ?? open : null;
   const counts = useMemo(() => Object.fromEntries(STATE_FILTERS.map((f) => [f, applyFilter(shots, f).length])), [shots]);
 
   return (
@@ -196,7 +198,7 @@ export function Gallery({ settings, data, onShowOnMap, filter, onFilter, locatio
           )}
         />
       )}
-      <ShotDetail shot={open} onClose={() => onOpen(null)} settings={settings} mode={mode} onDeleted={remove} onUpdated={update}
+      <ShotDetail shot={openLatest} onClose={() => onOpen(null)} settings={settings} mode={mode} onDeleted={remove} onUpdated={update}
         onShowOnMap={(s) => { onOpen(null); onShowOnMap(s); }} locations={locations} onLocations={onLocations} countAt={countAt} />
     </View>
   );

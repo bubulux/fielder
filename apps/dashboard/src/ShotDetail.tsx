@@ -1,5 +1,5 @@
 import { useState } from "preact/hooks";
-import { label } from "@fielder/vocab";
+import { extraLabel, label } from "@fielder/vocab";
 import { deleteShot, patchShot, type Location, type Shot, type ShotState } from "./api";
 import { coords, fovLabel, placeLabel, rigDescription, rigLabel, shotTitle, stateColor, when } from "./format";
 import { downloadCrop, Framed, type MaskMode } from "./Framed";
@@ -48,7 +48,7 @@ export function ShotDetail({ shot, initialMode, locations, onLocations, onUpdate
           </div>
           {editing ? (
             <TagsForm
-              initial={{ name: shot.name ?? "", light: shot.light ?? "", weather: shot.weather ?? "", int_ext: shot.int_ext ?? "", location_id: shot.location_id ?? "" }}
+              initial={{ name: shot.name ?? "", light: shot.light ?? "", weather: shot.weather ?? "", int_ext: shot.int_ext ?? "", location_id: shot.location_id ?? "", extra: shot.extra ?? {} }}
               locations={locations}
               onLocations={onLocations}
               submitLabel="Save"
@@ -62,6 +62,7 @@ export function ShotDetail({ shot, initialMode, locations, onLocations, onUpdate
                 <dt>Int/Ext</dt><dd>{label(shot.int_ext) || "—"}</dd>
                 <dt>Light</dt><dd>{label(shot.light) || "—"}</dd>
                 <dt>Weather</dt><dd>{label(shot.weather) || "—"}</dd>
+                <dt>Extra</dt><dd>{extraLabel(shot.extra) || "—"}</dd>
                 <dt>FOV</dt><dd>{fovLabel(shot) || "n/a"}</dd>
                 <dt>Position</dt><dd><a style="color:var(--accent)" href={`https://www.openstreetmap.org/?mlat=${shot.lat}&mlon=${shot.lon}#map=17/${shot.lat}/${shot.lon}`} target="_blank" rel="noreferrer">{coords(shot)}</a></dd>
                 <dt>Lens</dt><dd>{shot.lens_mm} mm</dd>

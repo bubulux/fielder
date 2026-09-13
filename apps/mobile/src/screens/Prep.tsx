@@ -1,12 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
 import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, useWindowDimensions, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { label } from "@fielder/vocab";
 import type { Shot } from "../api";
 import { FRAME_MODES, frameModeLabel, imageAspect, frameOf, ShotFrame, type FrameMode } from "../components/ShotFrame";
 import { Chip, ChipRow, colors, Sheet } from "../components/ui";
 import type { Settings } from "../types";
-import { placeLabel, rigLabel, shotTitle, type useShots } from "./Gallery";
+import { placeLabel, rigLabel, shotTitle, tagsLabel, type useShots } from "./Gallery";
 
 interface Props { settings: Settings; data: ReturnType<typeof useShots> }
 
@@ -114,7 +113,7 @@ export function Prep({ settings, data }: Props) {
       )}
       <Sheet visible={info} title={shotTitle(shot)} onClose={() => setInfo(false)}>
         <Text style={p.infoLine}>{placeLabel(shot) || "no location"}</Text>
-        <Text style={p.infoDim}>{[shot.int_ext, shot.light, shot.weather].filter(Boolean).map((v) => label(v)).join(" · ") || "no tags"}</Text>
+        <Text style={p.infoDim}>{tagsLabel(shot) || "no tags"}</Text>
         <Text style={p.infoDim}>{rigLabel(shot)}</Text>
         <Text style={p.infoDim}>{fmt(shot.timestamp)}</Text>
         <Text style={p.infoDim}>{shot.lat.toFixed(5)}, {shot.lon.toFixed(5)}</Text>

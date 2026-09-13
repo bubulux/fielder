@@ -38,6 +38,8 @@ export interface Settings {
   /** Draw a second, thin frame showing roughly what a human sees (a "normal" lens, in FF-equivalent mm). */
   humanViewEnabled: boolean;
   humanViewFocalMm: number;
+  /** Show the info overlay (rig, math, warnings) on the live view. */
+  hudEnabled: boolean;
 }
 
 /** Scouting tags entered in the review form after capture. Values are @fielder/vocab ids. */
@@ -47,6 +49,8 @@ export interface ShotTags {
   weather: string;
   int_ext: string;
   location_id: string;
+  /** Optional named collections, e.g. { ubahn: "U1 - Kurfürstendamm" }; see EXTRA_COLLECTIONS in @fielder/vocab. */
+  extra: Record<string, string>;
 }
 
 export interface ShotMetadata extends ShotTags {

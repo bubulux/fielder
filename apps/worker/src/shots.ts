@@ -1,4 +1,4 @@
-import { INT_EXT, LIGHT, SHOT_STATES, WEATHER } from "@fielder/vocab";
+import { INT_EXT, LIGHT, SHOT_STATES, validateExtra, WEATHER } from "@fielder/vocab";
 import { assertEnum, assertIsoTimestamp, assertNumber, assertString, assertUuid, HttpError, json, readJson, type Router } from "./http.ts";
 import type { Ctx } from "./index.ts";
 
@@ -18,6 +18,7 @@ export interface ShotRow {
   int_ext: string | null;
   location_id: string | null;
   state: string;
+  extra: string | null;
   preset_name?: string | null;
   location_name?: string | null;
   district?: string | null;
@@ -51,14 +52,15 @@ function toApi(row: ShotRow) {
     location_name: row.location_name ?? null,
     district: row.district ?? null,
     state: row.state ?? "unreviewed",
+    extra: row.extra ? (JSON.parse(row.extra) as Record<string, string>) : {},
   };
 }
 
 const LIST_SQL = `SELECT s.*, p.name AS preset_name, l.name AS location_name, l.district AS district
   FROM shots s LEFT JOIN presets p ON p.id = s.preset_id LEFT JOIN locations l ON l.id = s.location_id`;
 
-/** Scouting tags; all required on upload, editable afterwards. */
-interface Tags { name: string; light: string; weather: string; int_ext: string; location_id: string }
+/** Scouting tags; all required on upload (extra is optional), editable afterwards. */
+interface Tags { name: string; light: string; weather: string; int_ext: string; location_id: string; extra: string }
 
 function parseTags(m: Record<string, unknown>, required: true): Tags;
 function parseTags(m: Record<string, unknown>, required: false): Partial<Tags>;
@@ -70,6 +72,12 @@ function parseTags(m: Record<string, unknown>, required: boolean): Partial<Tags>
   if (want("weather")) out.weather = assertEnum(m.weather, "weather", WEATHER);
   if (want("int_ext")) out.int_ext = assertEnum(m.int_ext, "int_ext", INT_EXT);
   if (want("location_id")) out.location_id = assertUuid(m.location_id, "location_id");
+  if (m.extra !== undefined) {
+    const extra = m.extra ?? {};
+    const err = validateExtra(extra);
+    if (err) throw new HttpError(400, err);
+    out.extra = JSON.stringify(extra);
+  } else if (required) out.extra = "{}";
   return out;
 }
 
@@ -180,9 +188,9 @@ export function registerShotRoutes(r: Router<Ctx>) {
     try {
       await env.DB.prepare(
         `INSERT INTO shots (id, timestamp, lat, lon, preset_id, lens_mm, r2_object_key, extra_metadata,
-                            name, light, weather, int_ext, location_id, state)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, 'unreviewed')`,
-      ).bind(id, timestamp, lat, lon, presetId, lensMm, key, extraJson, tags.name, tags.light, tags.weather, tags.int_ext, tags.location_id).run();
+                            name, light, weather, int_ext, location_id, state, extra)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, 'unreviewed', ?14)`,
+      ).bind(id, timestamp, lat, lon, presetId, lensMm, key, extraJson, tags.name, tags.light, tags.weather, tags.int_ext, tags.location_id, tags.extra).run();
     } catch (err) {
       await env.SHOTS_BUCKET.delete(key).catch(() => {});
       throw err;

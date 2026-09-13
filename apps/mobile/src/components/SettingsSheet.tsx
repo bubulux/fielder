@@ -54,6 +54,12 @@ export function SettingsSheet({ visible, onClose, settings, onChange, pendingCou
         </ChipRow>
         <Hint>Locks the whole app to that orientation, so it opens ready to shoot. Applies immediately.</Hint>
       </Row>
+      <Row label="Info overlay on the live view">
+        <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
+          <Text style={{ color: colors.text }}>Show rig, focal length, FOV and warnings</Text>
+          <Switch value={settings.hudEnabled} onValueChange={(v) => set("hudEnabled", v)} trackColor={{ true: colors.accent }} />
+        </View>
+      </Row>
       <Row label="Fit to frame (digital zoom)">
         <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
           <Text style={{ color: colors.text }}>Enabled</Text>
@@ -71,7 +77,7 @@ export function SettingsSheet({ visible, onClose, settings, onChange, pendingCou
             <Chip key={mm} label={`${mm} mm-eq`} selected={settings.humanViewFocalMm === mm} onPress={() => set("humanViewFocalMm", mm)} />
           ))}
         </ChipRow>
-        <Hint>Draws a thin cyan frame for roughly what a person sees. There is no single "human field of view"; 43–50 mm full-frame-equivalent is the film convention for the region of attention, 35 mm is a wider take. The HUD says whether the rig is wider or narrower than it.</Hint>
+        <Hint>The Human button on the shoot screen cycles off → 35 → 43 → 50 → off. Draws a thin cyan frame for roughly what a person sees. There is no single "human field of view"; 43–50 mm full-frame-equivalent is the film convention for the region of attention, 35 mm is a wider take. The HUD says whether the rig is wider or narrower than it.</Hint>
       </Row>
       <Row label="Frame border">
         <ChipRow>

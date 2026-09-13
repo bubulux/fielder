@@ -30,6 +30,7 @@ const LENS_STRIP = 72;
 /** Minimum clearance between the lens strip and the screen edge (camera cutout in landscape). */
 const EDGE_PAD = 32;
 const MAX_UPLOAD_EDGE = 1280;
+const HUMAN_STEPS = [35, 43, 50];
 
 type Sheet = "rig" | "lens" | "settings" | null;
 
@@ -233,6 +234,16 @@ export function Viewfinder({ settings, onSettings, active: tabActive, shots, loc
     [shots],
   );
 
+  /** Off -> 35 -> 43 -> 50 mm-eq -> off. */
+  function cycleHuman() {
+    setSettings((x) => {
+      if (!x.humanViewEnabled) return { ...x, humanViewEnabled: true, humanViewFocalMm: HUMAN_STEPS[0] };
+      const i = HUMAN_STEPS.indexOf(x.humanViewFocalMm);
+      if (i < 0 || i === HUMAN_STEPS.length - 1) return { ...x, humanViewEnabled: false };
+      return { ...x, humanViewFocalMm: HUMAN_STEPS[i + 1] };
+    });
+  }
+
   async function retryUploads() {
     const r = await flush();
     setPendingCount(r.remaining);
@@ -250,7 +261,7 @@ export function Viewfinder({ settings, onSettings, active: tabActive, shots, loc
   }
 
   const lensStrip = (
-    <LensCarousel lensMm={lensMm} onChange={setLensMm} vertical={!portrait} length={portrait ? window.width : window.height} range={lensRange} />
+    <LensCarousel lensMm={lensMm} onChange={setLensMm} vertical={!portrait} length={portrait ? window.width : window.height} range={lensRange} onPressValue={() => setSheet("lens")} />
   );
 
   return (
@@ -271,8 +282,8 @@ export function Viewfinder({ settings, onSettings, active: tabActive, shots, loc
             />
           )}
           {overlay && <Overlay preview={preview} rect={overlay.rect} settings={settings} exceedsPreview={overlay.exceedsPreview} human={overlay.human} />}
-          {/* HUD */}
-          <View style={s.hud} pointerEvents="none">
+          {/* HUD (can be hidden in Settings; the "no rig" hint always shows) */}
+          {(settings.hudEnabled || !active) && <View style={s.hud} pointerEvents="none">
             {active && overlay ? (
               <>
                 <Text style={s.hudMain}>{active.name} · {lensMm} mm{active.speedboosterFactor !== 1 ? ` ×${active.speedboosterFactor}` : ""}</Text>
@@ -296,7 +307,7 @@ export function Viewfinder({ settings, onSettings, active: tabActive, shots, loc
             )}
             {!isConfigured && <Text style={s.hudWarn}>Build has no API configuration; shots stay on device.</Text>}
             {isConfigured && !authEmail && <Text style={s.hudWarn}>Not signed in: shots are kept on the phone. Sign in via Setup.</Text>}
-          </View>
+          </View>}
           {toast && <View style={s.toast}><Text style={s.toastText}>{toast}</Text></View>}
         </View>
       </View>
@@ -304,7 +315,7 @@ export function Viewfinder({ settings, onSettings, active: tabActive, shots, loc
       {portrait && lensStrip}
       <View style={[s.controls, portrait ? { height: CONTROLS_SIZE, flexDirection: "row" } : { width: CONTROLS_SIZE, flexDirection: "column" }]}>
         <Ctl label="Rig" value={active ? "●" : "＋"} onPress={() => setSheet("rig")} />
-        <Ctl label="Custom" value={`${lensMm}`} onPress={() => setSheet("lens")} />
+        <Ctl label="Human" value={settings.humanViewEnabled ? `${settings.humanViewFocalMm}` : "off"} onPress={cycleHuman} accent={settings.humanViewEnabled} />
         <Ctl label="Fit" value={settings.fitToFrame ? "ON" : "off"} onPress={() => setSettings((x) => ({ ...x, fitToFrame: !x.fitToFrame }))} accent={settings.fitToFrame} />
         <Pressable onPress={capture} disabled={!!busy || !active || !cameraReady} style={[s.shutter, (!!busy || !active || !cameraReady) && { opacity: 0.4 }]}>
           {busy === "capture" ? <ActivityIndicator color="#000" /> : <View style={s.shutterInner} />}

@@ -83,6 +83,7 @@ export interface Shot {
   location_name: string | null;
   district: string | null;
   state: "unreviewed" | "approved" | "archived";
+  extra: Record<string, string>;
 }
 
 interface ServerLocation {

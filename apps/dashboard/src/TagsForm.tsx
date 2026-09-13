@@ -1,5 +1,5 @@
 import { useState } from "preact/hooks";
-import { BERLIN_DISTRICTS, INT_EXT, label, LIGHT, WEATHER } from "@fielder/vocab";
+import { BERLIN_DISTRICTS, EXTRA_COLLECTIONS, INT_EXT, label, LIGHT, WEATHER } from "@fielder/vocab";
 import { ApiError, putLocation, type Location, type ShotTags } from "./api";
 
 interface Props {
@@ -22,6 +22,7 @@ export function TagsForm({ initial, locations, onLocations, submitLabel, onSubmi
   const [locationId, setLocationId] = useState(initial?.location_id ?? "");
   const [newName, setNewName] = useState("");
   const [newDistrict, setNewDistrict] = useState("");
+  const [extra, setExtra] = useState<Record<string, string>>(initial?.extra ?? {});
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -45,7 +46,7 @@ export function TagsForm({ initial, locations, onLocations, submitLabel, onSubmi
           id = existing;
         }
       }
-      await onSubmit({ name: name.trim(), light, weather, int_ext: intExt, location_id: id });
+      await onSubmit({ name: name.trim(), light, weather, int_ext: intExt, location_id: id, extra });
     } catch (err) { setError((err as Error).message); } finally { setBusy(false); }
   }
 
@@ -87,6 +88,18 @@ export function TagsForm({ initial, locations, onLocations, submitLabel, onSubmi
           </select>
         </label>
       </div>
+      {EXTRA_COLLECTIONS.map((c) => {
+        const groups = new Map<string, string[]>();
+        for (const v of c.values) { const g = v.split(" - ")[0]; groups.set(g, [...(groups.get(g) ?? []), v]); }
+        return (
+          <label key={c.id}>{c.name} (optional)
+            <select value={extra[c.id] ?? ""} onChange={(e) => { const v = (e.target as HTMLSelectElement).value; const { [c.id]: _, ...rest } = extra; setExtra(v ? { ...rest, [c.id]: v } : rest); }}>
+              <option value="">—</option>
+              {[...groups.entries()].map(([g, vs]) => <optgroup key={g} label={g}>{vs.map((v) => <option key={v} value={v}>{v}</option>)}</optgroup>)}
+            </select>
+          </label>
+        );
+      })}
       {error && <div class="error">{error}</div>}
       <div class="actions">
         <button type="button" class="btn" onClick={onCancel}>Cancel</button>

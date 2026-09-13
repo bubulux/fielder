@@ -20,6 +20,7 @@ export interface Shot {
   location_name: string | null;
   district: string | null;
   state: ShotState;
+  extra: Record<string, string>;
 }
 export interface Preset {
   id: string;
@@ -43,7 +44,7 @@ export interface Location {
   shot_count: number;
   approved_count: number;
 }
-export interface ShotTags { name: string; light: string; weather: string; int_ext: string; location_id: string }
+export interface ShotTags { name: string; light: string; weather: string; int_ext: string; location_id: string; extra: Record<string, string> }
 
 export class ApiError extends Error {
   constructor(public status: number, message: string, public body: unknown = null) { super(message); }

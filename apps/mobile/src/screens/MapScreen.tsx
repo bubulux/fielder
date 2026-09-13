@@ -20,6 +20,7 @@ export function MapScreen({ settings, data, focus, filter, locations, onLocation
     [shots, filter],
   );
   const html = useMemo(() => buildHtml(markers, focus ? { lat: focus.lat, lon: focus.lon } : null), [markers, focus]);
+  const openLatest = open ? (shots ?? []).find((s) => s.id === open.id) ?? open : null;
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.bg }}>
@@ -37,7 +38,7 @@ export function MapScreen({ settings, data, focus, filter, locations, onLocation
         domStorageEnabled
         setSupportMultipleWindows={false}
       />
-      <ShotDetail shot={open} onClose={() => onOpen(null)} settings={settings} mode="mask" onDeleted={remove} onUpdated={update} onShowOnMap={() => onOpen(null)}
+      <ShotDetail shot={openLatest} onClose={() => onOpen(null)} settings={settings} mode="mask" onDeleted={remove} onUpdated={update} onShowOnMap={() => onOpen(null)}
         locations={locations} onLocations={onLocations} countAt={countAt} />
     </View>
   );

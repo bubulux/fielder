@@ -12,9 +12,11 @@ interface Props {
   length: number;
   /** Rig lens range; limits the list to focal lengths inside it (endpoints included). */
   range: LensRange | null;
+  /** Tap on the value: opens the full lens sheet (custom focal length). */
+  onPressValue: () => void;
 }
 
-export function LensCarousel({ lensMm, onChange, vertical, length, range }: Props) {
+export function LensCarousel({ lensMm, onChange, vertical, length, range, onPressValue }: Props) {
   const list = lensList(range);
   const i = list.indexOf(lensMm);
   const atStart = i === 0 || (i < 0 && lensMm <= list[0]);
@@ -27,10 +29,10 @@ export function LensCarousel({ lensMm, onChange, vertical, length, range }: Prop
       <Pressable onPress={prev} disabled={atStart} style={s.btn} hitSlop={10}>
         <Text style={[s.arrow, atStart && s.disabled]}>{vertical ? "▲" : "◀"}</Text>
       </Pressable>
-      <View style={s.value}>
+      <Pressable onPress={onPressValue} style={s.value} hitSlop={6}>
         <Text style={[s.mm, i < 0 && s.custom]}>{lensMm}</Text>
         <Text style={s.unit}>mm{i < 0 ? " ·custom" : ""}</Text>
-      </View>
+      </Pressable>
       <Pressable onPress={next} disabled={atEnd} style={s.btn} hitSlop={10}>
         <Text style={[s.arrow, atEnd && s.disabled]}>{vertical ? "▼" : "▶"}</Text>
       </Pressable>
