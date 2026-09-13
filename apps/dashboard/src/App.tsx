@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "preact/hooks";
 import { SHOT_STATES } from "@fielder/vocab";
-import { fetchAllShots, fetchLocations, fetchPresets, fetchViews, type Location, type Preset, type SavedView, type Shot, type ShotState } from "./api";
+import { deleteShot, fetchAllShots, fetchLocations, fetchPresets, fetchViews, type Location, type Preset, type SavedView, type Shot, type ShotState } from "./api";
 import { isFrameMode, placeLabel, rigLabel, shotTitle, tagsLabel, when } from "./format";
 import { Framed, type MaskMode } from "./Framed";
 import { Locations } from "./Locations";
@@ -38,6 +38,10 @@ export function App() {
   const setLayout = (l: Layout) => { setLayoutState(l); try { localStorage.setItem("layout", l); } catch { /* ignore */ } };
   /** The list the open shot belongs to, for prev/next in the dialog. */
   const [openList, setOpenList] = useState<Shot[]>([]);
+  /** Row selection in the list layout (shot ids). */
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [bulkBusy, setBulkBusy] = useState(false);
+  const toggleSelected = (id: string) => setSelected((cur) => { const n = new Set(cur); if (n.has(id)) n.delete(id); else n.add(id); return n; });
   const setMask = (m: MaskMode) => { setMaskState(m); try { localStorage.setItem("maskMode", m); } catch { /* ignore */ } };
 
   const load = () => Promise.all([fetchAllShots().then(setShots), fetchPresets().then(setPresets), fetchLocations().then(setLocations), fetchViews().then(setViews)]).catch((e: Error) => setError(e.message));
@@ -49,7 +53,22 @@ export function App() {
   const unreviewed = counts.unreviewed ?? 0;
 
   const updated = (s: Shot) => { setShots((cur) => (cur ?? []).map((x) => (x.id === s.id ? s : x))); setOpen((cur) => (cur?.id === s.id ? s : cur)); void fetchLocations().then(setLocations).catch(() => {}); };
-  const deleted = (id: string) => { setShots((cur) => (cur ?? []).filter((x) => x.id !== id)); void fetchLocations().then(setLocations).catch(() => {}); };
+  const deleted = (id: string) => { setShots((cur) => (cur ?? []).filter((x) => x.id !== id)); setSelected((cur) => { const n = new Set(cur); n.delete(id); return n; }); void fetchLocations().then(setLocations).catch(() => {}); };
+
+  async function deleteSelected() {
+    const ids = visible.filter((s) => selected.has(s.id)).map((s) => s.id);
+    if (ids.length === 0) return;
+    if (!confirm(`Delete ${ids.length} shot${ids.length === 1 ? "" : "s"} permanently? This removes the images and their metadata. Archiving keeps them.`)) return;
+    setBulkBusy(true);
+    const failed: string[] = [];
+    for (const id of ids) {
+      try { await deleteShot(id); setShots((cur) => (cur ?? []).filter((x) => x.id !== id)); } catch (e) { failed.push(`${id}: ${(e as Error).message}`); }
+    }
+    setSelected(new Set());
+    setBulkBusy(false);
+    void fetchLocations().then(setLocations).catch(() => {});
+    if (failed.length) alert(`${failed.length} deletion(s) failed:\n${failed.join("\n")}`);
+  }
   const openShot = (s: Shot, list?: Shot[]) => { setOpenList(list ?? visible); setOpen(s); };
 
   return (
@@ -81,11 +100,24 @@ export function App() {
           visible.length === 0 ? <div class="status">{filter === "all" ? "No shots yet. Capture one with the phone app." : `No ${filter} shots.`}</div>
           : layout === "list" ? (
             <div class="list">
+              {(() => {
+                const selectedVisible = visible.filter((s) => selected.has(s.id)).length;
+                const allSelected = selectedVisible === visible.length;
+                return (
+                  <div class="bulk-bar">
+                    <label class="check"><input type="checkbox" checked={allSelected} onChange={() => setSelected(allSelected ? new Set() : new Set(visible.map((s) => s.id)))} /> {allSelected ? "Deselect all" : "Select all"}</label>
+                    <span class="meta">{selectedVisible} selected</span>
+                    <button class="btn danger" disabled={selectedVisible === 0 || bulkBusy} onClick={() => void deleteSelected()}>{bulkBusy ? "Deleting…" : `Delete selected (${selectedVisible})`}</button>
+                    {selectedVisible > 0 && <button class="btn" onClick={() => setSelected(new Set())}>Clear</button>}
+                  </div>
+                );
+              })()}
               <table>
-                <thead><tr><th></th><th>Name</th><th>Location</th><th>Tags</th><th>Rig · lens</th><th>Date</th><th>State</th></tr></thead>
+                <thead><tr><th></th><th></th><th>Name</th><th>Location</th><th>Tags</th><th>Rig · lens</th><th>Date</th><th>State</th></tr></thead>
                 <tbody>
                   {visible.map((s) => (
-                    <tr key={s.id} onClick={() => openShot(s)}>
+                    <tr key={s.id} onClick={() => openShot(s)} class={selected.has(s.id) ? "selected" : ""}>
+                      <td class="sel" onClick={(e) => { e.stopPropagation(); toggleSelected(s.id); }}><input type="checkbox" checked={selected.has(s.id)} onClick={(e) => e.stopPropagation()} onChange={() => toggleSelected(s.id)} /></td>
                       <td class="thumb"><Framed shot={s} mode={mask} /></td>
                       <td class="name">{shotTitle(s)}</td>
                       <td>{placeLabel(s) || "—"}</td>

@@ -139,3 +139,9 @@ main { min-height: 0; position: relative; }
 .list td.thumb { width: 150px; padding: 4px 10px; }
 .list td.thumb .framed { width: 140px; border-radius: 6px; }
 .list td.name { font-weight: 600; }
+
+.bulk-bar { display: flex; align-items: center; gap: 14px; padding: 0 10px 10px; }
+.bulk-bar .check { display: flex; align-items: center; gap: 6px; cursor: pointer; user-select: none; }
+.list td.sel { width: 36px; cursor: pointer; }
+.list input[type="checkbox"] { width: 16px; height: 16px; accent-color: var(--accent); cursor: pointer; }
+.list tbody tr.selected { background: rgba(255, 179, 0, .08); }
