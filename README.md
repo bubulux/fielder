@@ -17,8 +17,8 @@ Single user. Everything runs on Cloudflare; the phone app is a sideloaded Androi
 
 - **Worker** `fielder-api` at https://fielder-api.fielder-worker.workers.dev — API and dashboard on one hostname.
 - **R2** bucket `fielder-shots` (WEUR), **D1** database `fielder-db` (WEUR), migrations in `apps/worker/migrations/`.
-- **Cloudflare Access** (team `weathered-salad-6072`): app "Fielder" on the Worker hostname. Policy: Allow for the one allow-listed email via One-time PIN. (The former Service Auth policy / `fielder-mobile` service token is no longer used by the app and should be removed once the PIN login on the phone is confirmed.)
-- **Expo/EAS** project `@bubulux/fielder`; production env var `EXPO_PUBLIC_API_URL` (the `EXPO_PUBLIC_CF_ACCESS_*` vars are obsolete and can be deleted).
+- **Cloudflare Access** (team `weathered-salad-6072`): app "Fielder" on the Worker hostname with a single policy: Allow for the one allow-listed email via One-time PIN. No service tokens exist.
+- **Expo/EAS** project `@bubulux/fielder`; the only production env var is `EXPO_PUBLIC_API_URL`.
 
 No Google Cloud project is involved. Auth is Cloudflare Access only, for both clients:
 
@@ -94,6 +94,6 @@ ngrok session is still registered; wait 30 s or set `EXPO_TUNNEL_SUBDOMAIN` to a
 ## Secrets and rotation
 
 - The phone holds only a per-device Access session token obtained by PIN login; nothing is baked into the APK. To cut a device off, revoke its session in Zero Trust (Access → Users) or shorten the app session.
-- Legacy: the `fielder-mobile` service token and the `EXPO_PUBLIC_CF_ACCESS_*` EAS vars are unused since the PIN login shipped; delete the Service Auth policy and token in Zero Trust → Access → Service Auth and `eas env:delete` the two vars.
-- `.secrets/` holds local copies of identifiers and the temporary Cloudflare API token used for setup. It is gitignored. Never commit it.
+- The service token that early builds used was revoked on 2026-09-13; APKs from before that date can no longer reach the API.
+- `.secrets/` holds `access-app.json` (Access app id / AUD, not secret) and `cf-access-token`, a short-lived scoped Cloudflare API token (Access: Apps and Policies + Service Tokens, Edit) used only for Access administration from the CLI; renew it when needed. It is gitignored. Never commit it.
 - Wrangler's OAuth login lacks `account:read`; the account id is pinned in `apps/worker/wrangler.jsonc`.
