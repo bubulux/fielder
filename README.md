@@ -61,17 +61,29 @@ Toolchain installed on 2026-09-13: Temurin JDK 17 in `~/tools`, Android SDK in `
 
 ## Mobile development loop (no APK per change)
 
-Install the **dev client** APK once (EAS profile `dev-client`). Then run Metro with a tunnel,
-because WSL2 in NAT mode is not reachable from the phone over LAN:
+Run Metro with a tunnel, because WSL2 in NAT mode is not reachable from the phone over LAN:
 
 ```sh
-pnpm -C apps/mobile start        # expo start --dev-client --tunnel; reads apps/mobile/.env.local
+pnpm -C apps/mobile start        # expo start --go --tunnel; reads apps/mobile/.env.local
 ```
 
-Open the dev client on the phone and enter the URL Metro prints (an `https://….ngrok.io` or
-`….exp.direct` host). JS changes hot-reload. Only native changes (new Expo modules, app.json
-plugins/permissions) need a new dev-client build. `.env.local` (gitignored) carries the same
-EXPO_PUBLIC_* values as the EAS production environment.
+Open **Expo Go** on the phone and enter the URL Metro prints (an `exp://….exp.direct` host).
+JS changes hot-reload. Every native module this app uses ships inside Expo Go, so no custom
+build is needed for day-to-day work; the `app.json` config plugins only set permission prompt
+texts, which Expo Go replaces with its own generic ones.
+
+`.env.local` (gitignored) carries the same EXPO_PUBLIC_* values as the EAS production
+environment. Without `EXPO_PUBLIC_API_URL` the login WebView loads the bare path `/auth/mobile`
+against `file://` and fails with `net::ERR_ACCESS_DENIED`:
+
+```sh
+echo 'EXPO_PUBLIC_API_URL=https://fielder-api.fielder-worker.workers.dev' > apps/mobile/.env.local
+```
+
+Adding a native module that Expo Go does not bundle switches the loop back to a **dev client**:
+build it once with `pnpm -C apps/mobile build:dev-client` (EAS profile `dev-client`), then use
+`pnpm -C apps/mobile start:dev-client`. Native changes (new Expo modules, app.json
+plugins/permissions) need a fresh dev-client build; JS changes do not.
 
 If the tunnel fails with `Cannot read properties of undefined (reading 'body')`, a previous
 ngrok session is still registered; wait 30 s or set `EXPO_TUNNEL_SUBDOMAIN` to a new value.

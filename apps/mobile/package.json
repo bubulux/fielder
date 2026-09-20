@@ -28,13 +28,14 @@
     "typescript": "~6.0.3"
   },
   "scripts": {
-    "start": "expo start --dev-client --tunnel",
+    "start": "expo start --go --tunnel",
     "android": "expo start --android",
     "ios": "expo start --ios",
     "web": "expo start --web",
     "typecheck": "tsc -p .",
     "build:apk": "eas build --platform android --profile apk",
-    "start:lan": "expo start --dev-client",
+    "start:lan": "expo start --go",
+    "start:dev-client": "expo start --dev-client --tunnel",
     "build:dev-client": "eas build --platform android --profile dev-client",
     "build:apk:local": "eas build --local --platform android --profile apk --output ../../../fielder-builds/fielder-$(git rev-parse --short HEAD).apk"
   },
