@@ -4,6 +4,11 @@
   "version": "0.0.0",
   "packageManager": "pnpm@11.13.1",
   "scripts": {
+    "dev": "pnpm --parallel --filter @fielder/worker --filter @fielder/dashboard dev",
+    "dev:init": "bash scripts/dev-init.sh",
+    "dev:worker": "pnpm -C apps/worker dev",
+    "dev:dashboard": "pnpm -C apps/dashboard dev",
+    "dev:mobile": "pnpm -C apps/mobile start",
     "wrangler": "wrangler"
   },
   "devDependencies": {

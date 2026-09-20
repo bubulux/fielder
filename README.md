@@ -40,11 +40,28 @@ pnpm -C apps/worker run migrate:remote
 Local development of API + dashboard without Access in front:
 
 ```sh
-echo 'ACCESS_DEV_BYPASS="true"' > apps/worker/.dev.vars   # gitignored, dev only
-pnpm -C apps/worker run migrate:local
-pnpm -C apps/worker dev            # http://localhost:8787
-pnpm -C apps/dashboard dev         # http://localhost:5173, proxies /api to 8787
+pnpm dev:init       # once per checkout: writes the gitignored dev files, applies D1 migrations
+pnpm dev            # worker on :8787 + dashboard on :5173 (proxies /api and /health to 8787)
 ```
+
+Individual targets, if you want them in separate terminals:
+
+```sh
+pnpm dev:worker     # wrangler dev            -> http://localhost:8787
+pnpm dev:dashboard  # vite                    -> http://localhost:5173
+pnpm dev:mobile     # expo start --go --tunnel -> Expo Go on the phone
+```
+
+`dev:init` is re-runnable and never overwrites an existing file. It creates
+`apps/worker/.dev.vars` (`ACCESS_DEV_BYPASS="true"`, which makes the worker treat every
+request as `dev@localhost`), `apps/mobile/.env.local`, and an empty `apps/dashboard/dist`
+— `wrangler dev` refuses to boot without the directory named by `assets.directory`, even
+though Vite serves the UI in this loop.
+
+`dev:mobile` talks to the **deployed** worker, not the local one: the phone reaches Metro
+over the exp.direct tunnel, but `EXPO_PUBLIC_API_URL` points at
+`fielder-api.fielder-worker.workers.dev`. Worker changes therefore need a deploy before the
+phone sees them; the dashboard at :5173 is the fast loop for API work.
 
 ## Local APK builds (no EAS quota)
 
@@ -64,7 +81,7 @@ Toolchain installed on 2026-09-13: Temurin JDK 17 in `~/tools`, Android SDK in `
 Run Metro with a tunnel, because WSL2 in NAT mode is not reachable from the phone over LAN:
 
 ```sh
-pnpm -C apps/mobile start        # expo start --go --tunnel; reads apps/mobile/.env.local
+pnpm dev:mobile                  # expo start --go --tunnel; reads apps/mobile/.env.local
 ```
 
 Open **Expo Go** on the phone and enter the URL Metro prints (an `exp://….exp.direct` host).
@@ -72,13 +89,9 @@ JS changes hot-reload. Every native module this app uses ships inside Expo Go, s
 build is needed for day-to-day work; the `app.json` config plugins only set permission prompt
 texts, which Expo Go replaces with its own generic ones.
 
-`.env.local` (gitignored) carries the same EXPO_PUBLIC_* values as the EAS production
-environment. Without `EXPO_PUBLIC_API_URL` the login WebView loads the bare path `/auth/mobile`
-against `file://` and fails with `net::ERR_ACCESS_DENIED`:
-
-```sh
-echo 'EXPO_PUBLIC_API_URL=https://fielder-api.fielder-worker.workers.dev' > apps/mobile/.env.local
-```
+`.env.local` (gitignored, written by `pnpm dev:init`) carries the same EXPO_PUBLIC_* values as
+the EAS production environment. Without `EXPO_PUBLIC_API_URL` the login WebView loads the bare
+path `/auth/mobile` against `file://` and fails with `net::ERR_ACCESS_DENIED`.
 
 Adding a native module that Expo Go does not bundle switches the loop back to a **dev client**:
 build it once with `pnpm -C apps/mobile build:dev-client` (EAS profile `dev-client`), then use
