@@ -52,6 +52,10 @@ pnpm dev:dashboard  # vite                    -> http://localhost:5173
 pnpm dev:mobile     # expo start --go --tunnel -> Expo Go on the phone
 ```
 
+The root `Makefile` wraps the same scripts, so `make dev`, `make init`, `make worker`,
+`make dashboard` and `make mobile` all work; plain `make` lists them. `package.json` stays
+the source of truth. Ubuntu images for WSL ship without make — `sudo apt install make`.
+
 `dev:init` is re-runnable and never overwrites an existing file. It creates
 `apps/worker/.dev.vars` (`ACCESS_DEV_BYPASS="true"`, which makes the worker treat every
 request as `dev@localhost`), `apps/mobile/.env.local`, and an empty `apps/dashboard/dist`
