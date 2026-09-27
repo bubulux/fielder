@@ -6,7 +6,7 @@ import { clearLog, logCount, logText, setLogging } from "../log";
 import { PHONE } from "../phone";
 import { store, usePendingCount } from "../storage";
 import type { ProjectEntry, Settings } from "../types";
-import { flush } from "../uploads";
+import { discardPending, flush } from "../uploads";
 import { Button, Chip, ChipRow, colors, Hint, Input, Row } from "../components/ui";
 
 interface Props {
@@ -46,7 +46,7 @@ export function Setup({ settings, onChange, project, onSwitchProject, onSignIn }
   const buildInfo = `API: ${isConfigured ? API_URL.replace(/^https?:\/\//, "") : "not configured"}`;
 
   async function retryUploads() {
-    const r = await flush();
+    const r = await flush({ includeStuck: true });
     Alert.alert("Uploads", r.remaining === 0 ? "All uploaded." : `${r.remaining} still pending${r.lastError ? `: ${r.lastError}` : ""}`);
   }
   async function shareLog() {
@@ -141,6 +141,14 @@ export function Setup({ settings, onChange, project, onSwitchProject, onSignIn }
       <Row label="Uploads">
         <Text style={{ color: colors.text }}>{pendingCount === 0 ? "All shots uploaded." : `${pendingCount} shot(s) waiting for upload.`}</Text>
         {pendingCount > 0 && <Button label="Retry now" kind="ghost" onPress={() => void retryUploads()} />}
+        {store.loadPending().filter((p) => p.stuck).map((p) => (
+          <View key={p.metadata.id} style={{ marginTop: 10, borderWidth: 1, borderColor: colors.danger, borderRadius: 8, padding: 10 }}>
+            <Text style={{ color: colors.text }}>{p.metadata.name ?? "Untitled shot"} · {p.metadata.photos.length} photo(s)</Text>
+            <Text style={{ color: colors.danger, fontSize: 12, marginTop: 2 }}>Rejected by the server: {p.lastError ?? "unknown error"}</Text>
+            <Hint>Kept on the phone. "Retry now" tries it again; share the debug log if it keeps failing.</Hint>
+            <Button label="Discard this shot" kind="danger" onPress={() => Alert.alert("Discard shot", "Deletes the queued photos from the phone.", [{ text: "Cancel", style: "cancel" }, { text: "Discard", style: "destructive", onPress: () => discardPending(p.metadata.id) }])} />
+          </View>
+        ))}
       </Row>
       <Row label="Debug log">
         <Toggle label="Record a detailed log" value={settings.loggingEnabled} onChange={(v) => { setLogging(v); set("loggingEnabled", v); setEntries(logCount()); }} />

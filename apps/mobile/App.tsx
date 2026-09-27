@@ -5,7 +5,7 @@ import * as ScreenOrientation from "expo-screen-orientation";
 import type { Shot } from "./src/api";
 import { colors } from "./src/components/ui";
 import { ProjectSheet } from "./src/components/ProjectSheet";
-import { flush } from "./src/uploads";
+import { flush, onFlushed } from "./src/uploads";
 import { isSignedIn, onAuthChange } from "./src/auth";
 import { isConfigured } from "./src/config";
 import { Gallery, useShots, type StateFilter } from "./src/screens/Gallery";
@@ -58,6 +58,8 @@ function App() {
     setProjectId(store.loadActiveProjectId());
   }, []);
   useEffect(() => { if (isSignedIn()) void refreshProjects(); }, []);
+  // Any flush (camera, Setup, here) may have synced or remapped projects and locations.
+  useEffect(() => onFlushed(() => { setProjects(store.loadProjects()); setProjectId(store.loadActiveProjectId()); setLocations(store.loadLocations()); }), []);
   useEffect(() => onAuthChange(() => { if (!isSignedIn()) setLogin(true); else { void refreshProjects(); void shots.load(); } }), [shots.load]);
   useEffect(() => { store.saveActiveProjectId(projectId); }, [projectId]);
   const pickProject = (id: string, created: ProjectEntry | null) => {

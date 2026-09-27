@@ -115,6 +115,8 @@ export interface PendingUpload {
   files: Record<string, string>;
   attempts: number;
   lastError?: string;
+  /** Rejected by the server repeatedly: kept on the phone, only retried by hand (Setup → Uploads). */
+  stuck?: boolean;
 }
 /** One captured photo waiting for the tag form or the queue. */
 export interface DraftPhoto {

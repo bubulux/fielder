@@ -19,10 +19,12 @@ const PHASE_COLORS: Record<string, string> = { night: "#1c2340", dawn: "#e0925a"
 const hhmm = (d: Date) => d.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
 const windowsText = (w: Interval[]) => (w.length ? w.map((x) => `${hhmm(x.start)}–${hhmm(x.end)}`).join(", ") : "not on this day");
 const dateLabel = (date: string) => new Date(`${date}T12:00:00`).toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short", year: "numeric" });
+/** YYYY-MM-DD in the viewer's time zone (toISOString would give the UTC date). */
+const isoDate = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 function nextSaturday(): string {
   const d = new Date();
   d.setDate(d.getDate() + ((6 - d.getDay() + 7) % 7 || 7));
-  return d.toISOString().slice(0, 10);
+  return isoDate(d);
 }
 /** Centre of the shots' cover photos (for sun and weather), Berlin when there are none. */
 function centroid(shots: Shot[]): { lat: number; lon: number } {
@@ -41,20 +43,24 @@ export function Schedule({ projectId, shots, mask, onOpen }: Props) {
   const [error, setError] = useState<string | null>(null);
   useEffect(() => {
     setDays(null); setSelectedId(null);
-    fetchDays(projectId).then((d) => { setDays(d); setSelectedId(d.find((x) => x.date >= new Date().toISOString().slice(0, 10))?.id ?? d.at(-1)?.id ?? null); }).catch((e: Error) => setError(e.message));
+    fetchDays(projectId).then((d) => { setDays(d); setSelectedId(d.find((x) => x.date >= isoDate(new Date()))?.id ?? d.at(-1)?.id ?? null); }).catch((e: Error) => setError(e.message));
   }, [projectId]);
 
-  // Edits are saved automatically shortly after the last change.
-  const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Edits are saved automatically shortly after the last change, per day; leaving the tab saves at once.
+  const pendingSaves = useRef(new Map<string, { timer: ReturnType<typeof setTimeout>; day: ShootingDay }>());
   const [saving, setSaving] = useState<"idle" | "pending" | "saving" | "error">("idle");
+  const save = (d: ShootingDay) => {
+    pendingSaves.current.delete(d.id);
+    setSaving("saving");
+    putDay(d).then(() => { if (pendingSaves.current.size === 0) setSaving("idle"); }).catch((e: Error) => { setSaving("error"); setError(e.message); });
+  };
+  useEffect(() => () => { for (const { timer, day } of pendingSaves.current.values()) { clearTimeout(timer); void putDay(day).catch(() => {}); } pendingSaves.current.clear(); }, []);
   function change(d: ShootingDay) {
     setDays((cur) => (cur ?? []).map((x) => (x.id === d.id ? d : x)).sort((a, b) => a.date.localeCompare(b.date)));
     setSaving("pending");
-    if (saveTimer.current) clearTimeout(saveTimer.current);
-    saveTimer.current = setTimeout(() => {
-      setSaving("saving");
-      putDay(d).then(() => setSaving("idle")).catch((e: Error) => { setSaving("error"); setError(e.message); });
-    }, 600);
+    const prev = pendingSaves.current.get(d.id);
+    if (prev) clearTimeout(prev.timer);
+    pendingSaves.current.set(d.id, { day: d, timer: setTimeout(() => save(d), 600) });
   }
   async function create() {
     const d: ShootingDay = { id: crypto.randomUUID(), project_id: projectId, date: nextSaturday(), title: null, notes: null, shots: [], created_at: "", updated_at: null };
@@ -66,7 +72,7 @@ export function Schedule({ projectId, shots, mask, onOpen }: Props) {
   }
 
   const day = days?.find((d) => d.id === selectedId) ?? null;
-  const today = new Date().toISOString().slice(0, 10);
+  const today = isoDate(new Date());
   return (
     <div class="schedule">
       <aside class="views-side">

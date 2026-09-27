@@ -63,7 +63,7 @@ export function TagsForm({ initial, locations, countAt, fields = [], submitLabel
   return (
     <>
       <Row label="Name (optional, like everything below)">
-        <Input value={name} onChangeText={setName} placeholder="e.g. Bridge from the east bank" autoCapitalize="sentences" />
+        <Input value={name} onChangeText={setName} placeholder="e.g. Bridge from the east bank" autoCapitalize="sentences" maxLength={120} />
       </Row>
       <Row label="Location">
         {picked || newLoc ? (
@@ -73,7 +73,7 @@ export function TagsForm({ initial, locations, countAt, fields = [], submitLabel
           </View>
         ) : (
           <>
-            <Input value={query} onChangeText={setQuery} placeholder="Search existing or type a new location" autoCapitalize="words" />
+            <Input value={query} onChangeText={setQuery} placeholder="Search existing or type a new location" autoCapitalize="words" maxLength={80} />
             <View style={s.list}>
               {matches.map((l) => (
                 <Pressable key={l.id} onPress={() => pickLocation(l)} style={s.item}>

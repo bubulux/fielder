@@ -17,6 +17,7 @@ const KEYS = {
   projects: "projects.v1",
   activeProjectId: "activeProjectId.v1",
   sequence: "sequence.v1",
+  captureDraft: "captureDraft.v1",
   fields: "fields.v1",
 } as const;
 
@@ -76,6 +77,9 @@ export const store = {
   /** The sequence being shot (survives an app restart), or null. */
   loadSequence: (): CaptureDraft | null => { try { const raw = Storage.getItemSync(KEYS.sequence); return raw ? (JSON.parse(raw) as CaptureDraft) : null; } catch { return null; } },
   saveSequence: (d: CaptureDraft | null) => (d ? write(KEYS.sequence, d) : Storage.removeItemSync(KEYS.sequence)),
+  /** A capture or finished sequence waiting in the tag form (reopens after an app restart), or null. */
+  loadCaptureDraft: (): CaptureDraft | null => { try { const raw = Storage.getItemSync(KEYS.captureDraft); return raw ? (JSON.parse(raw) as CaptureDraft) : null; } catch { return null; } },
+  saveCaptureDraft: (d: CaptureDraft | null) => (d ? write(KEYS.captureDraft, d) : Storage.removeItemSync(KEYS.captureDraft)),
 
   loadFields: (): FieldDefinition[] => readArray<FieldDefinition>(KEYS.fields),
   saveFields: (f: FieldDefinition[]) => write(KEYS.fields, f),

@@ -267,9 +267,12 @@ export function registerShotRoutes(r: Router<Ctx>) {
     let insertShot: D1PreparedStatement | null = null;
     if (!existing) {
       const projectId = assertUuid(m.project_id, "project_id");
+      // A capture must never be rejected for metadata the phone could not know was stale or too long:
+      // overlong names are cut, a location deleted meanwhile is dropped (the photos keep their GPS).
+      if (typeof m.name === "string" && m.name.length > 120) m.name = m.name.slice(0, 120);
       const tags = parseTags(m, true);
       await assertProjectExists(env, projectId);
-      if (tags.location_id) await assertLocationExists(env, tags.location_id);
+      if (tags.location_id && !(await env.DB.prepare("SELECT 1 FROM locations WHERE id = ?1").bind(tags.location_id).first())) tags.location_id = null;
       const capturedAt = photos.map((p) => p.timestamp).sort()[0];
       insertShot = env.DB.prepare(
         `INSERT INTO shots (id, project_id, location_id, name, int_ext, light, artificial, weather, state, extra, captured_at)
@@ -282,10 +285,11 @@ export function registerShotRoutes(r: Router<Ctx>) {
         .results.map((x) => x.id),
     );
     const fresh = photos.filter((p) => !stored.has(p.id));
+    // A rig deleted (or never synced) meanwhile becomes NULL; the framing snapshot on the photo keeps it.
     const presetIds = [...new Set(fresh.map((p) => p.preset_id).filter((x): x is string => !!x))];
     if (presetIds.length) {
-      const known = await env.DB.prepare("SELECT id FROM presets WHERE id IN (SELECT value FROM json_each(?1))").bind(JSON.stringify(presetIds)).all<{ id: string }>();
-      if (known.results.length !== presetIds.length) throw new HttpError(400, "preset_id does not exist");
+      const known = new Set((await env.DB.prepare("SELECT id FROM presets WHERE id IN (SELECT value FROM json_each(?1))").bind(JSON.stringify(presetIds)).all<{ id: string }>()).results.map((x) => x.id));
+      for (const p of fresh) if (p.preset_id && !known.has(p.preset_id)) p.preset_id = null;
     }
     const files = fresh.map((p) => {
       const f = form.get(`photo.${p.id}`);
@@ -311,7 +315,9 @@ export function registerShotRoutes(r: Router<Ctx>) {
       stmts.push(env.DB.prepare("UPDATE shots SET captured_at = (SELECT min(timestamp) FROM photos WHERE shot_id = ?1) WHERE id = ?1").bind(id));
       await env.DB.batch(stmts);
     } catch (err) {
-      await Promise.all(written.map((k) => env.SHOTS_BUCKET.delete(k).catch(() => {})));
+      // Keep objects a concurrent upload of the same photos has committed meanwhile.
+      const committed = new Set((await env.DB.prepare("SELECT r2_object_key AS k FROM photos WHERE r2_object_key IN (SELECT value FROM json_each(?1))").bind(JSON.stringify(written)).all<{ k: string }>().catch(() => ({ results: written.map((k) => ({ k })) }))).results.map((x) => x.k));
+      await Promise.all(written.filter((k) => !committed.has(k)).map((k) => env.SHOTS_BUCKET.delete(k).catch(() => {})));
       if (err instanceof HttpError) throw err;
       if (String(err).includes("UNIQUE constraint failed: photos.shot_id, photos.ordinal")) throw new HttpError(409, "a different photo already has this ordinal in the shot");
       throw err;
@@ -329,10 +335,11 @@ export function registerShotRoutes(r: Router<Ctx>) {
     const args: unknown[] = [];
     for (const [k, v] of Object.entries(tags)) { args.push(v); sets.push(`${k} = ?${args.length}`); }
     if (b.state !== undefined) { args.push(assertEnum(b.state, "state", SHOT_STATES)); sets.push(`state = ?${args.length}`); }
+    let movedTo: string | null = null;
     if (b.project_id !== undefined) {
-      const pid = assertUuid(b.project_id, "project_id");
-      await assertProjectExists(env, pid);
-      args.push(pid); sets.push(`project_id = ?${args.length}`);
+      movedTo = assertUuid(b.project_id, "project_id");
+      await assertProjectExists(env, movedTo);
+      args.push(movedTo); sets.push(`project_id = ?${args.length}`);
     }
     // Interactive edits are checked against the project's field definitions. Uploads are not:
     // a phone with stale definitions must never have a capture rejected.
@@ -349,6 +356,8 @@ export function registerShotRoutes(r: Router<Ctx>) {
     args.push(sid);
     const res = await env.DB.prepare(`UPDATE shots SET ${sets.join(", ")} WHERE id = ?${args.length}`).bind(...args).run();
     if (!res.meta.changes) throw new HttpError(404, "shot not found");
+    // A shot moved to another project leaves the shooting days of its old project.
+    if (movedTo) await env.DB.prepare("DELETE FROM day_shots WHERE shot_id = ?1 AND day_id IN (SELECT id FROM shooting_days WHERE project_id != ?2)").bind(sid, movedTo).run();
     return json({ shot: await loadShot(env, sid) });
   });
 

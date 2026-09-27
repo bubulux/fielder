@@ -1,4 +1,5 @@
 import { api, ApiError } from "./api";
+import { log } from "./log";
 import type { LocationEntry, ProjectEntry } from "./types";
 
 /**
@@ -36,6 +37,11 @@ async function sync<T extends Named>(remote: Remote<T>, local: T[]): Promise<Syn
       } catch (err) {
         const existing = existingIdOf(err);
         if (existing) { remap[x.id] = existing; continue; }
+        // One entry the server rejects (e.g. a name too long) must not block the others.
+        if (err instanceof ApiError && err.status >= 400 && err.status < 500 && ![401, 403, 408, 429].includes(err.status)) {
+          log("warn", `${remote.what} rejected`, { name: x.name, error: err.message });
+          continue;
+        }
         throw err;
       }
     }

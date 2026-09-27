@@ -4,6 +4,7 @@ import { CameraView, useCameraPermissions } from "expo-camera";
 import * as Location from "expo-location";
 import * as Crypto from "expo-crypto";
 import { ImageManipulator, SaveFormat } from "expo-image-manipulator";
+import { File } from "expo-file-system";
 import { StatusBar } from "expo-status-bar";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { api, type Shot } from "../api";
@@ -12,7 +13,7 @@ import { isConfigured } from "../config";
 import { computeOverlay, formatDeg, previewBox, type Box } from "../framing";
 import { log } from "../log";
 import { PHONE } from "../phone";
-import { addToSequence, deleteDraftFiles, startSequence } from "../sequence";
+import { addToSequence, deleteDraftFiles, keepPhoto, restoreDraft, startSequence } from "../sequence";
 import { store, usePendingCount } from "../storage";
 import { lensRangeOf, type CaptureDraft, type DraftPhoto, type LocationEntry, type PhotoMetadata, type Preset, type ProjectEntry, type Settings, type ShotMetadata, type ShotTags } from "../types";
 import { enqueue, flush } from "../uploads";
@@ -77,9 +78,11 @@ export function Viewfinder({ settings, onSettings, active: tabActive, project, s
   const [toast, setToast] = useState<string | null>(null);
   const pendingCount = usePendingCount();
   /** Capture or finished sequence waiting in the tag form. */
-  const [draft, setDraft] = useState<CaptureDraft | null>(null);
+  const [draft, setDraft] = useState<CaptureDraft | null>(() => restoreDraft(store.loadCaptureDraft()));
   /** Sequence mode: on while non-null; resumes after an app restart. */
   const [sequence, setSequence] = useState<CaptureDraft | null>(() => store.loadSequence());
+  /** Mirrors `sequence` for code that runs across awaits (a capture can wait seconds for GPS). */
+  const sequenceRef = useRef<CaptureDraft | null>(sequence);
   /** Flashlight; deliberately not remembered across launches. */
   const [torch, setTorch] = useState(false);
 
@@ -166,6 +169,7 @@ export function Viewfinder({ settings, onSettings, active: tabActive, project, s
   async function capture() {
     if (!camera.current || !cameraReady || busy || !active || !overlay || !project) return;
     setBusy("capture");
+    const seqAtStart = sequenceRef.current?.shotId ?? null;
     try {
       const [pos, pic] = await Promise.all([
         getPosition(),
@@ -181,6 +185,7 @@ export function Viewfinder({ settings, onSettings, active: tabActive, project, s
         .resize(landscapePic ? { width: Math.min(MAX_UPLOAD_EDGE, pic.width) } : { height: Math.min(MAX_UPLOAD_EDGE, pic.height) })
         .renderAsync();
       const small = await rendered.saveAsync({ compress: 0.72, format: SaveFormat.JPEG });
+      try { new File(pic.uri).delete(); } catch { /* full-size camera temp file */ }
 
       const exif = (pic.exif ?? {}) as Record<string, unknown>;
       const frame = { width: round4(overlay.fractions.width), height: round4(overlay.fractions.height) };
@@ -223,21 +228,23 @@ export function Viewfinder({ settings, onSettings, active: tabActive, project, s
           gps_fix_age_ms: Date.now() - pos.timestamp,
         },
       };
-      log("info", "capture", { lens: lensMm, rig: active.name, gps_accuracy_m: meta.gps_accuracy_m, sequence: !!sequence, direct: settings.directUpload });
+      log("info", "capture", { lens: lensMm, rig: active.name, gps_accuracy_m: meta.gps_accuracy_m, sequence: !!seqAtStart, direct: settings.directUpload });
       if (!active.synced) {
         // Preset unknown to the server: try once more now so the FK can be set on the row later.
         try { await api.putPreset(active); setPresets((c) => c.map((x) => (x.id === active.id ? { ...x, synced: true } : x))); } catch { /* the framing snapshot on the photo still preserves it */ }
       }
       const photo: DraftPhoto = { uri: small.uri, meta, frame };
-      if (sequence) {
-        const next = addToSequence(sequence, photo);
+      // Joins the sequence only if the one that was on when the shutter fired is still on.
+      const seq = sequenceRef.current;
+      if (seqAtStart && seq && seq.shotId === seqAtStart) {
+        const next = addToSequence(seq, photo);
+        sequenceRef.current = next;
         setSequence(next);
         showToast(`Sequence · ${next.photos.length} photo${next.photos.length === 1 ? "" : "s"}`);
-      } else if (settings.directUpload) {
-        await queueDraft({ shotId: Crypto.randomUUID(), photos: [photo] }, NO_TAGS, null);
       } else {
-        // Hand over to the review form; nothing is queued until the user taps Upload.
-        setDraft({ shotId: Crypto.randomUUID(), photos: [photo] });
+        const single: CaptureDraft = { shotId: Crypto.randomUUID(), photos: [keepPhoto(photo)] };
+        if (settings.directUpload) finishDraft(single);
+        else openDraft(single); // nothing is queued until the user taps Upload
       }
     } catch (err) {
       log("error", "capture failed", err);
@@ -247,8 +254,21 @@ export function Viewfinder({ settings, onSettings, active: tabActive, project, s
     }
   }
 
-  /** Queue a capture or sequence as one shot of the active project and try to upload right away. */
-  async function queueDraft(d: CaptureDraft, tags: ShotTags, newLocation: LocationEntry | null): Promise<boolean> {
+  /** Show a draft in the tag form; it is stored so it reopens after an app restart. */
+  function openDraft(d: CaptureDraft) {
+    store.saveCaptureDraft(d);
+    setDraft(d);
+  }
+
+  /** Direct upload: queue without tags; if that fails the draft opens in the form instead of being lost. */
+  function finishDraft(d: CaptureDraft) {
+    store.saveCaptureDraft(d);
+    if (queueDraft(d, NO_TAGS, null)) store.saveCaptureDraft(null);
+    else setDraft(d);
+  }
+
+  /** Queue a capture or sequence as one shot of the active project; the upload runs in the background. */
+  function queueDraft(d: CaptureDraft, tags: ShotTags, newLocation: LocationEntry | null): boolean {
     if (!project) return false;
     if (newLocation) { const next = [...locations, newLocation]; onLocations(next); store.saveLocations(next); }
     const metadata: ShotMetadata = { id: d.shotId, project_id: project.id, ...tags, photos: d.photos.map((p) => p.meta) };
@@ -260,35 +280,42 @@ export function Viewfinder({ settings, onSettings, active: tabActive, project, s
       return false; // keep the draft so nothing is lost
     }
     deleteDraftFiles(d); // the queue has its own copies now
-    const r = await flush();
-    onLocations(store.loadLocations());
-    showToast(r.remaining === 0 ? "Uploaded" : `Saved locally (${r.remaining} pending)`);
+    showToast("Saved, uploading…");
+    void flush().then((r) => {
+      onLocations(store.loadLocations());
+      showToast(r.remaining === 0 ? "Uploaded" : `Saved on the phone (${r.remaining} pending)`);
+    });
     return true;
   }
 
-  async function uploadDraft(tags: ShotTags, newLocation: LocationEntry | null) {
+  function uploadDraft(tags: ShotTags, newLocation: LocationEntry | null) {
     if (!draft) return;
-    const d = draft;
-    if (await queueDraft(d, tags, newLocation)) setDraft(null);
+    if (queueDraft(draft, tags, newLocation)) { store.saveCaptureDraft(null); setDraft(null); }
   }
 
   function discardDraft() {
     if (draft) { deleteDraftFiles(draft); log("info", "draft discarded", { shot: draft.shotId, photos: draft.photos.length }); }
+    store.saveCaptureDraft(null);
     setDraft(null);
   }
 
-  async function toggleSequence() {
-    if (!sequence) {
-      setSequence(startSequence());
+  function toggleSequence() {
+    const d = sequenceRef.current;
+    if (!d) {
+      const started = startSequence();
+      sequenceRef.current = started;
+      setSequence(started);
       showToast("Sequence on: every shot joins one set");
       return;
     }
-    const d = sequence;
+    sequenceRef.current = null;
     setSequence(null);
-    store.saveSequence(null);
     log("info", "sequence end", { shot: d.shotId, photos: d.photos.length });
-    if (d.photos.length === 0) { showToast("Sequence off"); return; }
-    if (settings.directUpload) await queueDraft(d, NO_TAGS, null);
+    if (d.photos.length === 0) { store.saveSequence(null); showToast("Sequence off"); return; }
+    // Store the finished sequence as the draft before forgetting it as the running sequence.
+    store.saveCaptureDraft(d);
+    store.saveSequence(null);
+    if (settings.directUpload) finishDraft(d);
     else setDraft(d);
   }
 
@@ -310,7 +337,7 @@ export function Viewfinder({ settings, onSettings, active: tabActive, project, s
   }
 
   async function retryUploads() {
-    const r = await flush();
+    const r = await flush({ includeStuck: true });
     showToast(r.remaining === 0 ? "All uploaded" : `${r.remaining} still pending${r.lastError ? `: ${r.lastError}` : ""}`);
   }
 
@@ -397,11 +424,11 @@ export function Viewfinder({ settings, onSettings, active: tabActive, project, s
           {busy === "capture" ? <ActivityIndicator color="#000" /> : <View style={[s.shutterInner, sequence && { backgroundColor: SEQ_COLOR }]} />}
         </Pressable>
         <Ctl label="Light" value={torch ? "ON" : "off"} onPress={() => setTorch((t) => !t)} accent={torch} />
-        <Ctl label="Seq" value={sequence ? `${sequence.photos.length}` : "off"} onPress={() => void toggleSequence()} color={sequence ? SEQ_COLOR : undefined} />
+        <Ctl label="Seq" value={sequence ? `${sequence.photos.length}` : "off"} onPress={toggleSequence} disabled={!!busy} color={sequence ? SEQ_COLOR : undefined} />
         <Ctl label="Uploads" value={pendingCount ? `${pendingCount}` : "✓"} onPress={() => void retryUploads()} />
       </View>
 
-      <ShotReview draft={draft} settings={settings} locations={locations} countAt={countAt} fields={draft ? store.fieldsForProject(project?.id) : []} onUpload={(t, l) => void uploadDraft(t, l)} onDiscard={discardDraft} />
+      <ShotReview draft={draft} settings={settings} locations={locations} countAt={countAt} fields={draft ? store.fieldsForProject(project?.id) : []} onUpload={uploadDraft} onDiscard={discardDraft} />
       <PresetSheet visible={sheet === "rig"} onClose={() => setSheet(null)} presets={presets} activeId={active?.id ?? null}
         onChange={(p, id) => { setPresets(p); setActiveId(id); }} />
       <LensSheet visible={sheet === "lens"} onClose={() => setSheet(null)} lensMm={lensMm} onChange={setLensMm} range={lensRange} />
@@ -409,9 +436,9 @@ export function Viewfinder({ settings, onSettings, active: tabActive, project, s
   );
 }
 
-function Ctl({ label, value, onPress, accent, color }: { label: string; value: string; onPress: () => void; accent?: boolean; color?: string }) {
+function Ctl({ label, value, onPress, accent, color, disabled }: { label: string; value: string; onPress: () => void; accent?: boolean; color?: string; disabled?: boolean }) {
   return (
-    <Pressable onPress={onPress} style={s.ctl} hitSlop={6}>
+    <Pressable onPress={onPress} disabled={disabled} style={[s.ctl, disabled && { opacity: 0.4 }]} hitSlop={6}>
       <Text style={[s.ctlValue, accent && { color: colors.accent }, color ? { color } : null]}>{value}</Text>
       <Text style={[s.ctlLabel, color ? { color } : null]}>{label}</Text>
     </Pressable>

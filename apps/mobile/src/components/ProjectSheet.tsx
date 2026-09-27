@@ -47,7 +47,7 @@ export function ProjectSheet({ visible, projects, activeId, onPick, onClose }: P
             {projects.length === 0 && <Text style={[s.itemSub, { padding: 12 }]}>No projects yet. Create the first one below.</Text>}
           </View>
           <Text style={s.label}>New project</Text>
-          <Input value={name} onChangeText={setName} placeholder="Project name" autoCapitalize="sentences" onSubmitEditing={create} />
+          <Input value={name} onChangeText={setName} placeholder="Project name" autoCapitalize="sentences" onSubmitEditing={create} maxLength={80} />
           {!!clash && <Hint>“{clash.name}” already exists; this opens it.</Hint>}
           <Button label={clash ? "Open" : "Create and open"} onPress={create} disabled={!trimmed} />
         </ScrollView>

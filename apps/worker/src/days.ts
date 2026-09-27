@@ -48,7 +48,7 @@ export function registerDayRoutes(r: Router<Ctx>) {
     const notes = opt(b.notes, "notes", 4000);
     if (!Array.isArray(b.shots)) throw new HttpError(400, "shots must be an array");
     if (b.shots.length > MAX_SHOTS_PER_DAY) throw new HttpError(413, `at most ${MAX_SHOTS_PER_DAY} shots per day`);
-    const shots = b.shots.map((s, i) => {
+    let shots = b.shots.map((s, i) => {
       const o = (s ?? {}) as Record<string, unknown>;
       const time = o.planned_time === undefined || o.planned_time === null || o.planned_time === "" ? null : o.planned_time;
       if (time !== null && (typeof time !== "string" || !TIME_RE.test(time))) throw new HttpError(400, `shots[${i}].planned_time must be HH:MM`);
@@ -56,10 +56,11 @@ export function registerDayRoutes(r: Router<Ctx>) {
     });
     if (new Set(shots.map((s) => s.shot_id)).size !== shots.length) throw new HttpError(400, "a shot is listed twice");
     await assertProjectExists(env, projectId);
+    // Shots deleted or moved to another project meanwhile are dropped from the day instead of failing the save.
     if (shots.length) {
-      const n = await env.DB.prepare("SELECT count(*) AS n FROM shots WHERE project_id = ?1 AND id IN (SELECT value FROM json_each(?2))")
-        .bind(projectId, JSON.stringify(shots.map((s) => s.shot_id))).first<{ n: number }>();
-      if ((n?.n ?? 0) !== shots.length) throw new HttpError(400, "every shot must exist and belong to the day's project");
+      const ok = new Set((await env.DB.prepare("SELECT id FROM shots WHERE project_id = ?1 AND id IN (SELECT value FROM json_each(?2))")
+        .bind(projectId, JSON.stringify(shots.map((s) => s.shot_id))).all<{ id: string }>()).results.map((x) => x.id));
+      shots = shots.filter((s) => ok.has(s.shot_id));
     }
     const now = new Date().toISOString();
     const stmts = [
