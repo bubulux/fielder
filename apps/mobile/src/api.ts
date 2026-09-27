@@ -117,6 +117,10 @@ export interface Shot {
   photos: Photo[];
 }
 
+/** A shooting day of a project with its planned shots in order (planned in the dashboard). */
+export interface DayShot { shot_id: string; planned_time: string | null; notes: string | null }
+export interface ShootingDay { id: string; project_id: string; date: string; title: string | null; notes: string | null; updated_at: string | null; shots: DayShot[] }
+
 /** The photo that stands for the shot in lists, maps and filters: the first one. */
 export const cover = (s: Shot): Photo => s.photos[0];
 
@@ -164,6 +168,7 @@ export const api = {
       body: JSON.stringify({ name: l.name }),
     }),
 
+  listDays: (projectId: string) => call<{ days: ShootingDay[] }>(`/api/days?project_id=${projectId}`).then((r) => r.days),
   listFields: () => call<{ fields: FieldDefinition[] }>("/api/fields").then((r) => r.fields),
 
   listProjects: async (): Promise<ProjectEntry[]> => {

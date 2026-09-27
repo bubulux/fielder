@@ -10,7 +10,7 @@ import { isSignedIn, onAuthChange } from "./src/auth";
 import { isConfigured } from "./src/config";
 import { Gallery, useShots, type StateFilter } from "./src/screens/Gallery";
 import { Login } from "./src/screens/Login";
-import { Prep } from "./src/screens/Prep";
+import { ShootDay } from "./src/screens/ShootDay";
 import { Review } from "./src/screens/Review";
 import { Setup } from "./src/screens/Setup";
 import { setLogging } from "./src/log";
@@ -19,8 +19,8 @@ import { Viewfinder } from "./src/screens/Viewfinder";
 import { store } from "./src/storage";
 import type { LocationEntry, ProjectEntry, Settings } from "./src/types";
 
-type Mode = "shoot" | "review" | "gallery" | "map" | "prep" | "setup";
-const ICONS: Record<Mode, string> = { shoot: "◉", review: "☑", gallery: "▦", map: "⌖", prep: "▷", setup: "⚙" };
+type Mode = "shoot" | "review" | "gallery" | "map" | "day" | "setup";
+const ICONS: Record<Mode, string> = { shoot: "◉", review: "☑", gallery: "▦", map: "⌖", day: "▷", setup: "⚙" };
 const TAB = 52;
 /** Minimum clearance between the UI strips and the screen edge (camera cutout, Android navigation bar). */
 export const EDGE_PAD = 32;
@@ -113,7 +113,7 @@ function App() {
         {mode === "review" && <Review settings={settings} data={shots} locations={locations} onLocations={setLocations} countAt={countAt} />}
         {mode === "gallery" && <Gallery settings={settings} data={shots} onShowOnMap={(s) => { setFocus(s); setMode("map"); }} filter={filter} onFilter={setFilter}
           locations={locations} onLocations={setLocations} countAt={countAt} open={open} onOpen={setOpen} />}
-        {mode === "prep" && <Prep settings={settings} data={shots} />}
+        {mode === "day" && <ShootDay settings={settings} data={shots} project={project} />}
         {mode === "setup" && <Setup settings={settings} onChange={setSettings} project={project} onSwitchProject={() => setProjectSheet(true)} onSignIn={() => setLogin(true)} />}
         {mode === "map" && <MapScreen settings={settings} data={shots} focus={focus} filter={filter} locations={locations} onLocations={setLocations} countAt={countAt} open={open} onOpen={setOpen} />}
       </View>

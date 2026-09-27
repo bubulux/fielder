@@ -1,5 +1,6 @@
 import type { StyleProp, ViewStyle } from "react-native";
 import { imageHeaders, imageUri, type Photo } from "../api";
+import { offlinePhotoUri } from "../offline";
 import type { Settings } from "../types";
 import { FramedImage, type FrameFractions, type FrameMode } from "./FramedImage";
 
@@ -22,11 +23,12 @@ interface Props {
   style?: StyleProp<ViewStyle>;
 }
 
-/** A stored photo rendered with its rig frame (fetched through the authenticated image proxy). */
+/** A stored photo rendered with its rig frame: the offline copy if there is one, else through the authenticated image proxy. */
 export function ShotFrame({ photo, width, settings, mode, style }: Props) {
+  const local = offlinePhotoUri(photo);
   return (
     <FramedImage
-      source={{ uri: imageUri(photo), headers: imageHeaders() }}
+      source={local ? { uri: local } : { uri: imageUri(photo), headers: imageHeaders() }}
       aspect={imageAspect(photo)}
       frame={frameOf(photo)}
       width={width}
