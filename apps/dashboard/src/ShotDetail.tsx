@@ -1,9 +1,10 @@
 import { useEffect, useState } from "preact/hooks";
 import type { FieldDef } from "@fielder/vocab";
-import { deleteShot, type Location, type Project, type Shot } from "./api";
+import { deleteShot, type Location, type Preset, type Project, type Shot } from "./api";
 import { when } from "./format";
 import { downloadCrop, Framed, type MaskMode } from "./Framed";
 import { ModeSwitch } from "./ModeSwitch";
+import { RigExplorer } from "./RigExplorer";
 import { Filmstrip, isTyping, ShotInfo, usePhotoKeys } from "./ShotInfo";
 
 export { Badge } from "./ShotInfo";
@@ -14,6 +15,7 @@ interface Props {
   mode: MaskMode;
   onMode: (m: MaskMode) => void;
   projects: Project[];
+  presets: Preset[];
   /** Extra-field definitions of the shot's project. */
   fields: readonly FieldDef[];
   locations: Location[];
@@ -27,8 +29,9 @@ interface Props {
   onNavigate: (s: Shot) => void;
 }
 
-export function ShotDetail({ shot, mode, onMode, projects, fields, locations, onLocations, onUpdated, onDeleted, onShowOnMap, onClose, list, onNavigate }: Props) {
+export function ShotDetail({ shot, mode, onMode, projects, presets, fields, locations, onLocations, onUpdated, onDeleted, onShowOnMap, onClose, list, onNavigate }: Props) {
   const [photoIndex, setPhotoIndex] = useState(0);
+  const [exploring, setExploring] = useState(false);
   const photo = shot.photos[Math.min(photoIndex, shot.photos.length - 1)];
   const index = list.findIndex((s) => s.id === shot.id);
   const prev = index > 0 ? list[index - 1] : null;
@@ -38,19 +41,29 @@ export function ShotDetail({ shot, mode, onMode, projects, fields, locations, on
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (isTyping(e)) return;
+      if (exploring) { if (e.key === "Escape") setExploring(false); return; }
       if (e.key === "ArrowLeft" && prev) { e.preventDefault(); onNavigate(prev); }
       else if (e.key === "ArrowRight" && next) { e.preventDefault(); onNavigate(next); }
       else if (e.key === "Escape") onClose();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [prev, next, onNavigate, onClose]);
+  }, [prev, next, onNavigate, onClose, exploring]);
 
   async function remove() {
     if (!confirm(`Delete this shot from ${when(shot.captured_at)}? This removes ${shot.photos.length > 1 ? `all ${shot.photos.length} images` : "the image"} and the metadata permanently. Archiving keeps it.`)) return;
     try { await deleteShot(shot.id); onDeleted(shot.id); onClose(); } catch (e) { alert(`Delete failed: ${(e as Error).message}`); }
   }
 
+  if (exploring) {
+    return (
+      <div class="detail-backdrop" onClick={() => setExploring(false)}>
+        <div class="detail wide" onClick={(e) => e.stopPropagation()}>
+          <RigExplorer photo={photo} presets={presets} mode={mode} onMode={onMode} onClose={() => setExploring(false)} />
+        </div>
+      </div>
+    );
+  }
   return (
     <div class="detail-backdrop" onClick={onClose}>
       <div class="detail" onClick={(e) => e.stopPropagation()}>
@@ -69,6 +82,7 @@ export function ShotDetail({ shot, mode, onMode, projects, fields, locations, on
             <button class="btn outline" onClick={() => void downloadCrop(photo)} title="Download the photo cropped to the rig frame">Download crop</button>
             <a class="btn outline" href={photo.image_url} download target="_blank" rel="noreferrer">Original</a>
             <button class="btn outline" onClick={() => onShowOnMap(shot)}>Show on map</button>
+            <button class="btn outline" onClick={() => setExploring(true)} title="Frame this photo with other rigs and lenses">Explore rigs</button>
             <span style="flex:1" />
             <button class="btn danger" onClick={() => void remove()}>Delete</button>
             <button class="btn outline" onClick={onClose}>Close</button>

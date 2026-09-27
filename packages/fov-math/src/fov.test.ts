@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { computeFraming, overlayRect, phoneViewFromEquivalent, rotateFov } from "./fov.ts";
+import { computeFraming, overlayRect, phoneViewFromEquivalent, phoneViewFromFrame, reframe, rotateFov } from "./fov.ts";
 import { FULL_FRAME } from "./presets.ts";
 import { CAMERAS, describeRig, findFormat } from "./cameras.ts";
 
@@ -101,4 +101,25 @@ test("camera formats: Pocket 4K DCI is 18.96 × 10, Pocket 6K UHD is a windowed 
   assert.equal(describeRig("bmpcc4k", "4k-dci", 1, 1), "Blackmagic Pocket 4K · 4K DCI 4096×2160");
   assert.equal(describeRig(null, null, 20, 11), "Custom 20 × 11 mm");
   for (const c of CAMERAS) for (const f of c.formats) assert.ok(f.widthMm > f.heightMm && f.widthMm < 40, `${c.id}/${f.id}`);
+});
+
+test("reframe: the source rig lands on its own frame, a longer lens frames tighter", () => {
+  const rig = { sensor: { widthMm: 23.1, heightMm: 12.99 }, speedboosterFactor: 1 };
+  const frame = { widthFraction: 0.6, heightFraction: 0.45 };
+  const same = reframe({ rig, lensMm: 24 }, frame, { rig, lensMm: 24 });
+  near(same.widthFraction, 0.6, 1e-9);
+  near(same.heightFraction, 0.45, 1e-9);
+  const tele = reframe({ rig, lensMm: 24 }, frame, { rig, lensMm: 48 });
+  assert.ok(tele.widthFraction < 0.31 && tele.widthFraction > 0.29, `48 mm ~ half of 24 mm width, got ${tele.widthFraction}`);
+  const wide = reframe({ rig, lensMm: 24 }, frame, { rig, lensMm: 8 });
+  assert.equal(wide.exceedsPreview, true);
+});
+
+test("phoneViewFromFrame inverts overlayRect", () => {
+  const phone = { horizontalFovDeg: 66, verticalFovDeg: 52 };
+  const rigFov = { horizontal: 40, vertical: 23 };
+  const r = overlayRect(rigFov, phone);
+  const back = phoneViewFromFrame(rigFov, r);
+  near(back.horizontalFovDeg, 66, 1e-9);
+  near(back.verticalFovDeg, 52, 1e-9);
 });

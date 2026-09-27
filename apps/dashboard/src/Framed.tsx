@@ -1,5 +1,5 @@
 import type { Photo } from "./api";
-import { frameLayout, frameOf, imageAspect, type FrameMode, type PctRect } from "./format";
+import { frameLayout, frameOf, imageAspect, type FrameGeometry, type FrameMode, type PctRect } from "./format";
 
 export type MaskMode = FrameMode;
 
@@ -17,8 +17,8 @@ const pct = (r: PctRect) => ({ left: `${r.left}%`, top: `${r.top}%`, width: `${r
  * The box always has the photo's aspect ratio (or the frame's in fit mode) so the percentage
  * geometry of frame and tints lines up with the image.
  */
-export function Framed({ photo, mode, className, maxHeight }: { photo: Photo; mode: MaskMode; className?: string; maxHeight?: string }) {
-  const f = frameOf(photo);
+export function Framed({ photo, mode, className, maxHeight, frame }: { photo: Photo; mode: MaskMode; className?: string; maxHeight?: string; /** Draw this frame instead of the stored one (rig explorer). */ frame?: FrameGeometry | null }) {
+  const f = frame ?? frameOf(photo);
   const img = photo.image_url;
   const photoAspect = imageAspect(photo);
   const l = f && mode !== "off" ? frameLayout(f, mode, photoAspect) : null;

@@ -207,3 +207,23 @@ textarea.json { width: 100%; font: 12px/1.45 ui-monospace, SFMono-Regular, Menlo
 .field-edit { max-width: 1100px; }
 .field-edit-cols { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); gap: 16px; }
 @media (max-width: 900px) { .field-edit-cols { grid-template-columns: 1fr; } }
+
+/* Rig explorer */
+.detail.wide { display: block; padding: 18px 22px; }
+.explorer { display: flex; flex-direction: column; gap: 14px; }
+.explorer-head { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.explorer .compare { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+.explorer .single { display: flex; flex-direction: column; gap: 12px; }
+.explorer .pane { display: flex; flex-direction: column; gap: 8px; align-items: stretch; }
+.explorer .pane .framed { margin: 0 auto; }
+.explorer .pane-title { font-weight: 600; }
+.explorer .tag { display: inline-block; background: var(--accent); color: #000; border-radius: 4px; padding: 0 6px; font-size: 12px; margin-right: 4px; }
+.explorer .warn { color: var(--accent); }
+.explorer .pickers { display: grid; grid-template-columns: minmax(180px, 260px) 1fr; gap: 12px; align-items: start; }
+.explorer .pickers label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--dim); }
+.chips.small .chip { padding: 4px 10px; font-size: 12px; }
+.lens-strip { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 6px; }
+.lens-strip button { flex: none; width: 150px; padding: 0; background: none; border: 2px solid transparent; border-radius: 8px; cursor: pointer; color: var(--text); overflow: hidden; }
+.lens-strip button.active { border-color: var(--accent); }
+.lens-strip span { display: block; font-size: 12px; padding: 3px 0; }
+@media (max-width: 900px) { .explorer .compare { grid-template-columns: 1fr; } .explorer .pickers { grid-template-columns: 1fr; } }

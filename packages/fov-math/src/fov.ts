@@ -115,3 +115,32 @@ export function overlayRect(rigFov: { horizontal: number; vertical: number }, ph
 export function rotateFov(fov: { horizontal: number; vertical: number }) {
   return { horizontal: fov.vertical, vertical: fov.horizontal };
 }
+
+/**
+ * The phone's view of a stored photo, recovered from the rig FOV the photo was framed with
+ * (already on the photo's axes, i.e. rotated for a portrait rig) and the frame fractions.
+ * Inverse of overlayRect: lets any other rig/lens be framed on an existing photo.
+ */
+export function phoneViewFromFrame(rigFov: { horizontal: number; vertical: number }, frame: { widthFraction: number; heightFraction: number }): PhoneView {
+  return {
+    horizontalFovDeg: 2 * Math.atan(Math.tan((rigFov.horizontal / 2) * RAD) / frame.widthFraction) * DEG,
+    verticalFovDeg: 2 * Math.atan(Math.tan((rigFov.vertical / 2) * RAD) / frame.heightFraction) * DEG,
+  };
+}
+
+/** A rig + lens as needed to frame it on a photo. */
+export interface RigLens { rig: Rig; lensMm: number; portrait?: boolean }
+
+/** Rig FOV on the photo's axes (portrait rigs swap horizontal and vertical). */
+export function fovOnPhoto(x: RigLens): { horizontal: number; vertical: number } {
+  const fov = computeFraming(x.rig, x.lensMm).fov;
+  return x.portrait ? rotateFov(fov) : fov;
+}
+
+/**
+ * Where `target` would frame on a photo that was taken while `source` was framed at
+ * `sourceFrame`. Fractions > 1 mean the target sees more than the photo contains.
+ */
+export function reframe(source: RigLens, sourceFrame: { widthFraction: number; heightFraction: number }, target: RigLens): OverlayRect {
+  return overlayRect(fovOnPhoto(target), phoneViewFromFrame(fovOnPhoto(source), sourceFrame));
+}

@@ -1,3 +1,4 @@
+import type { RigLens } from "@fielder/fov-math";
 import { extraLabel, label, lightLabel, STATE_COLORS, type FilterableShot } from "@fielder/vocab";
 import type { Photo, Shot } from "./api";
 
@@ -98,5 +99,20 @@ export function filterable(s: Shot): FilterableShot {
     light: s.light, artificial: s.artificial ? "yes" : "no", weather: s.weather,
     preset_id: p.preset_id, lens_mm: p.lens_mm, ff_eq_mm: typeof ffEq === "number" ? ffEq : null,
     photo_count: s.photos.length, timestamp: s.captured_at, extra: s.extra,
+  };
+}
+
+/** The rig and lens a photo was framed with, as fov-math input; null for photos without a framing snapshot. */
+export function sourceRigOf(p: Photo): { rigLens: RigLens; frame: { widthFraction: number; heightFraction: number } } | null {
+  const f = p.framing;
+  const fr = frameOf(p);
+  if (!f || !fr || typeof f.sensor_width_mm !== "number" || typeof f.sensor_height_mm !== "number") return null;
+  return {
+    rigLens: {
+      rig: { sensor: { widthMm: f.sensor_width_mm, heightMm: f.sensor_height_mm }, speedboosterFactor: typeof f.speedbooster_factor === "number" ? f.speedbooster_factor : 1 },
+      lensMm: p.lens_mm,
+      portrait: f.rig_orientation === "portrait",
+    },
+    frame: { widthFraction: fr.width_fraction, heightFraction: fr.height_fraction },
   };
 }

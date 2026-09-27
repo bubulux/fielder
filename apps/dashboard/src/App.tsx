@@ -196,6 +196,7 @@ export function App() {
           mode={dialogMode}
           onMode={setDialogMode}
           projects={projects ?? []}
+          presets={presets ?? []}
           fields={fieldsOf(open.project_id)}
           locations={locations ?? []}
           onLocations={setLocations}
