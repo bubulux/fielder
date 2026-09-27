@@ -10,11 +10,12 @@ import { ModeSwitch } from "./ModeSwitch";
 import { ALL_PROJECTS, Projects, type ActiveProject } from "./Projects";
 import { Review } from "./Review";
 import { Rigs } from "./Rigs";
+import { Schedule } from "./Schedule";
 import { Badge, ShotDetail } from "./ShotDetail";
 import { Views } from "./Views";
 
-type Tab = "gallery" | "review" | "map" | "views" | "projects" | "fields" | "rigs" | "locations";
-const TABS: Tab[] = ["gallery", "review", "map", "views", "projects", "fields", "rigs", "locations"];
+type Tab = "gallery" | "review" | "map" | "schedule" | "views" | "projects" | "fields" | "rigs" | "locations";
+const TABS: Tab[] = ["gallery", "review", "map", "schedule", "views", "projects", "fields", "rigs", "locations"];
 type Filter = ShotState | "all";
 type Layout = "grid" | "list";
 
@@ -183,6 +184,9 @@ export function App() {
         )}
         {loaded && active && tab === "review" && <Review shots={projectShots} mask={mask} projects={projects} fieldsOf={fieldsOf} locations={locations ?? []} onLocations={setLocations} onUpdated={updated} onDeleted={deleted} />}
         {loaded && active && tab === "map" && <MapView shots={visible} onOpen={(s) => openShot(s, visible)} focus={focus} mask={mask} />}
+        {loaded && active && tab === "schedule" && (active === ALL_PROJECTS
+          ? <div class="status">Shooting days belong to a project: pick one in the header to plan its days.</div>
+          : <Schedule projectId={active} shots={projectShots} mask={mask} onOpen={openShot} />)}
         {loaded && active && tab === "views" && <Views shots={projectShots} projects={projects} fieldDefs={filterDefs} locations={locations ?? []} presets={presets ?? []} views={views} onViews={setViews} mask={mask} onOpen={openShot} />}
         {loaded && active && tab === "projects" && <Projects projects={projects} onChange={setProjects} fields={fields ?? []} active={active} onActivate={(p) => { activate(p); setTab("gallery"); }} />}
         {loaded && active && tab === "fields" && <Fields fields={fields} onChange={setFields} projects={projects ?? []} />}

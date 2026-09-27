@@ -227,3 +227,48 @@ textarea.json { width: 100%; font: 12px/1.45 ui-monospace, SFMono-Regular, Menlo
 .lens-strip button.active { border-color: var(--accent); }
 .lens-strip span { display: block; font-size: 12px; padding: 3px 0; }
 @media (max-width: 900px) { .explorer .compare { grid-template-columns: 1fr; } .explorer .pickers { grid-template-columns: 1fr; } }
+
+/* Schedule */
+.schedule { display: grid; grid-template-columns: 280px minmax(0, 1fr); height: 100%; min-height: 0; }
+.view-item.past { opacity: .55; }
+.day-editor { display: flex; flex-direction: column; gap: 14px; }
+.day-head { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.day-head input, .day-notes, .plan-time input { background: var(--bg); color: var(--text); border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; font: inherit; font-size: 14px; color-scheme: dark; }
+.day-head .grow { flex: 1; min-width: 200px; }
+.day-notes { resize: vertical; }
+.timeline { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; display: flex; flex-direction: column; gap: 6px; }
+.tl-bar { position: relative; height: 34px; border-radius: 6px; overflow: hidden; }
+.tl-seg { position: absolute; top: 0; bottom: 0; display: flex; align-items: center; justify-content: center; overflow: hidden; }
+.tl-seg span { font-size: 11px; font-weight: 600; color: rgba(0,0,0,.65); text-transform: uppercase; letter-spacing: .5px; }
+.tl-seg.night span { color: rgba(255,255,255,.6); }
+.tl-ticks { position: relative; height: 16px; }
+.tl-ticks span { position: absolute; transform: translateX(-50%); font-size: 11px; color: var(--dim); }
+.tl-ticks span:first-child { transform: none; }
+.tl-weather { position: relative; height: 34px; }
+.tl-hour { position: absolute; top: 0; bottom: 0; }
+.tl-hour .cloud { position: absolute; left: 1px; right: 1px; top: 0; height: 12px; background: #8c8c96; border-radius: 2px; }
+.tl-hour .rain { position: absolute; left: 1px; right: 1px; bottom: 14px; max-height: 18px; background: #3d8bfd; opacity: .8; border-radius: 2px; }
+.tl-hour span { position: absolute; bottom: 0; left: 0; font-size: 10px; color: var(--dim); }
+.loc-group { display: flex; flex-direction: column; gap: 8px; margin-bottom: 14px; }
+.loc-head { font-size: 14px; }
+.plan-row { display: grid; grid-template-columns: 120px minmax(0, 1fr) auto auto; gap: 12px; align-items: center; background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 8px; }
+.plan-row .thumb { cursor: pointer; border-radius: 6px; overflow: hidden; }
+.plan-title { font-weight: 600; }
+.plan-time { display: flex; flex-direction: column; gap: 2px; font-size: 11px; color: var(--dim); }
+.plan-actions { display: flex; gap: 4px; }
+.plan-actions .btn { padding: 4px 9px; }
+.win-bar { position: relative; height: 10px; border-radius: 3px; overflow: hidden; margin-top: 6px; }
+.win-phase { position: absolute; top: 0; bottom: 0; opacity: .25; }
+.win-ok { position: absolute; top: 0; bottom: 0; background: var(--ok); opacity: .85; }
+.win-planned { position: absolute; top: -2px; bottom: -2px; width: 3px; margin-left: -1px; background: #fff; }
+.win-planned.bad { background: var(--danger); }
+.shot-picker { border: 1px dashed var(--border); border-radius: 10px; padding: 12px; display: flex; flex-direction: column; gap: 12px; }
+.picker-head { display: flex; gap: 14px; align-items: flex-end; }
+.picker-head label:first-child { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--dim); min-width: 240px; }
+.picker-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 10px; margin-top: 6px; }
+.picker-card { text-align: left; background: var(--panel); color: var(--text); border: 1px solid var(--border); border-radius: 8px; padding: 0 0 6px; cursor: pointer; font: inherit; overflow: hidden; }
+.picker-card:hover { border-color: var(--accent); }
+.picker-card .title { font-size: 13px; font-weight: 600; padding: 4px 8px 0; }
+.picker-card .meta { padding: 0 8px; }
+.meta.warn, .warn { color: var(--accent); }
+@media (max-width: 900px) { .schedule { grid-template-columns: 1fr; } .plan-row { grid-template-columns: 90px 1fr; } }

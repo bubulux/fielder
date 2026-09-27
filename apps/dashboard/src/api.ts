@@ -125,6 +125,14 @@ export const deleteField = (id: string) => send<{ deleted: string }>("DELETE", `
 export const importFields = (fields: unknown[]) => send<{ fields: FieldDefinition[]; created: number; updated: number }>("POST", "/api/fields/import", { fields });
 export const putProjectFields = (projectId: string, fieldIds: string[]) => send<{ field_ids: string[] }>("PUT", `/api/projects/${projectId}/fields`, { field_ids: fieldIds }).then((r) => r.field_ids);
 
+/** A shooting day of a project with its planned shots in order. */
+export interface DayShot { shot_id: string; planned_time: string | null; notes: string | null }
+export interface ShootingDay { id: string; project_id: string; date: string; title: string | null; notes: string | null; created_at: string; updated_at: string | null; shots: DayShot[] }
+export const fetchDays = (projectId: string) => get<{ days: ShootingDay[] }>(`/api/days?project_id=${projectId}`).then((r) => r.days);
+export const putDay = (d: Omit<ShootingDay, "created_at" | "updated_at">) =>
+  send<{ day: ShootingDay }>("PUT", `/api/days/${d.id}`, { project_id: d.project_id, date: d.date, title: d.title, notes: d.notes, shots: d.shots }).then((r) => r.day);
+export const deleteDay = (id: string) => send<{ deleted: string }>("DELETE", `/api/days/${id}`).then(() => undefined);
+
 export const fetchPresets = () => get<{ presets: Preset[] }>("/api/presets").then((r) => r.presets);
 export const putPreset = (p: Omit<Preset, "created_at" | "updated_at">) =>
   send<{ preset: Preset }>("PUT", `/api/presets/${p.id}`, {

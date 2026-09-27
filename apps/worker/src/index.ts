@@ -5,6 +5,7 @@
  */
 import { AccessError, verifyAccessJwt, type AccessIdentity } from "./access.ts";
 import { registerAuthRoutes } from "./auth.ts";
+import { registerDayRoutes } from "./days.ts";
 import { registerFieldRoutes } from "./fields.ts";
 import { HttpError, json, Router } from "./http.ts";
 import { registerLocationRoutes } from "./locations.ts";
@@ -55,6 +56,7 @@ registerAuthRoutes(router);
 registerPresetRoutes(router);
 registerProjectRoutes(router);
 registerFieldRoutes(router);
+registerDayRoutes(router);
 registerLocationRoutes(router);
 registerShotRoutes(router);
 registerViewRoutes(router);
