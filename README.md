@@ -1,6 +1,6 @@
 # Fielder
 
-Personal shot-scouting viewfinder: point the phone at a scene, pick the rig (sensor + speedbooster) and lens you plan to shoot with, and see the real field of view as an overlay. Snapshots with GPS and framing metadata land in a private web dashboard with a map.
+Personal shot-scouting viewfinder and shoot planner: point the phone at a scene, pick the rig (sensor + speedbooster) and lens you plan to shoot with, and see the real field of view as an overlay. Snapshots with GPS and framing metadata land in a private web dashboard, organised by project, where shooting days are planned against the daylight and forecast.
 
 Single user. Everything runs on Cloudflare; the phone app is a sideloaded Android APK built with EAS.
 
@@ -8,7 +8,8 @@ Single user. Everything runs on Cloudflare; the phone app is a sideloaded Androi
 
 | Path | What |
 | --- | --- |
-| `packages/fov-math` | Pure TypeScript: sensor/speedbooster/lens presets, FOV, crop factor, overlay geometry. Tested with `node --test`. |
+| `packages/fov-math` | Pure TypeScript: sensor/speedbooster/lens presets, FOV, crop factor, overlay geometry, re-framing a photo for another rig. Tested with `node --test`. |
+| `packages/vocab` | Shared vocabularies, the filter model, extra-field definitions and the sun/daylight math. Tested with `node --test`. |
 | `apps/worker` | Cloudflare Worker: JSON API (`/api/projects`, `/api/shots`, …), R2 image proxy, and the dashboard as static assets. Verifies the Cloudflare Access JWT on every request. |
 | `apps/dashboard` | Vite + Preact + Leaflet SPA. Built into `dist/` and served by the Worker. |
 | `apps/mobile` | Expo SDK 57 app. Camera preview, overlay, capture, offline upload queue. |
@@ -30,6 +31,7 @@ No Google Cloud project is involved. Auth is Cloudflare Access only, for both cl
 ```sh
 pnpm install                       # 7-day dependency cooldown is enforced (pnpm-workspace.yaml)
 pnpm -C packages/fov-math test
+pnpm -C packages/vocab test
 pnpm -C apps/mobile exec tsc -p .  # mobile typecheck
 pnpm -C apps/mobile eas build --platform android --profile apk   # new APK (cloud build)
 
@@ -105,27 +107,41 @@ plugins/permissions) need a fresh dev-client build; JS changes do not.
 If the tunnel fails with `Cannot read properties of undefined (reading 'body')`, a previous
 ngrok session is still registered; wait 30 s or set `EXPO_TUNNEL_SUBDOMAIN` to a new value.
 
+## Features
+
+- **Projects**: every shot belongs to one. Both clients ask which project to work on and remember it; the dashboard can also browse all projects at once. Locations, rigs, views and extra-field definitions are shared.
+- **Capture (phone)**: rig + lens overlay, human-view frame (cycle 35/43/50 or toggle one value, see Setup), flashlight, **sequence mode** (every photo while it is on becomes one shot; red SEQ badge), **direct upload** (skip the tag form), high-accuracy GPS with the accuracy in the HUD, offline upload queue.
+- **Review**: phone and dashboard, prev/next (arrow keys on the web), details edited in place, sequences shown as a photo strip (`,` and `.` step through it on the web).
+- **Positions** can be corrected by dragging a pin (dashboard dialog and phone detail sheet), per photo or for a whole sequence.
+- **Extra fields**: JSON definitions (text, number, yes/no, select, nested groups, selects whose options depend on a sibling) on the dashboard's Fields tab, importable from an AI (copy the prompt there); each project picks its fields.
+- **Rig explorer** (dashboard dialog → Explore rigs): frame an existing photo with any rig + lens, lens strip per rig, A/B compare.
+- **Schedule** (dashboard): shooting days per project, shots per location, light phases from the sun position (night < −6°, dawn/dusk −6°…+6°, day > +6°), sunrise/sunset, Open-Meteo hourly forecast (~16 days ahead), each shot's shootable window vs. its planned time.
+- **Day mode** (phone): the planned days, their light, and big prev/next stepping through the shots; "Make offline" stores a day with all its photos for use without a connection.
+- **Debug log** (phone, Setup → Debug log): records API calls, uploads, sync, captures, GPS and errors; share it as text.
+
 ## Data model
 
 `projects(id, name UNIQUE (case-insensitive), notes, created_at, updated_at)`
 `presets(id, name, camera_id, format_id, sensor_width_mm, sensor_height_mm, speedbooster_factor, lens_min_mm, lens_max_mm, created_at, updated_at)`
 `locations(id, name UNIQUE (case-insensitive), created_at, updated_at)`
 `shots(id, project_id, location_id, name, int_ext, light JSON array, artificial, weather, state, extra JSON, captured_at, created_at, updated_at)`
-`photos(id, shot_id, ordinal, timestamp, lat, lon, gps_accuracy_m, preset_id, lens_mm, r2_object_key, width, height, framing JSON, device JSON, created_at)`
+`photos(id, shot_id, ordinal, timestamp, lat, lon, gps_accuracy_m, position_corrected, preset_id, lens_mm, r2_object_key, width, height, framing JSON, device JSON, created_at)`
+`field_definitions(id, key UNIQUE, definition JSON, …)`, `project_fields(project_id, field_id, position)`
+`shooting_days(id, project_id, date, title, notes, …)`, `day_shots(day_id, shot_id, position, planned_time, notes)`
 `views(id, name, filter JSON, created_at, updated_at)`
 
 - A **shot** is the unit of scouting metadata and review; it owns one or more **photos** (one per normal capture, many for a sequence). Rig, lens, framing and GPS are per photo; the first photo is the shot's cover.
-- Every shot belongs to one **project**. Both clients ask which project to work on and remember it; the dashboard can also show all projects at once. Only empty projects can be deleted. Locations, rigs and views are shared by all projects.
-- `state` is `unreviewed` (default on upload) → `approved` or `archived` (Review tab on phone and web). Archived keeps the photos; delete removes them.
-- All tags are optional on upload and editable afterwards (`PATCH /api/shots/:id`). `light` is any subset of `dawn, day, dusk, night` (the phases the shot works in); `artificial` is a separate flag, independent of INT/EXT. Vocabularies live in `packages/vocab` (shared by worker, app and dashboard).
-- `extra` is a free-form JSON object for now; per-project field definitions will describe and validate it.
-- `framing` is the rig/lens/FOV snapshot at capture time incl. `frame` = rig frame relative to the photo. `device` holds the phone model, EXIF focal lengths and GPS extras.
+- `state` is `unreviewed` (default on upload) → `approved` or `archived`. Archived keeps the photos; delete removes them.
+- All tags are optional on upload and editable afterwards (`PATCH /api/shots/:id`). `light` is any subset of `dawn, day, dusk, night` (the phases the shot works in); `artificial` is a separate flag, independent of INT/EXT; with no phase set a shot fits any time of day.
+- `extra` holds the values of the project's extra fields (groups are nested objects). Edits are validated against the project's definitions; uploads are only pruned, so a phone with stale definitions never loses a capture.
+- `framing` is the rig/lens/FOV snapshot at capture time incl. `frame` = rig frame relative to the photo (the rig explorer re-frames from it). `device` holds the phone model, EXIF focal lengths and GPS extras.
 - The schema was reset on 2026-09-27 (`0001_baseline.sql`); prototype data from before was dropped.
 
 ## API
 
-`GET/PUT/DELETE /api/projects[/:id]`, `GET/PUT/DELETE /api/presets[/:id]`, `GET/PUT/DELETE /api/locations[/:id]` (project and location PUTs answer 409 + `existing_id` on a name clash),
-`GET /api/shots?project_id=&state=&location_id=` (keyset-paginated, photos included), `POST /api/shots` (multipart `metadata` JSON + one `photo.<id>` file per photo; idempotent, so a retry or a continued sequence only adds missing photos), `PATCH /api/shots/:id` (tags, state and/or project), `DELETE /api/shots/:id`, `GET /api/photos/:id/image`, `GET/PUT/DELETE /api/views[/:id]`, `GET /auth/mobile` (phone sign-in page), `GET /health`.
+`GET/PUT/DELETE /api/projects[/:id]`, `PUT /api/projects/:id/fields`, `GET/PUT/DELETE /api/presets[/:id]`, `GET/PUT/DELETE /api/locations[/:id]` (project and location PUTs answer 409 + `existing_id` on a name clash),
+`GET /api/shots?project_id=&state=&location_id=` (keyset-paginated, photos included), `POST /api/shots` (multipart `metadata` JSON + one `photo.<id>` file per photo; idempotent, so a retry or a continued sequence only adds missing photos), `PATCH /api/shots/:id` (tags, state and/or project), `DELETE /api/shots/:id`, `GET /api/photos/:id/image`, `PATCH /api/photos/:id` (position; `all_in_shot`),
+`GET/PUT/DELETE /api/fields[/:id]`, `POST /api/fields/import`, `GET /api/days?project_id=`, `GET/PUT/DELETE /api/days/:id`, `GET/PUT/DELETE /api/views[/:id]`, `GET /auth/mobile` (phone sign-in page), `GET /health`.
 
 ## Secrets and rotation
 
