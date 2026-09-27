@@ -5,6 +5,8 @@ import { deletePreset, putPreset, type Preset, type Shot } from "./api";
 interface Props { presets: Preset[] | null; shots: Shot[]; onChange: (p: Preset[]) => void }
 
 interface Draft { id: string; name: string; cameraId: string; formatId: string | null; w: string; h: string; sb: string; lmin: string; lmax: string; isNew: boolean }
+/** Shots with at least one photo taken on the rig. */
+const usedBy = (shots: Shot[], presetId: string) => shots.filter((s) => s.photos.some((p) => p.preset_id === presetId)).length;
 const num = (s: string) => { const v = Number(String(s).replace(",", ".")); return Number.isFinite(v) && v > 0 ? v : null; };
 
 function autoName(d: Draft): string {
@@ -52,7 +54,7 @@ export function Rigs({ presets, shots, onChange }: Props) {
     } catch (err) { setError((err as Error).message); }
   }
   async function remove(p: Preset) {
-    const used = shots.filter((s) => s.preset_id === p.id).length;
+    const used = usedBy(shots, p.id);
     if (!confirm(`Delete rig "${p.name}"?${used ? ` ${used} shot(s) reference it; they keep their framing snapshot.` : ""} The phone drops it on next launch.`)) return;
     try { await deletePreset(p.id); onChange((presets ?? []).filter((x) => x.id !== p.id)); } catch (e) { alert(`Delete failed: ${(e as Error).message}`); }
   }
@@ -71,7 +73,7 @@ export function Rigs({ presets, shots, onChange }: Props) {
                 <td>{p.sensor_width_mm} × {p.sensor_height_mm} mm</td>
                 <td>{p.speedbooster_factor === 1 ? "none" : `×${p.speedbooster_factor}`}</td>
                 <td>{p.lens_min_mm != null && p.lens_max_mm != null ? `${p.lens_min_mm}–${p.lens_max_mm} mm` : "any"}</td>
-                <td>{shots.filter((s) => s.preset_id === p.id).length}</td>
+                <td>{usedBy(shots, p.id)}</td>
                 <td class="actions"><button class="btn" onClick={() => startEdit(p)}>Edit</button><button class="btn danger" onClick={() => void remove(p)}>Delete</button></td>
               </tr>
             ))}

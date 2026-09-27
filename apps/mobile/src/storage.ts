@@ -1,6 +1,6 @@
 import Storage from "expo-sqlite/kv-store";
 import { DEFAULT_SETTINGS } from "./defaults";
-import type { LocationEntry, PendingUpload, Preset, Settings } from "./types";
+import type { LocationEntry, PendingUpload, Preset, ProjectEntry, Settings } from "./types";
 
 export { DEFAULT_SETTINGS };
 
@@ -9,8 +9,11 @@ const KEYS = {
   presets: "presets.v1",
   activePresetId: "activePresetId.v1",
   lensMm: "lensMm.v1",
-  pending: "pendingUploads.v1",
-  locations: "locations.v1",
+  // v2: shot + photos model (2026-09 rework); v1 entries are not migrated.
+  pending: "pendingUploads.v2",
+  locations: "locations.v2",
+  projects: "projects.v1",
+  activeProjectId: "activeProjectId.v1",
 } as const;
 
 
@@ -55,4 +58,11 @@ export const store = {
 
   loadLocations: (): LocationEntry[] => readArray<LocationEntry>(KEYS.locations),
   saveLocations: (l: LocationEntry[]) => write(KEYS.locations, l),
+
+  loadProjects: (): ProjectEntry[] => readArray<ProjectEntry>(KEYS.projects),
+  saveProjects: (p: ProjectEntry[]) => write(KEYS.projects, p),
+
+  loadActiveProjectId: (): string | null => Storage.getItemSync(KEYS.activeProjectId),
+  saveActiveProjectId: (id: string | null) =>
+    id ? Storage.setItemSync(KEYS.activeProjectId, id) : Storage.removeItemSync(KEYS.activeProjectId),
 };

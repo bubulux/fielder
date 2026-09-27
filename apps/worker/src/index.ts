@@ -8,6 +8,7 @@ import { registerAuthRoutes } from "./auth.ts";
 import { HttpError, json, Router } from "./http.ts";
 import { registerLocationRoutes } from "./locations.ts";
 import { registerPresetRoutes } from "./presets.ts";
+import { registerProjectRoutes } from "./projects.ts";
 import { registerShotRoutes } from "./shots.ts";
 import { registerViewRoutes } from "./views.ts";
 
@@ -51,6 +52,7 @@ router.on("GET", "/health", async ({ env, identity }) => {
 });
 registerAuthRoutes(router);
 registerPresetRoutes(router);
+registerProjectRoutes(router);
 registerLocationRoutes(router);
 registerShotRoutes(router);
 registerViewRoutes(router);

@@ -1,6 +1,6 @@
 import { useMemo, useState } from "preact/hooks";
 import { emptyFilter, evaluateFilter, type FilterGroup } from "@fielder/vocab";
-import { deleteView, putView, type Location, type Preset, type SavedView, type Shot } from "./api";
+import { deleteView, putView, type Location, type Preset, type Project, type SavedView, type Shot } from "./api";
 import { FilterBuilderResults } from "./ViewsResults";
 import { GroupEditor } from "./FilterBuilder";
 import { filterable } from "./format";
@@ -8,6 +8,7 @@ import type { MaskMode } from "./Framed";
 
 interface Props {
   shots: Shot[];
+  projects: Project[];
   locations: Location[];
   presets: Preset[];
   views: SavedView[] | null;
@@ -17,7 +18,7 @@ interface Props {
 }
 
 /** Filter tool: build a query, see matching shots, save it as a named view on the server. */
-export function Views({ shots, locations, presets, views, onViews, mask, onOpen }: Props) {
+export function Views({ shots, projects, locations, presets, views, onViews, mask, onOpen }: Props) {
   const [current, setCurrent] = useState<SavedView | null>(null);
   const [filter, setFilter] = useState<FilterGroup>(emptyFilter);
   const [name, setName] = useState("");
@@ -69,7 +70,7 @@ export function Views({ shots, locations, presets, views, onViews, mask, onOpen 
         </div>
       </aside>
       <section class="views-main">
-        <GroupEditor group={filter} ctx={{ locations, presets }} onChange={change} />
+        <GroupEditor group={filter} ctx={{ projects, locations, presets }} onChange={change} />
         <FilterBuilderResults shots={results} total={shots.length} mask={mask} onOpen={onOpen} />
       </section>
     </div>

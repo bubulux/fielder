@@ -1,4 +1,4 @@
-import type { Shot } from "./api";
+import type { Photo } from "./api";
 import { frameLayout, frameOf, imageAspect, type FrameMode, type PctRect } from "./format";
 
 export type MaskMode = FrameMode;
@@ -6,7 +6,7 @@ export type MaskMode = FrameMode;
 const pct = (r: PctRect) => ({ left: `${r.left}%`, top: `${r.top}%`, width: `${r.width}%`, height: `${r.height}%` });
 
 /**
- * Renders a shot with its rig frame re-applied from the stored geometry.
+ * Renders a photo with its rig frame re-applied from the stored geometry.
  * The frame is centred; fractions > 1 mean the rig saw more than the phone, in
  * which case the photo is shrunk inside the frame exactly like in the app.
  * "fit" crops the photo to the frame instead.
@@ -17,10 +17,10 @@ const pct = (r: PctRect) => ({ left: `${r.left}%`, top: `${r.top}%`, width: `${r
  * The box always has the photo's aspect ratio (or the frame's in fit mode) so the percentage
  * geometry of frame and tints lines up with the image.
  */
-export function Framed({ shot, mode, className, maxHeight }: { shot: Shot; mode: MaskMode; className?: string; maxHeight?: string }) {
-  const f = frameOf(shot);
-  const img = shot.image_url;
-  const photoAspect = imageAspect(shot);
+export function Framed({ photo, mode, className, maxHeight }: { photo: Photo; mode: MaskMode; className?: string; maxHeight?: string }) {
+  const f = frameOf(photo);
+  const img = photo.image_url;
+  const photoAspect = imageAspect(photo);
   const l = f && mode !== "off" ? frameLayout(f, mode, photoAspect) : null;
   const aspect = l?.aspect ?? photoAspect;
   const style = { aspectRatio: String(aspect), height: "auto", width: maxHeight ? `min(100%, calc(${maxHeight} * ${aspect}))` : undefined };
@@ -44,9 +44,9 @@ export function Framed({ shot, mode, className, maxHeight }: { shot: Shot; mode:
 }
 
 /** Crop the photo to the rig frame in the browser and trigger a download. */
-export async function downloadCrop(shot: Shot): Promise<void> {
-  const f = frameOf(shot);
-  const res = await fetch(shot.image_url, { credentials: "same-origin" });
+export async function downloadCrop(photo: Photo): Promise<void> {
+  const f = frameOf(photo);
+  const res = await fetch(photo.image_url, { credentials: "same-origin" });
   const bitmap = await createImageBitmap(await res.blob());
   const wf = Math.min(1, f?.width_fraction ?? 1);
   const hf = Math.min(1, f?.height_fraction ?? 1);
@@ -59,7 +59,7 @@ export async function downloadCrop(shot: Shot): Promise<void> {
   if (!blob) return;
   const a = document.createElement("a");
   a.href = URL.createObjectURL(blob);
-  a.download = `fielder-${shot.timestamp.replace(/[:.]/g, "-")}-framed.jpg`;
+  a.download = `fielder-${photo.timestamp.replace(/[:.]/g, "-")}-framed.jpg`;
   a.click();
   setTimeout(() => URL.revokeObjectURL(a.href), 10_000);
 }

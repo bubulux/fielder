@@ -1,10 +1,10 @@
 import { useMemo, useState } from "react";
 import { ActivityIndicator, Alert, ScrollView, StyleSheet, Text, useWindowDimensions, View } from "react-native";
-import { api, type Shot } from "../api";
+import { api, cover, type Shot } from "../api";
 import { FRAME_MODES, frameModeLabel, ShotFrame, type FrameMode } from "../components/ShotFrame";
 import { Button, Chip, ChipRow, colors } from "../components/ui";
 import type { Settings } from "../types";
-import { badgeOf, placeLabel, rigLabel, shotTitle, tagsLabel, type useShots } from "./Gallery";
+import { badgeOf, photoCountLabel, placeLabel, rigLabel, shotTitle, tagsLabel, type useShots } from "./Gallery";
 
 interface Props {
   settings: Settings;
@@ -24,7 +24,7 @@ export function Review({ settings, data, onOpen }: Props) {
   const { shots, error, update, remove } = data;
 
   const queue = useMemo(
-    () => (shots ?? []).filter((s) => s.state === "unreviewed").sort((a, b) => a.timestamp.localeCompare(b.timestamp)),
+    () => (shots ?? []).filter((s) => s.state === "unreviewed").sort((a, b) => a.captured_at.localeCompare(b.captured_at)),
     [shots],
   );
   const current = queue.find((s) => !skipped.includes(s.id)) ?? queue[0] ?? null;
@@ -46,7 +46,7 @@ export function Review({ settings, data, onOpen }: Props) {
   const photoWidth = portrait ? width - 32 : Math.min(width * 0.55, height * 1.25);
   const photo = (
     <View style={{ alignItems: "center" }}>
-      <ShotFrame shot={current} width={photoWidth} settings={settings} mode={mode} style={{ borderRadius: 8 }} />
+      <ShotFrame photo={cover(current)} width={photoWidth} settings={settings} mode={mode} style={{ borderRadius: 8 }} />
       <View style={{ marginTop: 8 }}>
         <ChipRow>{FRAME_MODES.map((m) => <Chip key={m} label={frameModeLabel(m)} selected={mode === m} onPress={() => setMode(m)} />)}</ChipRow>
       </View>
@@ -57,8 +57,8 @@ export function Review({ settings, data, onOpen }: Props) {
       <Text style={r.title}>{shotTitle(current)}</Text>
       <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginTop: 4 }}>{badgeOf(current)}<Text style={r.line}>{placeLabel(current) || "no location"}</Text></View>
       {!!tagsLabel(current) && <Text style={r.dim}>{tagsLabel(current)}</Text>}
-      <Text style={r.dim}>{rigLabel(current)}</Text>
-      <Text style={r.dim}>{fmt(current.timestamp)}</Text>
+      <Text style={r.dim}>{rigLabel(cover(current))}</Text>
+      <Text style={r.dim}>{[fmt(current.captured_at), photoCountLabel(current)].filter(Boolean).join(" · ")}</Text>
       <View style={{ flexDirection: "row", gap: 12, marginTop: 12 }}>
         <View style={{ flex: 1 }}><Button label="Archive" kind="ghost" onPress={() => void setState(current, "archived")} disabled={busy} /></View>
         <View style={{ flex: 1 }}><Button label="Approve" onPress={() => void setState(current, "approved")} disabled={busy} /></View>

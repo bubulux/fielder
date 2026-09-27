@@ -1,6 +1,6 @@
 import { useMemo, useState } from "preact/hooks";
 import { deleteShot, patchShot, type Shot, type ShotState } from "./api";
-import { placeLabel, rigLabel, shotTitle, tagsLabel, when } from "./format";
+import { cover, photoCountLabel, placeLabel, rigLabel, shotTitle, tagsLabel, when } from "./format";
 import { Framed, type MaskMode } from "./Framed";
 import { ModeSwitch } from "./ModeSwitch";
 import { Badge } from "./ShotDetail";
@@ -18,7 +18,7 @@ export function Review({ shots, mask, onUpdated, onDeleted, onOpen }: Props) {
   const [mode, setMode] = useState<MaskMode>(mask);
   const [skipped, setSkipped] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
-  const queue = useMemo(() => shots.filter((s) => s.state === "unreviewed").sort((a, b) => a.timestamp.localeCompare(b.timestamp)), [shots]);
+  const queue = useMemo(() => shots.filter((s) => s.state === "unreviewed").sort((a, b) => a.captured_at.localeCompare(b.captured_at)), [shots]);
   const current = queue.find((s) => !skipped.includes(s.id)) ?? queue[0];
 
   async function setState(shot: Shot, state: ShotState) {
@@ -35,13 +35,13 @@ export function Review({ shots, mask, onUpdated, onDeleted, onOpen }: Props) {
     <div class="review">
       <div class="review-head"><strong>{queue.length} to review</strong><ModeSwitch value={mode} onChange={setMode} /></div>
       <div class="review-body">
-        <Framed shot={current} mode={mode} className="review-img" />
+        <Framed photo={cover(current)} mode={mode} className="review-img" />
         <div class="side">
           <div>
             <div style="font-weight:600;font-size:16px">{shotTitle(current)} <Badge shot={current} /></div>
             <div>{placeLabel(current) || "no location"}</div>
             <div class="meta">{tagsLabel(current) || "no tags"}</div>
-            <div class="meta">{rigLabel(current)} · {when(current.timestamp)}</div>
+            <div class="meta">{[rigLabel(cover(current)), when(current.captured_at), photoCountLabel(current)].filter(Boolean).join(" · ")}</div>
           </div>
           <div class="actions wrap" style="justify-content:flex-start">
             <button class="btn primary" disabled={busy} onClick={() => void setState(current, "approved")}>Approve</button>

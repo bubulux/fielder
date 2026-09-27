@@ -8,6 +8,9 @@ interface Props {
   onClose: () => void;
   settings: Settings;
   onChange: (s: Settings) => void;
+  /** Active project (every capture goes there). */
+  projectName: string | null;
+  onSwitchProject: () => void;
   pendingCount: number;
   onRetryUploads: () => void;
   buildInfo: string;
@@ -25,10 +28,15 @@ const TINTS: { label: string; value: string }[] = [
   { label: "White 50%", value: "rgba(255,255,255,0.5)" },
 ];
 
-export function SettingsSheet({ visible, onClose, settings, onChange, pendingCount, onRetryUploads, buildInfo, authEmail, onSignIn, onSignOut }: Props) {
+export function SettingsSheet({ visible, onClose, settings, onChange, projectName, onSwitchProject, pendingCount, onRetryUploads, buildInfo, authEmail, onSignIn, onSignOut }: Props) {
   const set = <K extends keyof Settings>(k: K, v: Settings[K]) => onChange({ ...settings, [k]: v });
   return (
     <Sheet visible={visible} title="Settings" onClose={onClose}>
+      <Row label="Project">
+        <Text style={{ color: colors.text, fontSize: 16 }}>{projectName ?? "None selected"}</Text>
+        <Button label="Switch project" kind="ghost" onPress={onSwitchProject} />
+        <Hint>Every shot you take goes into this project.</Hint>
+      </Row>
       <Row label={`${PHONE.model} main camera, 35mm-equivalent`}>
         <Input
           value={String(settings.phoneEquivalentFocalMm)}

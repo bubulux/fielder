@@ -1,7 +1,7 @@
 import { label, FILTER_FIELDS, filterField, isGroup, OP_LABELS, OPS_BY_KIND, type FilterGroup, type FilterOp, type FilterRule } from "@fielder/vocab";
-import type { Location, Preset } from "./api";
+import type { Location, Preset, Project } from "./api";
 
-interface Ctx { locations: Location[]; presets: Preset[] }
+interface Ctx { projects: Project[]; locations: Location[]; presets: Preset[] }
 
 const needsValue = (op: FilterOp) => op !== "empty" && op !== "not_empty";
 const isList = (op: FilterOp) => op === "in" || op === "not_in";
@@ -10,8 +10,8 @@ const isPair = (op: FilterOp) => op === "between";
 function options(fieldId: string, ctx: Ctx): { value: string; label: string }[] {
   const f = filterField(fieldId);
   if (!f) return [];
-  if (f.kind === "ref") return (f.ref === "location" ? ctx.locations.map((l) => ({ value: l.id, label: `${l.name} · ${l.district}` })) : ctx.presets.map((p) => ({ value: p.id, label: p.name })));
-  return (f.options ?? []).map((v) => ({ value: v, label: f.id === "state" || f.id === "light" || f.id === "weather" || f.id === "int_ext" ? label(v) : v }));
+  if (f.kind === "ref") return (f.ref === "location" ? ctx.locations : f.ref === "project" ? ctx.projects : ctx.presets).map((x) => ({ value: x.id, label: x.name }));
+  return (f.options ?? []).map((v) => ({ value: v, label: label(v) }));
 }
 
 function defaultRule(): FilterRule { return { field: "state", op: "is", value: "approved" }; }
@@ -26,7 +26,7 @@ function RuleRow({ rule, ctx, onChange, onRemove }: { rule: FilterRule; ctx: Ctx
 
   let valueEditor = null;
   if (needsValue(rule.op)) {
-    if ((f.kind === "enum" || f.kind === "ref") && isList(rule.op)) {
+    if ((f.kind === "enum" || f.kind === "set" || f.kind === "ref") && isList(rule.op)) {
       const sel = Array.isArray(rule.value) ? rule.value.map(String) : [];
       valueEditor = (
         <div class="chips small">

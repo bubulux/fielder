@@ -61,8 +61,8 @@ export function registerPresetRoutes(r: Router<Ctx>) {
     const pid = assertUuid(id, "id");
     const res = await env.DB.prepare("DELETE FROM presets WHERE id = ?1").bind(pid).run();
     if (!res.meta.changes) throw new HttpError(404, "preset not found");
-    // shots.preset_id becomes NULL via ON DELETE SET NULL; the framing snapshot in
-    // extra_metadata keeps the historical config.
+    // photos.preset_id becomes NULL via ON DELETE SET NULL; the framing snapshot on
+    // each photo keeps the historical config.
     return json({ deleted: pid });
   });
 }

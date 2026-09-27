@@ -1,11 +1,9 @@
-import { BERLIN_DISTRICTS } from "@fielder/vocab";
-import { assertEnum, assertString, assertUuid, HttpError, json, readJson, type Router } from "./http.ts";
+import { assertString, assertUuid, HttpError, json, readJson, type Router } from "./http.ts";
 import type { Ctx } from "./index.ts";
 
 export interface LocationRow {
   id: string;
   name: string;
-  district: string;
   created_at: string;
   updated_at: string | null;
   shot_count?: number;
@@ -28,14 +26,13 @@ export function registerLocationRoutes(r: Router<Ctx>) {
     const lid = assertUuid(id, "id");
     const b = await readJson<Record<string, unknown>>(request);
     const name = assertString(b.name, "name", 80);
-    const district = assertEnum(b.district, "district", BERLIN_DISTRICTS);
     const clash = await env.DB.prepare("SELECT id FROM locations WHERE name = ?1 COLLATE NOCASE AND id != ?2").bind(name, lid).first<{ id: string }>();
     if (clash) return json({ error: "a location with this name already exists", existing_id: clash.id }, 409);
     const now = new Date().toISOString();
     await env.DB.prepare(
-      `INSERT INTO locations (id, name, district, updated_at) VALUES (?1, ?2, ?3, ?4)
-       ON CONFLICT(id) DO UPDATE SET name = ?2, district = ?3, updated_at = ?4`,
-    ).bind(lid, name, district, now).run();
+      `INSERT INTO locations (id, name, updated_at) VALUES (?1, ?2, ?3)
+       ON CONFLICT(id) DO UPDATE SET name = ?2, updated_at = ?3`,
+    ).bind(lid, name, now).run();
     const row = await env.DB.prepare(`${LIST_SQL} WHERE l.id = ?1 GROUP BY l.id`).bind(lid).first<LocationRow>();
     return json({ location: row });
   });

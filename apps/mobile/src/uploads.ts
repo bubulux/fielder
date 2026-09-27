@@ -1,33 +1,48 @@
 import { Directory, File, Paths } from "expo-file-system";
 import { api, ApiError } from "./api";
-import { syncLocations } from "./locationSync";
+import { syncLocations, syncProjects } from "./namedSync";
 import { store } from "./storage";
 import type { PendingUpload, ShotMetadata } from "./types";
 
-const dir = new Directory(Paths.document, "pending-shots");
+const dir = new Directory(Paths.document, "pending-photos");
 
 function ensureDir() {
   if (!dir.exists) dir.create({ intermediates: true });
 }
 
-/** Copy the temp capture into app storage and enqueue it; returns the queue entry. Throws if the photo cannot be stored. */
-export function enqueue(metadata: ShotMetadata, tempUri: string): PendingUpload {
+/**
+ * Copy the temp captures (photo id -> temp file URI) into app storage and enqueue the shot.
+ * Throws if a photo cannot be stored.
+ */
+export function enqueue(metadata: ShotMetadata, tempUris: Record<string, string>): PendingUpload {
   ensureDir();
-  const dest = new File(dir, `${metadata.id}.jpg`);
-  // copy() is async in this SDK; the caller deletes the temp file right after, so the copy must be complete here.
-  new File(tempUri).copySync(dest, { overwrite: true });
-  if (!dest.exists) throw new Error("could not store the photo for upload");
-  const entry: PendingUpload = { metadata, fileUri: dest.uri, attempts: 0 };
+  const files: Record<string, string> = {};
+  for (const p of metadata.photos) {
+    const dest = new File(dir, `${p.id}.jpg`);
+    // copy() is async in this SDK; the caller deletes the temp file right after, so the copy must be complete here.
+    new File(tempUris[p.id]).copySync(dest, { overwrite: true });
+    if (!dest.exists) throw new Error("could not store the photo for upload");
+    files[p.id] = dest.uri;
+  }
+  const entry: PendingUpload = { metadata, files, attempts: 0 };
   store.savePending([...store.loadPending(), entry]);
   return entry;
 }
 
-function remove(id: string) {
-  store.savePending(store.loadPending().filter((p) => p.metadata.id !== id));
-  try {
-    const f = new File(dir, `${id}.jpg`);
-    if (f.exists) f.delete();
-  } catch { /* best effort */ }
+function remove(entry: PendingUpload) {
+  store.savePending(store.loadPending().filter((p) => p.metadata.id !== entry.metadata.id));
+  for (const uri of Object.values(entry.files)) {
+    try { const f = new File(uri); if (f.exists) f.delete(); } catch { /* best effort */ }
+  }
+}
+
+/** Point queued shots at the server's id where a locally created location/project clashed by name. */
+function remapPending(field: "location_id" | "project_id", remap: Record<string, string>) {
+  if (Object.keys(remap).length === 0) return;
+  store.savePending(store.loadPending().map((p) => {
+    const to = p.metadata[field] ? remap[p.metadata[field]] : undefined;
+    return to ? { ...p, metadata: { ...p.metadata, [field]: to } } : p;
+  }));
 }
 
 export interface FlushResult { uploaded: number; remaining: number; lastError?: string }
@@ -40,27 +55,29 @@ export function flush(): Promise<FlushResult> {
   flushing = (async () => {
     let uploaded = 0;
     let lastError: string | undefined;
-    // Locations first, so a shot never arrives before the location it references.
-    const sync = await syncLocations(store.loadLocations());
-    if (sync) {
-      store.saveLocations(sync.locations);
-      if (Object.keys(sync.remap).length) {
-        store.savePending(store.loadPending().map((p) => {
-          const to = p.metadata.location_id ? sync.remap[p.metadata.location_id] : undefined;
-          return to ? { ...p, metadata: { ...p.metadata, location_id: to } } : p;
-        }));
-      }
+    // Projects and locations first, so a shot never arrives before what it references.
+    const projects = await syncProjects(store.loadProjects());
+    if (projects) {
+      store.saveProjects(projects.items);
+      remapPending("project_id", projects.remap);
+      const active = store.loadActiveProjectId();
+      if (active && projects.remap[active]) store.saveActiveProjectId(projects.remap[active]);
+    }
+    const locations = await syncLocations(store.loadLocations());
+    if (locations) {
+      store.saveLocations(locations.items);
+      remapPending("location_id", locations.remap);
     }
     for (const entry of store.loadPending()) {
-      if (!new File(entry.fileUri).exists) {
-        // The photo is gone (e.g. queued by a build with the copy race); nothing can ever be uploaded for it.
-        remove(entry.metadata.id);
-        lastError = "a queued shot lost its photo and was dropped";
+      if (entry.metadata.photos.some((p) => !entry.files[p.id] || !new File(entry.files[p.id]).exists)) {
+        // A photo is gone; the server would reject the shot forever.
+        remove(entry);
+        lastError = "a queued shot lost a photo and was dropped";
         continue;
       }
       try {
-        await api.uploadShot(entry.metadata, entry.fileUri);
-        remove(entry.metadata.id);
+        await api.uploadShot(entry.metadata, entry.files);
+        remove(entry);
         uploaded++;
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
@@ -70,7 +87,7 @@ export function flush(): Promise<FlushResult> {
         const q = store.loadPending();
         const i = q.findIndex((p) => p.metadata.id === entry.metadata.id);
         if (i >= 0) {
-          if (permanent && q[i].attempts >= 2) { remove(entry.metadata.id); continue; }
+          if (permanent && q[i].attempts >= 2) { remove(q[i]); continue; }
           q[i] = { ...q[i], attempts: q[i].attempts + 1, lastError: msg };
           store.savePending(q);
         }

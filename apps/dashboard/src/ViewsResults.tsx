@@ -1,6 +1,6 @@
 import { useState } from "preact/hooks";
 import type { Shot } from "./api";
-import { placeLabel, rigLabel, shotTitle, when } from "./format";
+import { cover, placeLabel, rigLabel, shotTitle, when } from "./format";
 import { Framed, type MaskMode } from "./Framed";
 import { MapView } from "./MapView";
 import { Badge } from "./ShotDetail";
@@ -22,11 +22,11 @@ export function FilterBuilderResults({ shots, total, mask, onOpen }: { shots: Sh
         <div class="gallery results-grid">
           {shots.map((s) => (
             <article class="card" key={s.id} onClick={() => onOpen(s, shots)}>
-              <Framed shot={s} mode={mask} />
+              <Framed photo={cover(s)} mode={mask} />
               <div class="body">
                 <div class="title">{shotTitle(s)}</div>
-                <div class="sub">{placeLabel(s) || rigLabel(s)}</div>
-                <div class="sub row"><span>{when(s.timestamp)}</span><Badge shot={s} /></div>
+                <div class="sub">{placeLabel(s) || rigLabel(cover(s))}</div>
+                <div class="sub row"><span>{when(s.captured_at)}</span><Badge shot={s} /></div>
               </div>
             </article>
           ))}

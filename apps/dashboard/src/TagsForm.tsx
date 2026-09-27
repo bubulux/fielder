@@ -1,6 +1,6 @@
 import { useState } from "preact/hooks";
-import { BERLIN_DISTRICTS, EXTRA_COLLECTIONS, INT_EXT, label, LIGHT, WEATHER } from "@fielder/vocab";
-import { ApiError, putLocation, type Location, type ShotTags } from "./api";
+import { INT_EXT, label, LIGHT, WEATHER } from "@fielder/vocab";
+import { existingIdOf, putLocation, type Location, type ShotTags } from "./api";
 
 interface Props {
   initial?: Partial<ShotTags>;
@@ -13,21 +13,21 @@ interface Props {
 
 const NEW = "__new__";
 
-/** Scouting tags: name, location (existing or new + district), INT/EXT, light, weather. All required. */
+/** Scouting tags: name, location (existing or new), INT/EXT, light phases + artificial, weather. All optional. */
 export function TagsForm({ initial, locations, onLocations, submitLabel, onSubmit, onCancel }: Props) {
   const [name, setName] = useState(initial?.name ?? "");
-  const [light, setLight] = useState(initial?.light ?? "");
+  const [light, setLight] = useState<string[]>(initial?.light ?? []);
+  const [artificial, setArtificial] = useState(initial?.artificial ?? false);
   const [weather, setWeather] = useState(initial?.weather ?? "");
   const [intExt, setIntExt] = useState(initial?.int_ext ?? "");
   const [locationId, setLocationId] = useState(initial?.location_id ?? "");
   const [newName, setNewName] = useState("");
-  const [newDistrict, setNewDistrict] = useState("");
-  const [extra, setExtra] = useState<Record<string, string>>(initial?.extra ?? {});
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Everything is optional; a new location needs a name and a district.
-  const valid = locationId !== NEW || (!!newName.trim() && !!newDistrict);
+  // Everything is optional; a new location needs a name.
+  const valid = locationId !== NEW || !!newName.trim();
+  const toggleLight = (v: string) => setLight((cur) => (cur.includes(v) ? cur.filter((x) => x !== v) : [...cur, v]));
 
   async function submit(e: Event) {
     e.preventDefault();
@@ -36,18 +36,17 @@ export function TagsForm({ initial, locations, onLocations, submitLabel, onSubmi
     try {
       let id = locationId;
       if (id === NEW) {
-        const draft = { id: crypto.randomUUID(), name: newName.trim(), district: newDistrict };
         try {
-          const created = await putLocation(draft);
+          const created = await putLocation({ id: crypto.randomUUID(), name: newName.trim() });
           onLocations([...locations, created].sort((a, b) => a.name.localeCompare(b.name)));
           id = created.id;
         } catch (err) {
-          const existing = err instanceof ApiError && err.status === 409 ? (err.body as { existing_id?: string } | null)?.existing_id : undefined;
+          const existing = existingIdOf(err);
           if (!existing) throw err;
           id = existing;
         }
       }
-      await onSubmit({ name: name.trim() || null, light: light || null, weather: weather || null, int_ext: intExt || null, location_id: id || null, extra });
+      await onSubmit({ name: name.trim() || null, light, artificial, weather: weather || null, int_ext: intExt || null, location_id: id || null, extra: initial?.extra ?? {} });
     } catch (err) { setError((err as Error).message); } finally { setBusy(false); }
   }
 
@@ -57,30 +56,15 @@ export function TagsForm({ initial, locations, onLocations, submitLabel, onSubmi
       <label>Location
         <select value={locationId} onChange={(e) => setLocationId((e.target as HTMLSelectElement).value)}>
           <option value="">— choose —</option>
-          {locations.map((l) => <option key={l.id} value={l.id}>{l.name} · {l.district}</option>)}
+          {locations.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
           <option value={NEW}>＋ New location…</option>
         </select>
       </label>
-      {locationId === NEW && (
-        <div class="row2">
-          <label>New location name<input value={newName} onInput={(e) => setNewName((e.target as HTMLInputElement).value)} /></label>
-          <label>District
-            <select value={newDistrict} onChange={(e) => setNewDistrict((e.target as HTMLSelectElement).value)}>
-              <option value="">— choose —</option>
-              {BERLIN_DISTRICTS.map((d) => <option key={d} value={d}>{d}</option>)}
-            </select>
-          </label>
-        </div>
-      )}
-      <div class="row3">
+      {locationId === NEW && <label>New location name<input value={newName} onInput={(e) => setNewName((e.target as HTMLInputElement).value)} /></label>}
+      <div class="row2">
         <label>Int/Ext
           <select value={intExt} onChange={(e) => setIntExt((e.target as HTMLSelectElement).value)}>
             <option value="">—</option>{INT_EXT.map((v) => <option key={v} value={v}>{label(v)}</option>)}
-          </select>
-        </label>
-        <label>Light
-          <select value={light} onChange={(e) => setLight((e.target as HTMLSelectElement).value)}>
-            <option value="">—</option>{LIGHT.map((v) => <option key={v} value={v}>{label(v)}</option>)}
           </select>
         </label>
         <label>Weather
@@ -89,18 +73,13 @@ export function TagsForm({ initial, locations, onLocations, submitLabel, onSubmi
           </select>
         </label>
       </div>
-      {EXTRA_COLLECTIONS.map((c) => {
-        const groups = new Map<string, string[]>();
-        for (const v of c.values) { const g = v.split(" - ")[0]; groups.set(g, [...(groups.get(g) ?? []), v]); }
-        return (
-          <label key={c.id}>{c.name} (optional)
-            <select value={extra[c.id] ?? ""} onChange={(e) => { const v = (e.target as HTMLSelectElement).value; const { [c.id]: _, ...rest } = extra; setExtra(v ? { ...rest, [c.id]: v } : rest); }}>
-              <option value="">—</option>
-              {[...groups.entries()].map(([g, vs]) => <optgroup key={g} label={g}>{vs.map((v) => <option key={v} value={v}>{v}</option>)}</optgroup>)}
-            </select>
-          </label>
-        );
-      })}
+      <div class="field">
+        <span class="field-label">Light (every phase the shot works in)</span>
+        <div class="chips">
+          {LIGHT.map((v) => <button type="button" key={v} class={`chip ${light.includes(v) ? "active" : ""}`} onClick={() => toggleLight(v)}>{label(v)}</button>)}
+          <button type="button" class={`chip ${artificial ? "active" : ""}`} onClick={() => setArtificial(!artificial)}>Artificial</button>
+        </div>
+      </div>
       {error && <div class="error">{error}</div>}
       <div class="actions">
         <button type="button" class="btn" onClick={onCancel}>Cancel</button>

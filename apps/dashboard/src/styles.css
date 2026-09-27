@@ -145,3 +145,18 @@ main { min-height: 0; position: relative; }
 .list td.sel { width: 36px; cursor: pointer; }
 .list input[type="checkbox"] { width: 16px; height: 16px; accent-color: var(--accent); cursor: pointer; }
 .list tbody tr.selected { background: rgba(255, 179, 0, .08); }
+
+/* Projects */
+.project-switch { background: var(--bg); color: var(--text); border: 1px solid var(--border); border-radius: 999px; padding: 6px 12px; font: inherit; font-weight: 600; max-width: 260px; }
+.inline-select { background: var(--bg); color: var(--text); border: 1px solid var(--border); border-radius: 6px; padding: 2px 6px; font: inherit; }
+.rigs tbody tr.selected { background: rgba(255, 179, 0, .08); }
+.rig-form textarea { background: var(--bg); color: var(--text); border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; font: inherit; font-size: 14px; resize: vertical; }
+.gate-intro { max-width: 720px; margin-bottom: 16px; }
+.gate-intro h2 { margin: 0 0 6px; font-size: 20px; }
+
+/* Shots with several photos (sequences) */
+.card-img { position: relative; }
+.count-badge { position: absolute; top: 8px; right: 8px; background: rgba(0,0,0,.7); color: #fff; font-size: 12px; font-weight: 600; padding: 2px 8px; border-radius: 999px; pointer-events: none; }
+
+.field { display: flex; flex-direction: column; gap: 6px; }
+.field-label { font-size: 12px; color: var(--dim); }

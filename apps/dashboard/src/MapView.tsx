@@ -1,8 +1,8 @@
 import { useEffect, useRef } from "preact/hooks";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
-import type { Shot } from "./api";
-import { frameLayout, frameOf, imageAspect, placeLabel, rigLabel, shotTitle, stateColor, when } from "./format";
+import type { Photo, Shot } from "./api";
+import { cover, frameLayout, frameOf, imageAspect, placeLabel, rigLabel, shotTitle, stateColor, when } from "./format";
 import type { MaskMode } from "./Framed";
 
 interface Props { shots: Shot[]; onOpen: (shot: Shot) => void; focus?: Shot | null; mask: MaskMode }
@@ -30,19 +30,20 @@ export function MapView({ shots, onOpen, focus, mask }: Props) {
     g.clearLayers();
     const bounds: L.LatLngTuple[] = [];
     for (const s of shots) {
-      bounds.push([s.lat, s.lon]);
+      const p = cover(s);
+      bounds.push([p.lat, p.lon]);
       const c = stateColor(s);
-      const marker = L.circleMarker([s.lat, s.lon], { radius: 8, color: c, weight: 2, fillColor: c, fillOpacity: 0.6 });
+      const marker = L.circleMarker([p.lat, p.lon], { radius: 8, color: c, weight: 2, fillColor: c, fillOpacity: 0.6 });
       const html = document.createElement("div");
       html.className = "popup";
       html.innerHTML = `<div class="framed popup-img"></div><div class="title"></div><div class="sub"></div><div class="sub"></div><a href="#">Open details</a>`;
       const box = html.querySelector(".framed") as HTMLElement;
-      const p = popupFrameHtml(s, mask);
-      box.innerHTML = p.html;
-      box.style.aspectRatio = String(p.aspect ?? imageAspect(s));
+      const popup = popupFrameHtml(p, mask);
+      box.innerHTML = popup.html;
+      box.style.aspectRatio = String(popup.aspect ?? imageAspect(p));
       html.querySelector(".title")!.textContent = shotTitle(s);
-      html.querySelectorAll(".sub")[0]!.textContent = `${placeLabel(s) || rigLabel(s)} · ${s.state}`;
-      html.querySelectorAll(".sub")[1]!.textContent = when(s.timestamp);
+      html.querySelectorAll(".sub")[0]!.textContent = `${placeLabel(s) || rigLabel(p)} · ${s.state}`;
+      html.querySelectorAll(".sub")[1]!.textContent = when(s.captured_at);
       html.querySelector("a")!.addEventListener("click", (e) => { e.preventDefault(); onOpen(s); });
       marker.bindPopup(html, { maxWidth: 280 });
       marker.addTo(g);
@@ -52,13 +53,13 @@ export function MapView({ shots, onOpen, focus, mask }: Props) {
   }, [shots, mask]);
 
   useEffect(() => {
-    if (focus && map.current) map.current.setView([focus.lat, focus.lon], 16);
+    if (focus && map.current) map.current.setView([cover(focus).lat, cover(focus).lon], 16);
   }, [focus]);
 
   return <div ref={el} class="map" />;
 }
 
-function popupFrameHtml(s: Shot, mask: MaskMode): { html: string; aspect?: number } {
+function popupFrameHtml(s: Photo, mask: MaskMode): { html: string; aspect?: number } {
   const f = frameOf(s);
   const img = (style = "") => `<img src="${s.image_url}" alt="" loading="lazy" ${style} />`;
   if (!f || mask === "off") return { html: img() };

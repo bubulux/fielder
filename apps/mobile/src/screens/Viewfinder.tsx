@@ -13,7 +13,7 @@ import { API_URL, isConfigured } from "../config";
 import { computeOverlay, formatDeg, previewBox, type Box } from "../framing";
 import { PHONE } from "../phone";
 import { store } from "../storage";
-import { lensRangeOf, type LocationEntry, type Preset, type Settings, type ShotMetadata, type ShotTags } from "../types";
+import { lensRangeOf, type LocationEntry, type PhotoMetadata, type Preset, type ProjectEntry, type Settings, type ShotMetadata, type ShotTags } from "../types";
 import { enqueue, flush } from "../uploads";
 import { syncPresets } from "../presetSync";
 import { LensCarousel } from "../components/LensCarousel";
@@ -39,6 +39,9 @@ interface Props {
   onSettings: (s: Settings) => void;
   /** Whether this tab is on screen; the camera is released otherwise. */
   active: boolean;
+  /** Every capture goes into this project; null blocks the shutter (App asks for one first). */
+  project: ProjectEntry | null;
+  onSwitchProject: () => void;
   /** Uploaded shots (for per-location counters in the review form). */
   shots: Shot[] | null;
   locations: LocationEntry[];
@@ -46,7 +49,7 @@ interface Props {
   onSignIn: () => void;
 }
 
-export function Viewfinder({ settings, onSettings, active: tabActive, shots, locations, onLocations, onSignIn }: Props) {
+export function Viewfinder({ settings, onSettings, active: tabActive, project, onSwitchProject, shots, locations, onLocations, onSignIn }: Props) {
   const [size, setSize] = useState<Box>({ width: 0, height: 0 });
   const onLayout = (e: LayoutChangeEvent) => {
     const { width, height } = e.nativeEvent.layout;
@@ -71,8 +74,8 @@ export function Viewfinder({ settings, onSettings, active: tabActive, shots, loc
   const [toast, setToast] = useState<string | null>(null);
   const [pendingCount, setPendingCount] = useState(() => store.loadPending().length);
   const setLocations = (l: LocationEntry[]) => onLocations(l);
-  /** Captured photo waiting in the review form (base metadata without the tags). */
-  const [draft, setDraft] = useState<(Draft & { base: Omit<ShotMetadata, keyof ShotTags> }) | null>(null);
+  /** Captured photo waiting in the review form, with its metadata (the shot's tags come from the form). */
+  const [draft, setDraft] = useState<(Draft & { photo: PhotoMetadata }) | null>(null);
 
   const active = presets.find((p) => p.id === activeId) ?? presets[0] ?? null;
   const lensRange = lensRangeOf(active);
@@ -138,7 +141,7 @@ export function Viewfinder({ settings, onSettings, active: tabActive, shots, loc
   }
 
   async function capture() {
-    if (!camera.current || !cameraReady || busy || !active || !overlay) return;
+    if (!camera.current || !cameraReady || busy || !active || !overlay || !project) return;
     setBusy("capture");
     try {
       const [pos, pic] = await Promise.all([
@@ -157,48 +160,49 @@ export function Viewfinder({ settings, onSettings, active: tabActive, shots, loc
 
       const exif = (pic.exif ?? {}) as Record<string, unknown>;
       const frame = { width: round4(overlay.fractions.width), height: round4(overlay.fractions.height) };
-      const base: Omit<ShotMetadata, keyof ShotTags> = {
+      const photo: PhotoMetadata = {
         id: Crypto.randomUUID(),
+        ordinal: 0,
         timestamp: new Date(pos.timestamp || Date.now()).toISOString(),
         lat: pos.coords.latitude,
         lon: pos.coords.longitude,
+        gps_accuracy_m: pos.coords.accuracy ?? null,
         lens_mm: lensMm,
         preset_id: active.synced ? active.id : null,
-        extra_metadata: {
-          schema: 1,
-          framing: {
-            preset_name: active.name,
-            camera_id: active.cameraId,
-            format_id: active.formatId,
-            sensor_width_mm: active.sensorWidthMm,
-            sensor_height_mm: active.sensorHeightMm,
-            speedbooster_factor: active.speedboosterFactor,
-            lens_mm: lensMm,
-            rig_orientation: settings.rigOrientation,
-            effective_focal_mm: round(overlay.framing.effectiveFocalLengthMm),
-            full_frame_equivalent_mm: round(overlay.framing.fullFrameEquivalentMm),
-            hfov_deg: round(overlay.framing.fov.horizontal),
-            vfov_deg: round(overlay.framing.fov.vertical),
-            // Rig frame relative to the uploaded photo, centred. Lets the dashboard re-apply the mask.
-            frame: { width_fraction: frame.width, height_fraction: frame.height },
-          },
-          phone: {
-            model: PHONE.model,
-            equivalent_focal_mm: settings.phoneEquivalentFocalMm,
-            exif_focal_length: exif.FocalLength ?? null,
-            exif_focal_length_35mm: exif.FocalLengthIn35mmFilm ?? null,
-            exif_model: exif.Model ?? null,
-          },
-          gps: { accuracy_m: pos.coords.accuracy ?? null, altitude_m: pos.coords.altitude ?? null, heading_deg: pos.coords.heading ?? null },
-          image: { width: small.width, height: small.height },
+        width: small.width,
+        height: small.height,
+        framing: {
+          preset_name: active.name,
+          camera_id: active.cameraId,
+          format_id: active.formatId,
+          sensor_width_mm: active.sensorWidthMm,
+          sensor_height_mm: active.sensorHeightMm,
+          speedbooster_factor: active.speedboosterFactor,
+          lens_mm: lensMm,
+          rig_orientation: settings.rigOrientation,
+          effective_focal_mm: round(overlay.framing.effectiveFocalLengthMm),
+          full_frame_equivalent_mm: round(overlay.framing.fullFrameEquivalentMm),
+          hfov_deg: round(overlay.framing.fov.horizontal),
+          vfov_deg: round(overlay.framing.fov.vertical),
+          // Rig frame relative to the uploaded photo, centred. Lets the dashboard re-apply the mask.
+          frame: { width_fraction: frame.width, height_fraction: frame.height },
+        },
+        device: {
+          phone_model: PHONE.model,
+          phone_equivalent_focal_mm: settings.phoneEquivalentFocalMm,
+          exif_focal_length: exif.FocalLength ?? null,
+          exif_focal_length_35mm: exif.FocalLengthIn35mmFilm ?? null,
+          exif_model: exif.Model ?? null,
+          gps_altitude_m: pos.coords.altitude ?? null,
+          gps_heading_deg: pos.coords.heading ?? null,
         },
       };
       if (!active.synced) {
         // Preset unknown to the server: try once more now so the FK can be set on the row later.
-        try { await api.putPreset(active); setPresets((c) => c.map((x) => (x.id === active.id ? { ...x, synced: true } : x))); } catch { /* snapshot in extra_metadata still preserves it */ }
+        try { await api.putPreset(active); setPresets((c) => c.map((x) => (x.id === active.id ? { ...x, synced: true } : x))); } catch { /* the framing snapshot on the photo still preserves it */ }
       }
       // Hand over to the review form; nothing is queued until the user taps Upload.
-      setDraft({ uri: small.uri, width: small.width, height: small.height, frame, base });
+      setDraft({ uri: small.uri, width: small.width, height: small.height, frame, photo });
     } catch (err) {
       Alert.alert("Capture failed", err instanceof Error ? err.message : String(err));
     } finally {
@@ -207,11 +211,11 @@ export function Viewfinder({ settings, onSettings, active: tabActive, shots, loc
   }
 
   async function uploadDraft(tags: ShotTags, newLocation: LocationEntry | null) {
-    if (!draft) return;
+    if (!draft || !project) return;
     if (newLocation) { setLocations([...locations, newLocation]); store.saveLocations([...locations, newLocation]); }
-    const metadata: ShotMetadata = { ...draft.base, ...tags };
+    const metadata: ShotMetadata = { id: Crypto.randomUUID(), project_id: project.id, ...tags, photos: [draft.photo] };
     try {
-      enqueue(metadata, draft.uri);
+      enqueue(metadata, { [draft.photo.id]: draft.uri });
     } catch (err) {
       Alert.alert("Could not save the shot", err instanceof Error ? err.message : String(err));
       return; // keep the review form open so nothing is lost
@@ -286,6 +290,7 @@ export function Viewfinder({ settings, onSettings, active: tabActive, shots, loc
           {(settings.hudEnabled || !active) && <View style={s.hud} pointerEvents="none">
             {active && overlay ? (
               <>
+                <Text style={s.hudProject} numberOfLines={1}>{project?.name ?? "No project"}</Text>
                 <Text style={s.hudMain}>{active.name} · {lensMm} mm{active.speedboosterFactor !== 1 ? ` ×${active.speedboosterFactor}` : ""}</Text>
                 <Text style={s.hudSub}>
                   {round(overlay.framing.effectiveFocalLengthMm)} mm eff · {round(overlay.framing.fullFrameEquivalentMm)} mm FF-eq · {formatDeg(overlay.framing.fov.horizontal)} × {formatDeg(overlay.framing.fov.vertical)}
@@ -317,7 +322,7 @@ export function Viewfinder({ settings, onSettings, active: tabActive, shots, loc
         <Ctl label="Rig" value={active ? "●" : "＋"} onPress={() => setSheet("rig")} />
         <Ctl label="Human" value={settings.humanViewEnabled ? `${settings.humanViewFocalMm}` : "off"} onPress={cycleHuman} accent={settings.humanViewEnabled} />
         <Ctl label="Fit" value={settings.fitToFrame ? "ON" : "off"} onPress={() => setSettings((x) => ({ ...x, fitToFrame: !x.fitToFrame }))} accent={settings.fitToFrame} />
-        <Pressable onPress={capture} disabled={!!busy || !active || !cameraReady} style={[s.shutter, (!!busy || !active || !cameraReady) && { opacity: 0.4 }]}>
+        <Pressable onPress={capture} disabled={!!busy || !active || !cameraReady || !project} style={[s.shutter, (!!busy || !active || !cameraReady || !project) && { opacity: 0.4 }]}>
           {busy === "capture" ? <ActivityIndicator color="#000" /> : <View style={s.shutterInner} />}
         </Pressable>
         <Ctl label="Uploads" value={pendingCount ? `${pendingCount}` : "✓"} onPress={() => void retryUploads()} />
@@ -329,6 +334,7 @@ export function Viewfinder({ settings, onSettings, active: tabActive, shots, loc
         onChange={(p, id) => { setPresets(p); setActiveId(id); }} />
       <LensSheet visible={sheet === "lens"} onClose={() => setSheet(null)} lensMm={lensMm} onChange={setLensMm} range={lensRange} />
       <SettingsSheet visible={sheet === "settings"} onClose={() => setSheet(null)} settings={settings} onChange={setSettings}
+        projectName={project?.name ?? null} onSwitchProject={() => { setSheet(null); onSwitchProject(); }}
         pendingCount={pendingCount} onRetryUploads={() => void retryUploads()}
         buildInfo={`API: ${isConfigured ? API_URL.replace(/^https?:\/\//, "") : "not configured"}`}
         authEmail={authEmail} onSignIn={() => { setSheet(null); onSignIn(); }} onSignOut={() => setToken(null)} />
@@ -356,6 +362,7 @@ const s = StyleSheet.create({
   primaryText: { color: "#000", fontWeight: "600" },
   previewArea: { alignItems: "center", justifyContent: "center" },
   hud: { position: "absolute", top: 10, left: 10, right: 10, backgroundColor: "rgba(0,0,0,0.45)", borderRadius: 8, padding: 8 },
+  hudProject: { color: colors.accent, fontSize: 11, fontWeight: "700", textTransform: "uppercase", letterSpacing: 0.6, marginBottom: 2 },
   hudMain: { color: "#fff", fontSize: 14, fontWeight: "600" },
   hudSub: { color: "#ddd", fontSize: 12, marginTop: 2, fontVariant: ["tabular-nums"] },
   hudWarn: { color: colors.accent, fontSize: 12, marginTop: 4 },

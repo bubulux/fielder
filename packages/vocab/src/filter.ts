@@ -3,9 +3,10 @@
  * (validation of saved views). A filter is a group of rules joined by all/any;
  * groups nest so "A and (B or C)" is expressible.
  */
-import { BERLIN_DISTRICTS, EXTRA_COLLECTIONS, INT_EXT, LIGHT, SHOT_STATES, WEATHER } from "./vocab.ts";
+import { INT_EXT, LIGHT, SHOT_STATES, WEATHER, type Extra } from "./vocab.ts";
 
-export type FieldKind = "enum" | "ref" | "text" | "number" | "date";
+/** "set" = multi-valued enum (the shot holds a list, e.g. light phases). */
+export type FieldKind = "enum" | "set" | "ref" | "text" | "number" | "date";
 export type FilterOp =
   | "is" | "is_not" | "in" | "not_in"
   | "contains" | "not_contains"
@@ -24,26 +25,28 @@ export interface FilterField {
   /** enum: allowed values. */
   options?: readonly string[];
   /** ref: which server list supplies the options. */
-  ref?: "location" | "preset";
+  ref?: "location" | "preset" | "project";
 }
 
 export const FILTER_FIELDS: readonly FilterField[] = [
   { id: "state", label: "State", kind: "enum", options: SHOT_STATES },
+  { id: "project_id", label: "Project", kind: "ref", ref: "project" },
   { id: "name", label: "Name", kind: "text" },
   { id: "location_id", label: "Location", kind: "ref", ref: "location" },
-  { id: "district", label: "District", kind: "enum", options: BERLIN_DISTRICTS },
   { id: "int_ext", label: "Int/Ext", kind: "enum", options: INT_EXT },
-  { id: "light", label: "Light", kind: "enum", options: LIGHT },
+  { id: "light", label: "Light", kind: "set", options: LIGHT },
+  { id: "artificial", label: "Artificial light", kind: "enum", options: ["yes", "no"] },
   { id: "weather", label: "Weather", kind: "enum", options: WEATHER },
-  ...EXTRA_COLLECTIONS.map((c): FilterField => ({ id: `extra.${c.id}`, label: c.name, kind: "enum", options: c.values })),
   { id: "preset_id", label: "Rig", kind: "ref", ref: "preset" },
   { id: "lens_mm", label: "Lens (mm)", kind: "number" },
   { id: "ff_eq_mm", label: "FF-equivalent (mm)", kind: "number" },
+  { id: "photo_count", label: "Photos in shot", kind: "number" },
   { id: "timestamp", label: "Date", kind: "date" },
 ];
 
 export const OPS_BY_KIND: Record<FieldKind, readonly FilterOp[]> = {
   enum: ["is", "is_not", "in", "not_in", "empty", "not_empty"],
+  set: ["in", "not_in", "empty", "not_empty"],
   ref: ["is", "is_not", "in", "not_in", "empty", "not_empty"],
   text: ["contains", "not_contains", "is", "empty", "not_empty"],
   number: ["eq", "lt", "gt", "between", "empty", "not_empty"],
@@ -63,18 +66,21 @@ export const filterField = (id: string): FilterField | undefined => FILTER_FIELD
 /** The subset of a shot the evaluator needs (both clients map their Shot type to this). */
 export interface FilterableShot {
   state: string;
+  project_id: string;
   name: string | null;
   location_id: string | null;
-  district: string | null;
   int_ext: string | null;
-  light: string | null;
+  light: readonly string[];
+  artificial: "yes" | "no";
   weather: string | null;
+  /** Rig and lens of the shot's first photo. */
   preset_id: string | null;
-  lens_mm: number;
+  lens_mm: number | null;
   ff_eq_mm: number | null;
+  photo_count: number;
   /** ISO timestamp. */
   timestamp: string;
-  extra: Record<string, string> | null;
+  extra: Extra | null;
 }
 
 function fieldValue(s: FilterableShot, id: string): unknown {
@@ -82,7 +88,7 @@ function fieldValue(s: FilterableShot, id: string): unknown {
   return (s as unknown as Record<string, unknown>)[id] ?? null;
 }
 
-const isBlank = (v: unknown) => v === null || v === undefined || v === "";
+const isBlank = (v: unknown) => v === null || v === undefined || v === "" || (Array.isArray(v) && v.length === 0);
 
 export function evaluateRule(r: FilterRule, s: FilterableShot): boolean {
   const f = filterField(r.field);
@@ -91,6 +97,14 @@ export function evaluateRule(r: FilterRule, s: FilterableShot): boolean {
   if (r.op === "empty") return isBlank(v);
   if (r.op === "not_empty") return !isBlank(v);
   switch (f.kind) {
+    case "set": {
+      const have = Array.isArray(v) ? v.map(String) : [];
+      const list = Array.isArray(r.value) ? r.value.map(String) : [];
+      const any = list.some((x) => have.includes(x));
+      if (r.op === "in") return any;
+      if (r.op === "not_in") return !any;
+      return true;
+    }
     case "enum":
     case "ref": {
       const sv = v == null ? "" : String(v);

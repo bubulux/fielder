@@ -9,7 +9,7 @@ Single user. Everything runs on Cloudflare; the phone app is a sideloaded Androi
 | Path | What |
 | --- | --- |
 | `packages/fov-math` | Pure TypeScript: sensor/speedbooster/lens presets, FOV, crop factor, overlay geometry. Tested with `node --test`. |
-| `apps/worker` | Cloudflare Worker: JSON API (`/api/presets`, `/api/shots`), R2 image proxy, and the dashboard as static assets. Verifies the Cloudflare Access JWT on every request. |
+| `apps/worker` | Cloudflare Worker: JSON API (`/api/projects`, `/api/shots`, …), R2 image proxy, and the dashboard as static assets. Verifies the Cloudflare Access JWT on every request. |
 | `apps/dashboard` | Vite + Preact + Leaflet SPA. Built into `dist/` and served by the Worker. |
 | `apps/mobile` | Expo SDK 57 app. Camera preview, overlay, capture, offline upload queue. |
 
@@ -107,18 +107,25 @@ ngrok session is still registered; wait 30 s or set `EXPO_TUNNEL_SUBDOMAIN` to a
 
 ## Data model
 
+`projects(id, name UNIQUE (case-insensitive), notes, created_at, updated_at)`
 `presets(id, name, camera_id, format_id, sensor_width_mm, sensor_height_mm, speedbooster_factor, lens_min_mm, lens_max_mm, created_at, updated_at)`
-`locations(id, name UNIQUE (case-insensitive), district, created_at, updated_at)`
-`shots(id, timestamp, lat, lon, preset_id, lens_mm, r2_object_key, extra_metadata JSON, name, light, weather, int_ext, location_id, state, created_at)`
+`locations(id, name UNIQUE (case-insensitive), created_at, updated_at)`
+`shots(id, project_id, location_id, name, int_ext, light JSON array, artificial, weather, state, extra JSON, captured_at, created_at, updated_at)`
+`photos(id, shot_id, ordinal, timestamp, lat, lon, gps_accuracy_m, preset_id, lens_mm, r2_object_key, width, height, framing JSON, device JSON, created_at)`
+`views(id, name, filter JSON, created_at, updated_at)`
 
-- `state` is `unreviewed` (default on upload) → `approved` or `archived` (Review tab on phone and web). Archived keeps the photo; delete removes it.
-- `name`, `light`, `weather`, `int_ext`, `location_id` are required on upload (the phone's capture form) and editable afterwards (`PATCH /api/shots/:id`). Vocabularies live in `packages/vocab` (shared by worker, app and dashboard); districts are the 12 Berlin boroughs and belong to the location.
-- `extra_metadata` is additive and free-form. The phone writes `framing` (full rig/lens/FOV snapshot at capture time incl. `frame` = rig frame relative to the photo), `phone`, `gps`, `image`.
+- A **shot** is the unit of scouting metadata and review; it owns one or more **photos** (one per normal capture, many for a sequence). Rig, lens, framing and GPS are per photo; the first photo is the shot's cover.
+- Every shot belongs to one **project**. Both clients ask which project to work on and remember it; the dashboard can also show all projects at once. Only empty projects can be deleted. Locations, rigs and views are shared by all projects.
+- `state` is `unreviewed` (default on upload) → `approved` or `archived` (Review tab on phone and web). Archived keeps the photos; delete removes them.
+- All tags are optional on upload and editable afterwards (`PATCH /api/shots/:id`). `light` is any subset of `dawn, day, dusk, night` (the phases the shot works in); `artificial` is a separate flag, independent of INT/EXT. Vocabularies live in `packages/vocab` (shared by worker, app and dashboard).
+- `extra` is a free-form JSON object for now; per-project field definitions will describe and validate it.
+- `framing` is the rig/lens/FOV snapshot at capture time incl. `frame` = rig frame relative to the photo. `device` holds the phone model, EXIF focal lengths and GPS extras.
+- The schema was reset on 2026-09-27 (`0001_baseline.sql`); prototype data from before was dropped.
 
 ## API
 
-`GET/PUT/DELETE /api/presets[/:id]`, `GET/PUT/DELETE /api/locations[/:id]` (PUT answers 409 + `existing_id` on a name clash),
-`GET /api/shots?state=&location_id=` (keyset-paginated), `POST /api/shots` (multipart `image` + `metadata` JSON), `PATCH /api/shots/:id` (tags and/or state), `DELETE /api/shots/:id`, `GET /api/shots/:id/image`, `GET /auth/mobile` (phone sign-in page), `GET /health`.
+`GET/PUT/DELETE /api/projects[/:id]`, `GET/PUT/DELETE /api/presets[/:id]`, `GET/PUT/DELETE /api/locations[/:id]` (project and location PUTs answer 409 + `existing_id` on a name clash),
+`GET /api/shots?project_id=&state=&location_id=` (keyset-paginated, photos included), `POST /api/shots` (multipart `metadata` JSON + one `photo.<id>` file per photo; idempotent, so a retry or a continued sequence only adds missing photos), `PATCH /api/shots/:id` (tags, state and/or project), `DELETE /api/shots/:id`, `GET /api/photos/:id/image`, `GET/PUT/DELETE /api/views[/:id]`, `GET /auth/mobile` (phone sign-in page), `GET /health`.
 
 ## Secrets and rotation
 

@@ -4,6 +4,8 @@ import { SafeAreaProvider, useSafeAreaInsets } from "react-native-safe-area-cont
 import * as ScreenOrientation from "expo-screen-orientation";
 import type { Shot } from "./src/api";
 import { colors } from "./src/components/ui";
+import { ProjectSheet } from "./src/components/ProjectSheet";
+import { flush } from "./src/uploads";
 import { isSignedIn, onAuthChange } from "./src/auth";
 import { isConfigured } from "./src/config";
 import { Gallery, useShots, type StateFilter } from "./src/screens/Gallery";
@@ -13,7 +15,7 @@ import { Review } from "./src/screens/Review";
 import { MapScreen } from "./src/screens/MapScreen";
 import { Viewfinder } from "./src/screens/Viewfinder";
 import { store } from "./src/storage";
-import type { LocationEntry, Settings } from "./src/types";
+import type { LocationEntry, ProjectEntry, Settings } from "./src/types";
 
 type Mode = "shoot" | "review" | "gallery" | "map" | "prep";
 const ICONS: Record<Mode, string> = { shoot: "◉", review: "☑", gallery: "▦", map: "⌖", prep: "▷" };
@@ -39,10 +41,30 @@ function App() {
   const [open, setOpen] = useState<Shot | null>(null);
   const [filter, setFilter] = useState<StateFilter>("all");
   const [locations, setLocations] = useState<LocationEntry[]>(() => store.loadLocations());
-  const shots = useShots();
+  const [projects, setProjects] = useState<ProjectEntry[]>(() => store.loadProjects());
+  // Chosen once and remembered across launches until changed in Setup.
+  const [projectId, setProjectId] = useState<string | null>(() => store.loadActiveProjectId());
+  const project = projects.find((p) => p.id === projectId) ?? null;
+  const [projectSheet, setProjectSheet] = useState(false);
+  const shots = useShots(project?.id ?? null);
   // Login sheet: on launch when there is no session, and again whenever a request finds the session gone.
   const [login, setLogin] = useState<boolean>(() => isConfigured && !isSignedIn());
-  useEffect(() => onAuthChange(() => { if (!isSignedIn()) setLogin(true); else void shots.load(); }), []);
+  // flush() syncs projects first and repoints queued shots (and the active id) when a name clashed on the server.
+  const refreshProjects = useCallback(async () => {
+    await flush();
+    setProjects(store.loadProjects());
+    setProjectId(store.loadActiveProjectId());
+  }, []);
+  useEffect(() => { if (isSignedIn()) void refreshProjects(); }, []);
+  useEffect(() => onAuthChange(() => { if (!isSignedIn()) setLogin(true); else { void refreshProjects(); void shots.load(); } }), [shots.load]);
+  useEffect(() => { store.saveActiveProjectId(projectId); }, [projectId]);
+  const pickProject = (id: string, created: ProjectEntry | null) => {
+    if (created) { const next = [...store.loadProjects(), created]; store.saveProjects(next); setProjects(next); }
+    store.saveActiveProjectId(id); // now, not in the effect: refreshProjects reads it back from the store
+    setProjectId(id);
+    setProjectSheet(false);
+    if (created && isSignedIn()) void refreshProjects();
+  };
   const unreviewed = (shots.shots ?? []).filter((s) => s.state === "unreviewed").length;
   const countAt = useCallback(
     (locationId: string) =>
@@ -84,7 +106,7 @@ function App() {
       <View style={{ flex: 1, paddingTop: portrait ? insets.top : 0, paddingLeft: portrait ? 0 : insets.left }}>
         {/* Viewfinder stays mounted so state and camera warm-up survive tab switches; it releases the camera when inactive. */}
         <View style={[{ flex: 1 }, mode !== "shoot" && { display: "none" }]}>
-          <Viewfinder settings={settings} onSettings={setSettings} active={mode === "shoot"} shots={shots.shots} locations={locations} onLocations={setLocations} onSignIn={() => setLogin(true)} />
+          <Viewfinder settings={settings} onSettings={setSettings} active={mode === "shoot"} project={project} onSwitchProject={() => setProjectSheet(true)} shots={shots.shots} locations={locations} onLocations={setLocations} onSignIn={() => setLogin(true)} />
         </View>
         {mode === "review" && <Review settings={settings} data={shots} onOpen={(s) => { setOpen(s); setMode("gallery"); }} />}
         {mode === "gallery" && <Gallery settings={settings} data={shots} onShowOnMap={(s) => { setFocus(s); setMode("map"); }} filter={filter} onFilter={setFilter}
@@ -94,6 +116,8 @@ function App() {
       </View>
       {tabs}
       <Login visible={login} onDone={() => setLogin(false)} onSkip={() => setLogin(false)} />
+      {/* Asked once (after sign-in) when no project is active; afterwards only when switching from Setup. */}
+      <ProjectSheet visible={!login && (projectSheet || !project)} projects={projects} activeId={project?.id ?? null} onPick={pickProject} onClose={project ? () => setProjectSheet(false) : null} />
     </View>
   );
 }

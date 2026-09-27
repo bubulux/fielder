@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, useWindowDimensions, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import type { Shot } from "../api";
+import { cover, type Shot } from "../api";
 import { FRAME_MODES, frameModeLabel, imageAspect, frameOf, ShotFrame, type FrameMode } from "../components/ShotFrame";
 import { Chip, ChipRow, colors, Sheet } from "../components/ui";
 import type { Settings } from "../types";
@@ -26,17 +26,17 @@ export function Prep({ settings, data }: Props) {
   const [info, setInfo] = useState(false);
   const { shots, error } = data;
 
-  // Locations that have at least one approved shot, from the shots themselves (name/district are joined in).
+  // Locations that have at least one approved shot, from the shots themselves (the name is joined in).
   const groups = useMemo(() => {
-    const m = new Map<string, { id: string; name: string; district: string; shots: Shot[] }>();
+    const m = new Map<string, { id: string; name: string; shots: Shot[] }>();
     for (const s of shots ?? []) {
       if (s.state !== "approved") continue;
       const id = s.location_id ?? "none";
-      const g = m.get(id) ?? { id, name: s.location_name ?? "No location", district: s.district ?? "", shots: [] };
+      const g = m.get(id) ?? { id, name: s.location_name ?? "No location", shots: [] };
       g.shots.push(s);
       m.set(id, g);
     }
-    for (const g of m.values()) g.shots.sort((a, b) => a.timestamp.localeCompare(b.timestamp));
+    for (const g of m.values()) g.shots.sort((a, b) => a.captured_at.localeCompare(b.captured_at));
     return [...m.values()].sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" }));
   }, [shots]);
   const group = groups.find((g) => g.id === locationId) ?? null;
@@ -59,7 +59,6 @@ export function Prep({ settings, data }: Props) {
             <Pressable onPress={() => setLocationId(item.id)} style={p.locRow}>
               <View style={{ flex: 1 }}>
                 <Text style={p.locName}>{item.name}</Text>
-                <Text style={p.locSub}>{item.district}</Text>
               </View>
               <Text style={p.locCount}>{item.shots.length} approved</Text>
             </Pressable>
@@ -75,8 +74,9 @@ export function Prep({ settings, data }: Props) {
   const barH = 44;
   const availW = portrait ? width - 24 : width - 2 * NAV - 24;
   const availH = portrait ? height - barH - NAV - 60 - insets.top : height - barH - 60;
-  const f = frameOf(shot);
-  const aspect = mode === "fit" && f && f.width <= 1 && f.height <= 1 ? imageAspect(shot) * (f.width / f.height) : imageAspect(shot);
+  const photo = cover(shot);
+  const f = frameOf(photo);
+  const aspect = mode === "fit" && f && f.width <= 1 && f.height <= 1 ? imageAspect(photo) * (f.width / f.height) : imageAspect(photo);
   const imgW = Math.max(100, Math.min(availW, availH * aspect));
 
   const navBtn = (dir: -1 | 1) => {
@@ -89,7 +89,7 @@ export function Prep({ settings, data }: Props) {
   };
   const image = (
     <View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}>
-      <ShotFrame shot={shot} width={imgW} settings={settings} mode={mode} />
+      <ShotFrame photo={photo} width={imgW} settings={settings} mode={mode} />
       <View style={{ marginTop: 8 }}>
         <ChipRow>{FRAME_MODES.map((m) => <Chip key={m} label={frameModeLabel(m)} selected={mode === m} onPress={() => setMode(m)} />)}</ChipRow>
       </View>
@@ -114,9 +114,9 @@ export function Prep({ settings, data }: Props) {
       <Sheet visible={info} title={shotTitle(shot)} onClose={() => setInfo(false)}>
         <Text style={p.infoLine}>{placeLabel(shot) || "no location"}</Text>
         <Text style={p.infoDim}>{tagsLabel(shot) || "no tags"}</Text>
-        <Text style={p.infoDim}>{rigLabel(shot)}</Text>
-        <Text style={p.infoDim}>{fmt(shot.timestamp)}</Text>
-        <Text style={p.infoDim}>{shot.lat.toFixed(5)}, {shot.lon.toFixed(5)}</Text>
+        <Text style={p.infoDim}>{rigLabel(photo)}</Text>
+        <Text style={p.infoDim}>{fmt(shot.captured_at)}</Text>
+        <Text style={p.infoDim}>{photo.lat.toFixed(5)}, {photo.lon.toFixed(5)}</Text>
       </Sheet>
     </View>
   );

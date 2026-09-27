@@ -25,7 +25,7 @@ interface Props {
 /** Consecutive shots usually share place and conditions: remember them, but never the name. */
 let lastTags: Partial<ShotTags> = {};
 
-/** Capture -> this form -> Upload or Discard. Every field is required. */
+/** Capture -> this form -> Upload or Discard. Every field is optional. */
 export function ShotReview({ draft, settings, locations, countAt, onUpload, onDiscard }: Props) {
   const { width, height } = useWindowDimensions();
   const portrait = height >= width;
@@ -50,7 +50,7 @@ export function ShotReview({ draft, settings, locations, countAt, onUpload, onDi
       submitLabel="Upload"
       cancelLabel="Discard"
       onCancel={onDiscard}
-      onSubmit={(tags, newLoc) => { lastTags = { light: tags.light, weather: tags.weather, int_ext: tags.int_ext, location_id: tags.location_id }; onUpload(tags, newLoc); }}
+      onSubmit={(tags, newLoc) => { lastTags = { light: tags.light, artificial: tags.artificial, weather: tags.weather, int_ext: tags.int_ext, location_id: tags.location_id }; onUpload(tags, newLoc); }}
     />
   );
 

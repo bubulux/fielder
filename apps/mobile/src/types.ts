@@ -1,3 +1,5 @@
+import type { Extra } from "@fielder/vocab";
+
 export interface Preset {
   id: string;
   name: string;
@@ -42,32 +44,58 @@ export interface Settings {
   hudEnabled: boolean;
 }
 
-/** Scouting tags entered in the review form after capture. Values are @fielder/vocab ids; null = not specified. */
+/** Scouting tags entered in the review form after capture. Values are @fielder/vocab ids; null / [] / false = not specified. */
 export interface ShotTags {
   name: string | null;
-  light: string | null;
+  /** Daylight phases the shot works in (subset of LIGHT). */
+  light: string[];
+  /** Lit artificially, independent of the daylight phases. */
+  artificial: boolean;
   weather: string | null;
   int_ext: string | null;
   location_id: string | null;
-  /** Optional named collections, e.g. { ubahn: "U1 - Kurfürstendamm" }; see EXTRA_COLLECTIONS in @fielder/vocab. */
-  extra: Record<string, string>;
+  extra: Extra;
 }
 
-export interface ShotMetadata extends ShotTags {
+/** One captured image. Rig/lens framing and GPS are per photo (a sequence can change lens). */
+export interface PhotoMetadata {
   id: string;
+  /** Position inside the shot, 0-based. */
+  ordinal: number;
   timestamp: string;
   lat: number;
   lon: number;
+  gps_accuracy_m: number | null;
   lens_mm: number;
   preset_id: string | null;
-  extra_metadata: Record<string, unknown>;
+  width: number;
+  height: number;
+  /** Rig/lens snapshot incl. `frame` fractions, so the dashboard can re-apply the mask. */
+  framing: Record<string, unknown>;
+  /** Phone model, EXIF focal lengths, GPS extras. */
+  device: Record<string, unknown>;
 }
 
-/** A named place; lives on the server, cached locally so the form works offline. */
+/** What POST /api/shots receives: the shot's tags plus its photos. */
+export interface ShotMetadata extends ShotTags {
+  id: string;
+  project_id: string;
+  photos: PhotoMetadata[];
+}
+
+/** A named place; lives on the server, cached locally so the form works offline. Shared by all projects. */
 export interface LocationEntry {
   id: string;
   name: string;
-  district: string;
+  createdAt: string;
+  /** false until the Worker has acknowledged the PUT. */
+  synced: boolean;
+}
+
+/** Every shot belongs to one; the active one is chosen once and remembered. Cached locally like locations. */
+export interface ProjectEntry {
+  id: string;
+  name: string;
   createdAt: string;
   /** false until the Worker has acknowledged the PUT. */
   synced: boolean;
@@ -75,8 +103,8 @@ export interface LocationEntry {
 
 export interface PendingUpload {
   metadata: ShotMetadata;
-  /** Persistent local copy of the low-res JPEG. */
-  fileUri: string;
+  /** Persistent local copy of each photo's low-res JPEG, by photo id. */
+  files: Record<string, string>;
   attempts: number;
   lastError?: string;
 }

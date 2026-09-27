@@ -1,26 +1,27 @@
-import { extraLabel, label, STATE_COLORS, type FilterableShot } from "@fielder/vocab";
-import type { Shot } from "./api";
+import { extraLabel, label, lightLabel, STATE_COLORS, type FilterableShot } from "@fielder/vocab";
+import type { Photo, Shot } from "./api";
 
-export function framingOf(s: Shot): Record<string, unknown> | null {
-  const f = s.extra_metadata?.framing;
-  return f && typeof f === "object" ? (f as Record<string, unknown>) : null;
-}
+/** The photo that stands for the shot in lists, maps and filters: the first one. */
+export const cover = (s: Shot): Photo => s.photos[0];
 
-export function rigLabel(s: Shot): string {
-  const f = framingOf(s);
-  const name = s.preset_name ?? (f?.preset_name as string | undefined) ?? "unknown rig";
+export function rigLabel(p: Photo): string {
+  const f = p.framing;
+  const name = p.preset_name ?? (f?.preset_name as string | undefined) ?? "unknown rig";
   const sb = f?.speedbooster_factor as number | undefined;
-  return `${name} · ${s.lens_mm} mm${sb && sb !== 1 ? ` ×${sb}` : ""}`;
+  return `${name} · ${p.lens_mm} mm${sb && sb !== 1 ? ` ×${sb}` : ""}`;
 }
 
 /** "Name" or, for shots without tags, the rig label. */
-export const shotTitle = (s: Shot): string => s.name?.trim() || rigLabel(s);
-export const placeLabel = (s: Shot): string => [s.location_name, s.district].filter(Boolean).join(" · ");
-export const tagsLabel = (s: Shot): string => [...[s.int_ext, s.light, s.weather].filter(Boolean).map((v) => label(v)), extraLabel(s.extra)].filter(Boolean).join(" · ");
+export const shotTitle = (s: Shot): string => s.name?.trim() || rigLabel(cover(s));
+export const placeLabel = (s: Shot): string => s.location_name ?? "";
+export const tagsLabel = (s: Shot): string =>
+  [label(s.int_ext), lightLabel(s.light, s.artificial), label(s.weather), extraLabel(s.extra)].filter(Boolean).join(" · ");
 export const stateColor = (s: Shot): string => STATE_COLORS[s.state] ?? "#9a9aa5";
+/** "3 photos" for sequences, "" for single shots. */
+export const photoCountLabel = (s: Shot): string => (s.photos.length > 1 ? `${s.photos.length} photos` : "");
 
-export function fovLabel(s: Shot): string {
-  const f = framingOf(s);
+export function fovLabel(p: Photo): string {
+  const f = p.framing;
   if (!f) return "";
   const parts: string[] = [];
   if (typeof f.full_frame_equivalent_mm === "number") parts.push(`${f.full_frame_equivalent_mm} mm FF-eq`);
@@ -30,19 +31,19 @@ export function fovLabel(s: Shot): string {
 
 const fmt = new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" });
 export const when = (iso: string) => fmt.format(new Date(iso));
-export const coords = (s: Shot) => `${s.lat.toFixed(5)}, ${s.lon.toFixed(5)}`;
+export const coords = (p: Photo) => `${p.lat.toFixed(5)}, ${p.lon.toFixed(5)}`;
 
 export interface FrameGeometry { width_fraction: number; height_fraction: number }
 
-/** Rig frame relative to the photo, centred. Present on shots taken with app builds from 2026-09-06 on. */
-export function frameOf(s: Shot): FrameGeometry | null {
-  const f = framingOf(s)?.frame as Partial<FrameGeometry> | undefined;
+/** Rig frame relative to the photo, centred. */
+export function frameOf(p: Photo): FrameGeometry | null {
+  const f = p.framing?.frame as Partial<FrameGeometry> | undefined;
   if (!f || typeof f.width_fraction !== "number" || typeof f.height_fraction !== "number") return null;
   return { width_fraction: f.width_fraction, height_fraction: f.height_fraction };
 }
 
-export function rigDescription(s: Shot): string {
-  const f = framingOf(s);
+export function rigDescription(p: Photo): string {
+  const f = p.framing;
   if (!f) return "";
   const parts: string[] = [];
   if (typeof f.camera_id === "string" && typeof f.format_id === "string") parts.push(`${f.camera_id} / ${f.format_id}`);
@@ -52,10 +53,7 @@ export function rigDescription(s: Shot): string {
 }
 
 /** Photo aspect ratio (w/h) as uploaded; 4:3 when the app did not record it. */
-export function imageAspect(s: Shot): number {
-  const im = (s.extra_metadata?.image as { width?: number; height?: number } | undefined) ?? {};
-  return im.width && im.height ? im.width / im.height : 4 / 3;
-}
+export const imageAspect = (p: Photo): number => (p.width && p.height ? p.width / p.height : 4 / 3);
 
 export type FrameMode = "mask" | "frame" | "fit" | "off";
 export const FRAME_MODES: readonly FrameMode[] = ["mask", "frame", "fit", "off"];
@@ -88,12 +86,14 @@ export function frameLayout(f: FrameGeometry, mode: FrameMode, photoAspect: numb
   return { img, frame: { left: (100 - w) / 2, top: (100 - h) / 2, width: w, height: h }, shrunk: scale < 1 };
 }
 
-/** Map a shot to the shape the shared filter evaluator expects. */
+/** Map a shot to the shape the shared filter evaluator expects. Rig and lens come from the cover photo. */
 export function filterable(s: Shot): FilterableShot {
-  const f = framingOf(s);
+  const p = cover(s);
+  const ffEq = p.framing?.full_frame_equivalent_mm;
   return {
-    state: s.state, name: s.name, location_id: s.location_id, district: s.district, int_ext: s.int_ext, light: s.light, weather: s.weather,
-    preset_id: s.preset_id, lens_mm: s.lens_mm, timestamp: s.timestamp, extra: s.extra ?? null,
-    ff_eq_mm: typeof f?.full_frame_equivalent_mm === "number" ? f.full_frame_equivalent_mm : null,
+    state: s.state, project_id: s.project_id, name: s.name, location_id: s.location_id, int_ext: s.int_ext,
+    light: s.light, artificial: s.artificial ? "yes" : "no", weather: s.weather,
+    preset_id: p.preset_id, lens_mm: p.lens_mm, ff_eq_mm: typeof ffEq === "number" ? ffEq : null,
+    photo_count: s.photos.length, timestamp: s.captured_at, extra: s.extra,
   };
 }

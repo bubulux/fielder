@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import * as Crypto from "expo-crypto";
-import { BERLIN_DISTRICTS, EXTRA_COLLECTIONS, INT_EXT, label, LIGHT, WEATHER } from "@fielder/vocab";
+import { INT_EXT, label, LIGHT, WEATHER } from "@fielder/vocab";
 import type { LocationEntry, ShotTags } from "../types";
 import { Button, Chip, ChipRow, colors, Hint, Input, Row } from "./ui";
 
@@ -18,20 +18,18 @@ interface Props {
   busy?: boolean;
 }
 
-/** The scouting-tags form: name, location (pick or add), INT/EXT, light, weather. Every field is required. */
+/** The scouting-tags form: name, location (pick or add), INT/EXT, light phases + artificial, weather. Everything is optional. */
 export function TagsForm({ initial, locations, countAt, submitLabel, onSubmit, cancelLabel, onCancel, busy }: Props) {
   const [name, setName] = useState(initial?.name ?? "");
-  const [light, setLight] = useState<string | null>(initial?.light ?? null);
+  const [light, setLight] = useState<string[]>(initial?.light ?? []);
+  const [artificial, setArtificial] = useState(initial?.artificial ?? false);
   const [weather, setWeather] = useState<string | null>(initial?.weather ?? null);
   const [intExt, setIntExt] = useState<string | null>(initial?.int_ext ?? null);
   const initialLoc = locations.find((l) => l.id === initial?.location_id) ?? null;
   const [query, setQuery] = useState(initialLoc?.name ?? "");
   const [picked, setPicked] = useState<LocationEntry | null>(initialLoc);
-  const [newLoc, setNewLoc] = useState<{ name: string; district: string | null } | null>(null);
-  const [extra, setExtra] = useState<Record<string, string>>(initial?.extra ?? {});
-  /** Collection whose value picker is open. */
-  const [extraOpen, setExtraOpen] = useState<string | null>(null);
-  const [extraQuery, setExtraQuery] = useState("");
+  /** Name of a location to create on submit. */
+  const [newLoc, setNewLoc] = useState<string | null>(null);
 
   const matches = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -40,23 +38,22 @@ export function TagsForm({ initial, locations, countAt, submitLabel, onSubmit, c
   const exact = locations.some((l) => l.name.trim().toLowerCase() === query.trim().toLowerCase());
 
   const pickLocation = (l: LocationEntry) => { setPicked(l); setNewLoc(null); setQuery(l.name); };
-  const addLocation = () => { setPicked(null); setNewLoc({ name: query.trim(), district: null }); };
+  const addLocation = () => { setPicked(null); setNewLoc(query.trim()); };
   const clearLocation = () => { setPicked(null); setNewLoc(null); setQuery(""); };
 
-  // Everything is optional; only a new location needs its district before it can be created.
-  const valid = !newLoc || !!newLoc.district;
+  const toggleLight = (v: string) => setLight((cur) => (cur.includes(v) ? cur.filter((x) => x !== v) : [...cur, v]));
   const isEdit = !!initial?.location_id;
   const count = picked ? countAt(picked.id) : 0;
 
   const submit = () => {
-    if (!valid || busy) return;
+    if (busy) return;
     let created: LocationEntry | null = null;
     let id = picked?.id ?? null;
-    if (!id && newLoc && newLoc.district) {
-      created = { id: Crypto.randomUUID(), name: newLoc.name, district: newLoc.district, createdAt: new Date().toISOString(), synced: false };
+    if (!id && newLoc) {
+      created = { id: Crypto.randomUUID(), name: newLoc, createdAt: new Date().toISOString(), synced: false };
       id = created.id;
     }
-    onSubmit({ name: name.trim() || null, light, weather, int_ext: intExt, location_id: id, extra }, created);
+    onSubmit({ name: name.trim() || null, light, artificial, weather, int_ext: intExt, location_id: id, extra: initial?.extra ?? {} }, created);
   };
 
   return (
@@ -67,7 +64,7 @@ export function TagsForm({ initial, locations, countAt, submitLabel, onSubmit, c
       <Row label="Location">
         {picked || newLoc ? (
           <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
-            <Chip label={`${picked?.name ?? newLoc?.name}${picked ? ` · ${picked.district}` : " · new"}`} selected onPress={clearLocation} />
+            <Chip label={picked ? picked.name : `${newLoc} · new`} selected onPress={clearLocation} />
             <Pressable onPress={clearLocation} hitSlop={8}><Text style={{ color: colors.dim }}>change</Text></Pressable>
           </View>
         ) : (
@@ -77,7 +74,7 @@ export function TagsForm({ initial, locations, countAt, submitLabel, onSubmit, c
               {matches.map((l) => (
                 <Pressable key={l.id} onPress={() => pickLocation(l)} style={s.item}>
                   <Text style={s.itemName}>{l.name}</Text>
-                  <Text style={s.itemSub}>{l.district} · {countAt(l.id)} shot{countAt(l.id) === 1 ? "" : "s"}</Text>
+                  <Text style={s.itemSub}>{countAt(l.id)} shot{countAt(l.id) === 1 ? "" : "s"}</Text>
                 </Pressable>
               ))}
               {query.trim().length > 0 && !exact && (
@@ -92,55 +89,22 @@ export function TagsForm({ initial, locations, countAt, submitLabel, onSubmit, c
         {picked && !isEdit && <Hint>{count === 0 ? "First shot at this location." : `Shot #${count + 1} at this location.`}</Hint>}
         {newLoc && <Hint>First shot at this location.</Hint>}
       </Row>
-      {newLoc && (
-        <Row label="District (new location)">
-          <ChipRow>
-            {BERLIN_DISTRICTS.map((d) => <Chip key={d} label={d} selected={newLoc.district === d} onPress={() => setNewLoc({ ...newLoc, district: d })} />)}
-          </ChipRow>
-        </Row>
-      )}
       <Row label="Int / Ext">
         <ChipRow>{INT_EXT.map((v) => <Chip key={v} label={label(v)} selected={intExt === v} onPress={() => setIntExt(intExt === v ? null : v)} />)}</ChipRow>
       </Row>
-      <Row label="Light">
-        <ChipRow>{LIGHT.map((v) => <Chip key={v} label={label(v)} selected={light === v} onPress={() => setLight(light === v ? null : v)} />)}</ChipRow>
+      <Row label="Light (every phase the shot works in)">
+        <ChipRow>
+          {LIGHT.map((v) => <Chip key={v} label={label(v)} selected={light.includes(v)} onPress={() => toggleLight(v)} />)}
+          <Chip label="Artificial" selected={artificial} onPress={() => setArtificial(!artificial)} />
+        </ChipRow>
       </Row>
       <Row label="Weather">
         <ChipRow>{WEATHER.map((v) => <Chip key={v} label={label(v)} selected={weather === v} onPress={() => setWeather(weather === v ? null : v)} />)}</ChipRow>
       </Row>
-      <Row label="Extra (optional)">
-        <ChipRow>
-          {EXTRA_COLLECTIONS.map((c) => (
-            <Chip key={c.id} label={extra[c.id] ? `${c.name}: ${extra[c.id]}` : c.name} selected={!!extra[c.id] || extraOpen === c.id}
-              onPress={() => { if (extra[c.id]) { const { [c.id]: _, ...rest } = extra; setExtra(rest); setExtraOpen(null); } else { setExtraOpen(extraOpen === c.id ? null : c.id); setExtraQuery(""); } }} />
-          ))}
-        </ChipRow>
-        {extraOpen && (() => {
-          const c = EXTRA_COLLECTIONS.find((x) => x.id === extraOpen)!;
-          const q = extraQuery.trim().toLowerCase();
-          const hits = (q ? c.values.filter((v) => v.toLowerCase().includes(q)) : c.values).slice(0, 12);
-          return (
-            <View style={{ marginTop: 8 }}>
-              <Input value={extraQuery} onChangeText={setExtraQuery} placeholder={`Search ${c.name}…`} autoFocus />
-              <View style={s.list}>
-                {hits.map((v) => (
-                  <Pressable key={v} onPress={() => { setExtra({ ...extra, [c.id]: v }); setExtraOpen(null); }} style={s.item}>
-                    <Text style={s.itemName}>{v}</Text>
-                  </Pressable>
-                ))}
-                {hits.length === 0 && <Hint>No match.</Hint>}
-                {hits.length === 12 && <Hint>Type more to narrow the list.</Hint>}
-              </View>
-            </View>
-          );
-        })()}
-        <Hint>Tap a collection to pick a value; tap it again to remove it.</Hint>
-      </Row>
       <View style={{ flexDirection: "row", gap: 12, marginTop: 8 }}>
         {onCancel && <View style={{ flex: 1 }}><Button label={cancelLabel ?? "Cancel"} kind={cancelLabel === "Discard" ? "danger" : "ghost"} onPress={onCancel} /></View>}
-        <View style={{ flex: 2 }}><Button label={submitLabel} onPress={submit} disabled={!valid || busy} /></View>
+        <View style={{ flex: 2 }}><Button label={submitLabel} onPress={submit} disabled={busy} /></View>
       </View>
-      {!valid && <Hint>Pick a district for the new location.</Hint>}
     </>
   );
 }

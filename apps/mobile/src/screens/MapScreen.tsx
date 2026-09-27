@@ -4,7 +4,7 @@ import { WebView as RNWebView, type WebViewMessageEvent, type WebViewProps } fro
 
 // react-native-webview's class typings collapse to `never` under this TS/React combination; use the props type directly.
 const WebView = RNWebView as unknown as ComponentType<WebViewProps>;
-import type { Shot } from "../api";
+import { cover, type Shot } from "../api";
 import { colors } from "../components/ui";
 import { STATE_COLORS } from "@fielder/vocab";
 import { applyFilter, placeLabel, rigLabel, ShotDetail, shotTitle, type ShotListProps } from "./Gallery";
@@ -16,10 +16,10 @@ export function MapScreen({ settings, data, focus, filter, locations, onLocation
   const { shots, remove, update } = data;
 
   const markers = useMemo(
-    () => applyFilter(shots, filter).map((s) => ({ id: s.id, lat: s.lat, lon: s.lon, color: STATE_COLORS[s.state] ?? "#ffb300", title: shotTitle(s), sub: [placeLabel(s) || rigLabel(s), new Date(s.timestamp).toLocaleString()].join(" · ") })),
+    () => applyFilter(shots, filter).map((s) => { const p = cover(s); return { id: s.id, lat: p.lat, lon: p.lon, color: STATE_COLORS[s.state] ?? "#ffb300", title: shotTitle(s), sub: [placeLabel(s) || rigLabel(p), new Date(s.captured_at).toLocaleString()].join(" · ") }; }),
     [shots, filter],
   );
-  const html = useMemo(() => buildHtml(markers, focus ? { lat: focus.lat, lon: focus.lon } : null), [markers, focus]);
+  const html = useMemo(() => buildHtml(markers, focus ? { lat: cover(focus).lat, lon: cover(focus).lon } : null), [markers, focus]);
   const openLatest = open ? (shots ?? []).find((s) => s.id === open.id) ?? open : null;
 
   return (

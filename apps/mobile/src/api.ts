@@ -1,7 +1,8 @@
 import { File } from "expo-file-system";
 import { getToken, setToken } from "./auth";
 import { API_URL, isConfigured } from "./config";
-import type { LocationEntry, Preset, ShotMetadata, ShotTags } from "./types";
+import type { Extra } from "@fielder/vocab";
+import type { LocationEntry, Preset, ProjectEntry, ShotMetadata, ShotTags } from "./types";
 
 export class ApiError extends Error {
   constructor(public status: number, message: string, public body: unknown = null) {
@@ -64,52 +65,67 @@ function fromServer(s: ServerPreset): Preset {
   };
 }
 
-export interface Shot {
+export interface Photo {
   id: string;
+  shot_id: string;
+  ordinal: number;
   timestamp: string;
   lat: number;
   lon: number;
+  gps_accuracy_m: number | null;
   preset_id: string | null;
   preset_name: string | null;
   lens_mm: number;
+  width: number | null;
+  height: number | null;
+  framing: Record<string, unknown> | null;
+  device: Record<string, unknown> | null;
   image_url: string;
-  extra_metadata: Record<string, unknown> | null;
   created_at: string;
-  name: string | null;
-  light: string | null;
-  weather: string | null;
-  int_ext: string | null;
-  location_id: string | null;
-  location_name: string | null;
-  district: string | null;
-  state: "unreviewed" | "approved" | "archived";
-  extra: Record<string, string>;
 }
 
-interface ServerLocation {
+/** The unit of scouting metadata: one photo, or a whole sequence. */
+export interface Shot {
   id: string;
-  name: string;
-  district: string;
+  project_id: string;
+  project_name: string | null;
+  location_id: string | null;
+  location_name: string | null;
+  name: string | null;
+  int_ext: string | null;
+  light: string[];
+  artificial: boolean;
+  weather: string | null;
+  state: "unreviewed" | "approved" | "archived";
+  extra: Extra;
+  captured_at: string;
   created_at: string;
   updated_at: string | null;
-  shot_count: number;
-  approved_count: number;
+  /** Ordered; never empty. */
+  photos: Photo[];
 }
-const locationFromServer = (l: ServerLocation): LocationEntry => ({ id: l.id, name: l.name, district: l.district, createdAt: l.created_at, synced: true });
+
+/** The photo that stands for the shot in lists, maps and filters: the first one. */
+export const cover = (s: Shot): Photo => s.photos[0];
+
+/** Locations and projects share this shape as far as the app is concerned. */
+interface ServerNamed { id: string; name: string; created_at: string }
+const namedFromServer = (l: ServerNamed): LocationEntry & ProjectEntry => ({ id: l.id, name: l.name, createdAt: l.created_at, synced: true });
 
 type Cursor = { before: string; before_id: string } | null;
 interface ShotsPage { shots: Shot[]; next: Cursor }
 
 /** Headers for <Image> requests to the API (Access session token). */
 export const imageHeaders = (): Record<string, string> => headers();
-export const imageUri = (shot: Shot) => `${API_URL}${shot.image_url}`;
+export const imageUri = (photo: Photo) => `${API_URL}${photo.image_url}`;
 
 export const api = {
-  listShots: async (): Promise<Shot[]> => {
+  /** Every shot of one project, newest first. */
+  listShots: async (projectId: string): Promise<Shot[]> => {
     const all: Shot[] = [];
     let cursor: Cursor = null;
     for (;;) {
-      const q: string = cursor ? `?limit=500&before=${encodeURIComponent(cursor.before)}&before_id=${cursor.before_id}` : "?limit=500";
+      const q: string = `?limit=500&project_id=${projectId}${cursor ? `&before=${encodeURIComponent(cursor.before)}&before_id=${cursor.before_id}` : ""}`;
       const page: ShotsPage = await call<ShotsPage>(`/api/shots${q}`);
       all.push(...page.shots);
       if (!page.next) break;
@@ -118,19 +134,31 @@ export const api = {
     return all;
   },
   deleteShot: (id: string) => call<{ deleted: string }>(`/api/shots/${id}`, { method: "DELETE" }),
-  patchShot: (id: string, patch: Partial<ShotTags> & { state?: Shot["state"] }) =>
+  patchShot: (id: string, patch: Partial<ShotTags> & { state?: Shot["state"]; project_id?: string }) =>
     call<{ shot: Shot }>(`/api/shots/${id}`, { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify(patch) }).then((r) => r.shot),
 
   listLocations: async (): Promise<LocationEntry[]> => {
-    const r = await call<{ locations: ServerLocation[] }>("/api/locations");
-    return r.locations.map(locationFromServer);
+    const r = await call<{ locations: ServerNamed[] }>("/api/locations");
+    return r.locations.map(namedFromServer);
   },
   /** Upsert; a 409 means another location already has this name (ApiError.body.existing_id). */
   putLocation: (l: LocationEntry) =>
-    call<{ location: ServerLocation }>(`/api/locations/${l.id}`, {
+    call<{ location: ServerNamed }>(`/api/locations/${l.id}`, {
       method: "PUT",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ name: l.name, district: l.district }),
+      body: JSON.stringify({ name: l.name }),
+    }),
+
+  listProjects: async (): Promise<ProjectEntry[]> => {
+    const r = await call<{ projects: ServerNamed[] }>("/api/projects");
+    return r.projects.map(namedFromServer);
+  },
+  /** Upsert; a 409 means another project already has this name (ApiError.body.existing_id). */
+  putProject: (p: ProjectEntry) =>
+    call<{ project: ServerNamed }>(`/api/projects/${p.id}`, {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ name: p.name }),
     }),
   deleteLocation: (id: string) => call<{ deleted: string }>(`/api/locations/${id}`, { method: "DELETE" }),
 
@@ -159,13 +187,16 @@ export const api = {
 
   deletePreset: (id: string) => call<{ deleted: string }>(`/api/presets/${id}`, { method: "DELETE" }),
 
-  /** Multipart upload. `fileUri` must be a local file:// URI of a JPEG. */
-  uploadShot: (metadata: ShotMetadata, fileUri: string) => {
+  /**
+   * Multipart upload of a shot and its photos. `files` maps photo id -> local file:// URI of a JPEG.
+   * Idempotent on the server: photos already stored are skipped, so a retry is always safe.
+   */
+  uploadShot: (metadata: ShotMetadata, files: Record<string, string>) => {
     const form = new FormData();
+    form.append("metadata", JSON.stringify(metadata));
     // Expo's global fetch is the WinterCG implementation: it rejects React Native's
     // {uri,name,type} descriptors but accepts an expo-file-system File directly.
-    form.append("image", new File(fileUri) as unknown as Blob, `${metadata.id}.jpg`);
-    form.append("metadata", JSON.stringify(metadata));
+    for (const p of metadata.photos) form.append(`photo.${p.id}`, new File(files[p.id]) as unknown as Blob, `${p.id}.jpg`);
     return call<{ shot: { id: string }; duplicate?: boolean }>("/api/shots", { method: "POST", body: form });
   },
 };
