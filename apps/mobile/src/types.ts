@@ -40,6 +40,12 @@ export interface Settings {
   /** Draw a second, thin frame showing roughly what a human sees (a "normal" lens, in FF-equivalent mm). */
   humanViewEnabled: boolean;
   humanViewFocalMm: number;
+  /** Human button: "cycle" steps off -> 35 -> 43 -> 50 -> off; "toggle" flips between off and humanViewFocalMm. */
+  humanViewButton: "cycle" | "toggle";
+  /** Skip the tag form after a capture: every shot (or finished sequence) goes straight into the upload queue. */
+  directUpload: boolean;
+  /** Record a detailed log on the phone that can be shared for debugging. */
+  loggingEnabled: boolean;
   /** Show the info overlay (rig, math, warnings) on the live view. */
   hudEnabled: boolean;
 }
@@ -107,4 +113,18 @@ export interface PendingUpload {
   files: Record<string, string>;
   attempts: number;
   lastError?: string;
+}
+/** One captured photo waiting for the tag form or the queue. */
+export interface DraftPhoto {
+  /** Local file (temp for single captures, persistent for sequences). */
+  uri: string;
+  meta: PhotoMetadata;
+  /** Rig frame relative to the photo, for the preview. */
+  frame: { width: number; height: number };
+}
+
+/** A capture (one photo) or a sequence (many) that is not queued yet. */
+export interface CaptureDraft {
+  shotId: string;
+  photos: DraftPhoto[];
 }

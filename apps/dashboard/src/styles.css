@@ -189,3 +189,10 @@ main { min-height: 0; position: relative; }
 .shot-info dd { margin: 0; word-break: break-word; min-width: 0; }
 .shot-info dd a { color: var(--accent); }
 .review-body .side { font-size: 15px; }
+
+/* Position correction */
+.pos-editor { display: flex; flex-direction: column; gap: 8px; }
+.pos-map { height: 280px; border-radius: 8px; border: 1px solid var(--border); }
+.pos-pin div { width: 22px; height: 22px; border-radius: 50%; background: var(--accent); border: 3px solid #000; box-shadow: 0 0 0 2px var(--accent); cursor: grab; }
+.check { display: flex; align-items: center; gap: 6px; cursor: pointer; user-select: none; }
+.link { background: none; border: 0; padding: 0; color: var(--accent); cursor: pointer; font: inherit; font-size: 13px; text-decoration: underline; }

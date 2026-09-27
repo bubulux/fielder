@@ -12,13 +12,15 @@ import { Gallery, useShots, type StateFilter } from "./src/screens/Gallery";
 import { Login } from "./src/screens/Login";
 import { Prep } from "./src/screens/Prep";
 import { Review } from "./src/screens/Review";
+import { Setup } from "./src/screens/Setup";
+import { setLogging } from "./src/log";
 import { MapScreen } from "./src/screens/MapScreen";
 import { Viewfinder } from "./src/screens/Viewfinder";
 import { store } from "./src/storage";
 import type { LocationEntry, ProjectEntry, Settings } from "./src/types";
 
-type Mode = "shoot" | "review" | "gallery" | "map" | "prep";
-const ICONS: Record<Mode, string> = { shoot: "◉", review: "☑", gallery: "▦", map: "⌖", prep: "▷" };
+type Mode = "shoot" | "review" | "gallery" | "map" | "prep" | "setup";
+const ICONS: Record<Mode, string> = { shoot: "◉", review: "☑", gallery: "▦", map: "⌖", prep: "▷", setup: "⚙" };
 const TAB = 52;
 /** Minimum clearance between the UI strips and the screen edge (camera cutout, Android navigation bar). */
 export const EDGE_PAD = 32;
@@ -36,7 +38,7 @@ function App() {
   const insets = useSafeAreaInsets();
   const portrait = height >= width;
   const [mode, setMode] = useState<Mode>("shoot");
-  const [settings, setSettings] = useState<Settings>(() => store.loadSettings());
+  const [settings, setSettings] = useState<Settings>(() => { const s = store.loadSettings(); setLogging(s.loggingEnabled); return s; });
   const [focus, setFocus] = useState<Shot | null>(null);
   const [open, setOpen] = useState<Shot | null>(null);
   const [filter, setFilter] = useState<StateFilter>("all");
@@ -106,12 +108,13 @@ function App() {
       <View style={{ flex: 1, paddingTop: portrait ? insets.top : 0, paddingLeft: portrait ? 0 : insets.left }}>
         {/* Viewfinder stays mounted so state and camera warm-up survive tab switches; it releases the camera when inactive. */}
         <View style={[{ flex: 1 }, mode !== "shoot" && { display: "none" }]}>
-          <Viewfinder settings={settings} onSettings={setSettings} active={mode === "shoot"} project={project} onSwitchProject={() => setProjectSheet(true)} shots={shots.shots} locations={locations} onLocations={setLocations} onSignIn={() => setLogin(true)} />
+          <Viewfinder settings={settings} onSettings={setSettings} active={mode === "shoot"} project={project} shots={shots.shots} locations={locations} onLocations={setLocations} />
         </View>
         {mode === "review" && <Review settings={settings} data={shots} locations={locations} onLocations={setLocations} countAt={countAt} />}
         {mode === "gallery" && <Gallery settings={settings} data={shots} onShowOnMap={(s) => { setFocus(s); setMode("map"); }} filter={filter} onFilter={setFilter}
           locations={locations} onLocations={setLocations} countAt={countAt} open={open} onOpen={setOpen} />}
         {mode === "prep" && <Prep settings={settings} data={shots} />}
+        {mode === "setup" && <Setup settings={settings} onChange={setSettings} project={project} onSwitchProject={() => setProjectSheet(true)} onSignIn={() => setLogin(true)} />}
         {mode === "map" && <MapScreen settings={settings} data={shots} focus={focus} filter={filter} locations={locations} onLocations={setLocations} countAt={countAt} open={open} onOpen={setOpen} />}
       </View>
       {tabs}

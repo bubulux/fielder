@@ -13,5 +13,8 @@ export const DEFAULT_SETTINGS: Settings = {
   orientationLock: "auto",
   humanViewEnabled: false,
   humanViewFocalMm: 50,
+  humanViewButton: "cycle",
+  directUpload: false,
+  loggingEnabled: false,
   hudEnabled: true,
 };

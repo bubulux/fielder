@@ -29,6 +29,7 @@ interface PhotoRow {
   lat: number;
   lon: number;
   gps_accuracy_m: number | null;
+  position_corrected: number;
   preset_id: string | null;
   preset_name: string | null;
   lens_mm: number;
@@ -61,6 +62,7 @@ function photoToApi(p: PhotoRow) {
     lat: p.lat,
     lon: p.lon,
     gps_accuracy_m: p.gps_accuracy_m,
+    position_corrected: p.position_corrected === 1,
     preset_id: p.preset_id,
     preset_name: p.preset_name ?? null,
     lens_mm: p.lens_mm,
@@ -338,6 +340,19 @@ export function registerShotRoutes(r: Router<Ctx>) {
     const res = await env.DB.prepare(`UPDATE shots SET ${sets.join(", ")} WHERE id = ?${args.length}`).bind(...args).run();
     if (!res.meta.changes) throw new HttpError(404, "shot not found");
     return json({ shot: await loadShot(env, sid) });
+  });
+
+  /** Correct a position by hand: JSON { lat, lon, all_in_shot? }. all_in_shot moves every photo of the shot (a sequence taken on one spot). */
+  r.on("PATCH", "/api/photos/:id", async ({ env, request }, { id }) => {
+    const pid = assertUuid(id, "id");
+    const b = await readJson<Record<string, unknown>>(request);
+    const lat = assertNumber(b.lat, "lat", { min: -90, max: 90 });
+    const lon = assertNumber(b.lon, "lon", { min: -180, max: 180 });
+    const row = await env.DB.prepare("SELECT shot_id FROM photos WHERE id = ?1").bind(pid).first<{ shot_id: string }>();
+    if (!row) throw new HttpError(404, "photo not found");
+    await env.DB.prepare(`UPDATE photos SET lat = ?1, lon = ?2, position_corrected = 1 WHERE ${b.all_in_shot === true ? "shot_id = ?3" : "id = ?3"}`)
+      .bind(lat, lon, b.all_in_shot === true ? row.shot_id : pid).run();
+    return json({ shot: await loadShot(env, row.shot_id) });
   });
 
   r.on("DELETE", "/api/shots/:id", async ({ env }, { id }) => {

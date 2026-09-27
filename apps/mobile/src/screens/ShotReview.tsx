@@ -1,19 +1,13 @@
-import { useState } from "react";
-import { Modal, ScrollView, StyleSheet, Text, useWindowDimensions, View } from "react-native";
-import { FramedImage, FRAME_MODES, frameModeLabel, type FrameFractions, type FrameMode } from "../components/FramedImage";
+import { useEffect, useState } from "react";
+import { Modal, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from "react-native";
+import { Image } from "expo-image";
+import { FramedImage, FRAME_MODES, frameModeLabel, type FrameMode } from "../components/FramedImage";
 import { TagsForm } from "../components/TagsForm";
 import { Chip, ChipRow, colors } from "../components/ui";
-import type { LocationEntry, Settings, ShotTags } from "../types";
-
-export interface Draft {
-  uri: string;
-  width: number;
-  height: number;
-  frame: FrameFractions;
-}
+import type { CaptureDraft, LocationEntry, Settings, ShotTags } from "../types";
 
 interface Props {
-  draft: Draft | null;
+  draft: CaptureDraft | null;
   settings: Settings;
   locations: LocationEntry[];
   /** Shots already taken at a location (uploaded + pending). */
@@ -25,17 +19,29 @@ interface Props {
 /** Consecutive shots usually share place and conditions: remember them, but never the name. */
 let lastTags: Partial<ShotTags> = {};
 
-/** Capture -> this form -> Upload or Discard. Every field is optional. */
+/** Capture (or finished sequence) -> this form -> Upload or Discard. Every field is optional. */
 export function ShotReview({ draft, settings, locations, countAt, onUpload, onDiscard }: Props) {
   const { width, height } = useWindowDimensions();
   const portrait = height >= width;
   const [mode, setMode] = useState<FrameMode>("mask");
-  if (!draft) return null;
+  const [index, setIndex] = useState(0);
+  useEffect(() => { setIndex(0); }, [draft?.shotId]);
+  if (!draft || draft.photos.length === 0) return null;
 
+  const current = draft.photos[Math.min(index, draft.photos.length - 1)];
   const photoWidth = portrait ? width - 32 : Math.min(width * 0.45, height * 1.3);
   const photo = (
     <View style={{ alignItems: "center" }}>
-      <FramedImage source={{ uri: draft.uri }} aspect={draft.width / draft.height} frame={draft.frame} width={photoWidth} settings={settings} mode={mode} style={{ borderRadius: 8 }} />
+      <FramedImage source={{ uri: current.uri }} aspect={current.meta.width / current.meta.height} frame={current.frame} width={photoWidth} settings={settings} mode={mode} style={{ borderRadius: 8 }} />
+      {draft.photos.length > 1 && (
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ maxWidth: photoWidth }} contentContainerStyle={{ gap: 6, paddingVertical: 8 }}>
+          {draft.photos.map((p, i) => (
+            <Pressable key={p.meta.id} onPress={() => setIndex(i)} style={[s.thumb, i === index && { borderColor: colors.accent }]}>
+              <Image source={{ uri: p.uri }} style={{ width: "100%", height: "100%" }} contentFit="cover" />
+            </Pressable>
+          ))}
+        </ScrollView>
+      )}
       <View style={{ marginTop: 8 }}>
         <ChipRow>{FRAME_MODES.map((m) => <Chip key={m} label={frameModeLabel(m)} selected={mode === m} onPress={() => setMode(m)} />)}</ChipRow>
       </View>
@@ -43,11 +49,11 @@ export function ShotReview({ draft, settings, locations, countAt, onUpload, onDi
   );
   const form = (
     <TagsForm
-      key={draft.uri}
+      key={draft.shotId}
       initial={{ ...lastTags, name: null }}
       locations={locations}
       countAt={countAt}
-      submitLabel="Upload"
+      submitLabel={draft.photos.length > 1 ? `Upload ${draft.photos.length} photos` : "Upload"}
       cancelLabel="Discard"
       onCancel={onDiscard}
       onSubmit={(tags, newLoc) => { lastTags = { light: tags.light, artificial: tags.artificial, weather: tags.weather, int_ext: tags.int_ext, location_id: tags.location_id }; onUpload(tags, newLoc); }}
@@ -57,7 +63,7 @@ export function ShotReview({ draft, settings, locations, countAt, onUpload, onDi
   return (
     <Modal visible animationType="slide" onRequestClose={onDiscard}>
       <View style={s.root}>
-        <View style={s.header}><Text style={s.title}>New shot</Text></View>
+        <View style={s.header}><Text style={s.title}>{draft.photos.length > 1 ? `New sequence · ${draft.photos.length} photos` : "New shot"}</Text></View>
         {portrait ? (
           <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ padding: 16, paddingBottom: 40 }}>
             {photo}
@@ -80,4 +86,5 @@ const s = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.bg },
   header: { paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border },
   title: { color: colors.text, fontSize: 18, fontWeight: "600" },
+  thumb: { width: 64, height: 48, borderRadius: 6, overflow: "hidden", borderWidth: 2, borderColor: "transparent", backgroundColor: "#000" },
 });

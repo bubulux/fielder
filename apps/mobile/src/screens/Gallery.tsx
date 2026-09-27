@@ -6,6 +6,7 @@ import { extraLabel, label, lightLabel, SHOT_STATES, STATE_COLORS, type ShotStat
 import { Button, Chip, ChipRow, colors, Sheet, StateBadge } from "../components/ui";
 import { TagsForm } from "../components/TagsForm";
 import { PhotoStrip } from "../components/PhotoStrip";
+import { PositionPicker } from "../components/PositionPicker";
 import { ensureLocation } from "../namedSync";
 import type { LocationEntry, ShotTags } from "../types";
 import type { Settings } from "../types";
@@ -76,7 +77,8 @@ export function ShotDetail({ shot, onClose, settings, mode: initialMode, onDelet
   const [editing, setEditing] = useState(false);
   const [busy, setBusy] = useState(false);
   const [photoIndex, setPhotoIndex] = useState(0);
-  useEffect(() => { setMode(initialMode); setEditing(false); setPhotoIndex(0); }, [initialMode, shot?.id]);
+  const [movingPin, setMovingPin] = useState(false);
+  useEffect(() => { setMode(initialMode); setEditing(false); setPhotoIndex(0); setMovingPin(false); }, [initialMode, shot?.id]);
   if (!shot) return null;
   const photo = shot.photos[Math.min(photoIndex, shot.photos.length - 1)];
   const setState = async (state: Shot["state"]) => {
@@ -117,7 +119,7 @@ export function ShotDetail({ shot, onClose, settings, mode: initialMode, onDelet
       <Text style={d.line}>{[fmt(shot.captured_at), photoCountLabel(shot)].filter(Boolean).join(" · ")}</Text>
       <Text style={d.dim}>{rigLabel(photo)}</Text>
       <Text style={d.dim}>{fovLabel(photo)}</Text>
-      <Text style={d.dim}>{photo.lat.toFixed(5)}, {photo.lon.toFixed(5)}{photo.gps_accuracy_m != null ? ` ±${Math.round(photo.gps_accuracy_m)} m` : ""}</Text>
+      <Text style={d.dim}>{photo.lat.toFixed(5)}, {photo.lon.toFixed(5)}{photo.position_corrected ? " · corrected" : photo.gps_accuracy_m != null ? ` ±${Math.round(photo.gps_accuracy_m)} m` : ""}</Text>
       {editing ? (
         <TagsForm
           initial={{ name: shot.name, light: shot.light, artificial: shot.artificial, weather: shot.weather, int_ext: shot.int_ext, location_id: shot.location_id, extra: shot.extra }}
@@ -137,9 +139,13 @@ export function ShotDetail({ shot, onClose, settings, mode: initialMode, onDelet
           </View>
           <Button label="Edit details" kind="ghost" onPress={() => setEditing(true)} />
           <Button label="Show on map" kind="ghost" onPress={() => onShowOnMap(shot)} />
+          <Button label="Correct position" kind="ghost" onPress={() => setMovingPin(true)} />
           <Button label="Delete shot" kind="danger" onPress={del} />
         </>
       )}
+      <PositionPicker key={photo.id} visible={movingPin} lat={photo.lat} lon={photo.lon} accuracyM={photo.gps_accuracy_m} photoCount={shot.photos.length}
+        onCancel={() => setMovingPin(false)}
+        onSave={async (lat, lon, all) => { try { onUpdated(await api.patchPhotoPosition(photo.id, lat, lon, all)); setMovingPin(false); } catch (e) { Alert.alert("Saving the position failed", String(e)); } }} />
     </Sheet>
   );
 }

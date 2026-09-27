@@ -11,6 +11,8 @@ export interface Photo {
   lat: number;
   lon: number;
   gps_accuracy_m: number | null;
+  /** Moved by hand after capture. */
+  position_corrected: boolean;
   preset_id: string | null;
   preset_name: string | null;
   lens_mm: number;
@@ -125,6 +127,10 @@ export const deletePreset = (id: string) => send<{ deleted: string }>("DELETE", 
 
 export const deleteShot = (id: string) => send<{ deleted: string }>("DELETE", `/api/shots/${id}`).then(() => undefined);
 export const patchShot = (id: string, patch: Partial<ShotTags> & { state?: ShotState; project_id?: string }) => send<{ shot: Shot }>("PATCH", `/api/shots/${id}`, patch).then((r) => r.shot);
+
+/** Correct a photo's position by hand; `allInShot` moves every photo of its shot. Returns the updated shot. */
+export const patchPhotoPosition = (id: string, lat: number, lon: number, allInShot: boolean) =>
+  send<{ shot: Shot }>("PATCH", `/api/photos/${id}`, { lat, lon, all_in_shot: allInShot }).then((r) => r.shot);
 
 export const fetchLocations = () => get<{ locations: Location[] }>("/api/locations").then((r) => r.locations);
 /** Upsert; a 409 carries body.existing_id when another location already has the name. */

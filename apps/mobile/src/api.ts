@@ -1,6 +1,7 @@
 import { File } from "expo-file-system";
 import { getToken, setToken } from "./auth";
 import { API_URL, isConfigured } from "./config";
+import { log } from "./log";
 import type { Extra } from "@fielder/vocab";
 import type { LocationEntry, Preset, ProjectEntry, ShotMetadata, ShotTags } from "./types";
 
@@ -19,7 +20,16 @@ function headers(extra: Record<string, string> = {}): Record<string, string> {
 async function call<T>(path: string, init: RequestInit = {}): Promise<T> {
   if (!isConfigured) throw new ApiError(0, "API not configured in this build");
   if (!getToken()) throw new ApiError(401, "not signed in");
-  const res = await fetch(`${API_URL}${path}`, { ...init, headers: headers(init.headers as Record<string, string>) });
+  const started = Date.now();
+  const method = init.method ?? "GET";
+  let res: Response;
+  try {
+    res = await fetch(`${API_URL}${path}`, { ...init, headers: headers(init.headers as Record<string, string>) });
+  } catch (err) {
+    log("warn", "api network error", { method, path, ms: Date.now() - started, error: err });
+    throw err;
+  }
+  log(res.ok ? "debug" : "warn", "api", { method, path, status: res.status, ms: Date.now() - started });
   // Without a valid session Access redirects to its login page instead of reaching the Worker.
   const html = (res.headers.get("content-type") ?? "").includes("text/html");
   if (res.status === 401 || res.status === 403 || res.redirected || html || (res.url && !res.url.startsWith(API_URL))) {
@@ -73,6 +83,8 @@ export interface Photo {
   lat: number;
   lon: number;
   gps_accuracy_m: number | null;
+  /** Moved by hand after capture. */
+  position_corrected: boolean;
   preset_id: string | null;
   preset_name: string | null;
   lens_mm: number;
@@ -133,6 +145,9 @@ export const api = {
     }
     return all;
   },
+  /** Correct a photo's position by hand; allInShot moves every photo of its shot. */
+  patchPhotoPosition: (id: string, lat: number, lon: number, allInShot: boolean) =>
+    call<{ shot: Shot }>(`/api/photos/${id}`, { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ lat, lon, all_in_shot: allInShot }) }).then((r) => r.shot),
   deleteShot: (id: string) => call<{ deleted: string }>(`/api/shots/${id}`, { method: "DELETE" }),
   patchShot: (id: string, patch: Partial<ShotTags> & { state?: Shot["state"]; project_id?: string }) =>
     call<{ shot: Shot }>(`/api/shots/${id}`, { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify(patch) }).then((r) => r.shot),

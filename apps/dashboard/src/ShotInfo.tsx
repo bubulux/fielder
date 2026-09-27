@@ -3,6 +3,7 @@ import { extraLabel, label, lightLabel } from "@fielder/vocab";
 import { patchShot, type Location, type Photo, type Project, type Shot, type ShotState } from "./api";
 import { Combobox } from "./Combobox";
 import { coords, fovLabel, photoCountLabel, placeLabel, rigDescription, shotTitle, stateColor, when } from "./format";
+import { PositionEditor } from "./PositionEditor";
 import { TagsForm } from "./TagsForm";
 
 export function Badge({ shot }: { shot: Shot }) {
@@ -24,8 +25,9 @@ interface Props {
 /** Title, scouting + camera facts, review-state buttons and in-place tag editing. Used by the dialog and the review page. */
 export function ShotInfo({ shot, photo, projects, locations, onLocations, onUpdated, onStateChanged }: Props) {
   const [editing, setEditing] = useState(false);
+  const [movingPin, setMovingPin] = useState(false);
   const [busy, setBusy] = useState(false);
-  useEffect(() => { setEditing(false); }, [shot.id]);
+  useEffect(() => { setEditing(false); setMovingPin(false); }, [shot.id]);
 
   async function patch(p: Parameters<typeof patchShot>[1], what: string) {
     setBusy(true);
@@ -71,11 +73,13 @@ export function ShotInfo({ shot, photo, projects, locations, onLocations, onUpda
               <dt>Format</dt><dd>{rigDescription(photo) || "—"}</dd>
               <dt>Lens</dt><dd>{photo.lens_mm} mm</dd>
               <dt>FOV</dt><dd>{fovLabel(photo) || "n/a"}</dd>
-              <dt>Position</dt><dd><a href={`https://www.openstreetmap.org/?mlat=${photo.lat}&mlon=${photo.lon}#map=17/${photo.lat}/${photo.lon}`} target="_blank" rel="noreferrer">{coords(photo)}</a>{photo.gps_accuracy_m != null && <span class="meta"> ±{Math.round(photo.gps_accuracy_m)} m</span>}</dd>
+              <dt>Position</dt><dd><a href={`https://www.openstreetmap.org/?mlat=${photo.lat}&mlon=${photo.lon}#map=17/${photo.lat}/${photo.lon}`} target="_blank" rel="noreferrer">{coords(photo)}</a>{photo.position_corrected ? <span class="meta"> · corrected</span> : photo.gps_accuracy_m != null && <span class="meta"> ±{Math.round(photo.gps_accuracy_m)} m</span>}
+                {" "}<button class="link" onClick={() => setMovingPin(true)}>correct</button></dd>
             </dl>
           </section>
         </div>
       )}
+      {movingPin && !editing && <PositionEditor shot={shot} photo={photo} onSaved={(s) => { onUpdated(s); setMovingPin(false); }} onCancel={() => setMovingPin(false)} />}
       {!editing && (
         <div class="btn-row">
           {shot.state !== "approved" && <button class="btn approve" disabled={busy} onClick={() => void setState("approved")}>Approve</button>}

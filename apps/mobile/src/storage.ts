@@ -1,6 +1,7 @@
+import { useEffect, useState } from "react";
 import Storage from "expo-sqlite/kv-store";
 import { DEFAULT_SETTINGS } from "./defaults";
-import type { LocationEntry, PendingUpload, Preset, ProjectEntry, Settings } from "./types";
+import type { CaptureDraft, LocationEntry, PendingUpload, Preset, ProjectEntry, Settings } from "./types";
 
 export { DEFAULT_SETTINGS };
 
@@ -14,6 +15,7 @@ const KEYS = {
   locations: "locations.v2",
   projects: "projects.v1",
   activeProjectId: "activeProjectId.v1",
+  sequence: "sequence.v1",
 } as const;
 
 
@@ -38,6 +40,13 @@ function write(key: string, value: unknown) {
   Storage.setItemSync(key, JSON.stringify(value));
 }
 
+const pendingListeners = new Set<(count: number) => void>();
+/** Called with the queue length whenever the upload queue changes. Returns the unsubscribe function. */
+export function onPendingChange(cb: (count: number) => void): () => void {
+  pendingListeners.add(cb);
+  return () => { pendingListeners.delete(cb); };
+}
+
 export const store = {
   loadSettings: (): Settings => read(KEYS.settings, DEFAULT_SETTINGS),
   saveSettings: (s: Settings) => write(KEYS.settings, s),
@@ -54,7 +63,7 @@ export const store = {
   saveLensMm: (mm: number) => Storage.setItemSync(KEYS.lensMm, String(mm)),
 
   loadPending: (): PendingUpload[] => readArray<PendingUpload>(KEYS.pending),
-  savePending: (q: PendingUpload[]) => write(KEYS.pending, q),
+  savePending: (q: PendingUpload[]) => { write(KEYS.pending, q); for (const cb of pendingListeners) cb(q.length); },
 
   loadLocations: (): LocationEntry[] => readArray<LocationEntry>(KEYS.locations),
   saveLocations: (l: LocationEntry[]) => write(KEYS.locations, l),
@@ -62,7 +71,18 @@ export const store = {
   loadProjects: (): ProjectEntry[] => readArray<ProjectEntry>(KEYS.projects),
   saveProjects: (p: ProjectEntry[]) => write(KEYS.projects, p),
 
+  /** The sequence being shot (survives an app restart), or null. */
+  loadSequence: (): CaptureDraft | null => { try { const raw = Storage.getItemSync(KEYS.sequence); return raw ? (JSON.parse(raw) as CaptureDraft) : null; } catch { return null; } },
+  saveSequence: (d: CaptureDraft | null) => (d ? write(KEYS.sequence, d) : Storage.removeItemSync(KEYS.sequence)),
+
   loadActiveProjectId: (): string | null => Storage.getItemSync(KEYS.activeProjectId),
   saveActiveProjectId: (id: string | null) =>
     id ? Storage.setItemSync(KEYS.activeProjectId, id) : Storage.removeItemSync(KEYS.activeProjectId),
 };
+
+/** Queue length that re-renders when uploads are added or finish. */
+export function usePendingCount(): number {
+  const [n, setN] = useState(() => store.loadPending().length);
+  useEffect(() => onPendingChange(setN), []);
+  return n;
+}
