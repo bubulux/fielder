@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "preact/hooks";
+import type { FieldDef } from "@fielder/vocab";
 import { deleteShot, type Location, type Project, type Shot } from "./api";
 import { Framed, type MaskMode } from "./Framed";
 import { Filmstrip, isTyping, ShotInfo, usePhotoKeys } from "./ShotInfo";
@@ -8,6 +9,7 @@ interface Props {
   /** The global view mode (header switch). */
   mask: MaskMode;
   projects: Project[];
+  fieldsOf: (projectId: string) => FieldDef[];
   locations: Location[];
   onLocations: (l: Location[]) => void;
   onUpdated: (s: Shot) => void;
@@ -15,7 +17,7 @@ interface Props {
 }
 
 /** Unreviewed shots one at a time, oldest first. ←/→ step through the queue; details are edited in place. */
-export function Review({ shots, mask, projects, locations, onLocations, onUpdated, onDeleted }: Props) {
+export function Review({ shots, mask, projects, fieldsOf, locations, onLocations, onUpdated, onDeleted }: Props) {
   const queue = useMemo(() => shots.filter((s) => s.state === "unreviewed").sort((a, b) => a.captured_at.localeCompare(b.captured_at)), [shots]);
   /** Follow the shot, not the position, so edits don't jump; fall back to the same position when it leaves the queue. */
   const [currentId, setCurrentId] = useState<string | null>(null);
@@ -59,7 +61,7 @@ export function Review({ shots, mask, projects, locations, onLocations, onUpdate
           <Filmstrip shot={current} index={photoIndex} onPick={setPhotoIndex} />
         </div>
         <div class="side">
-          <ShotInfo shot={current} photo={photo} projects={projects} locations={locations} onLocations={onLocations} onUpdated={onUpdated} />
+          <ShotInfo shot={current} photo={photo} projects={projects} fields={fieldsOf(current.project_id)} locations={locations} onLocations={onLocations} onUpdated={onUpdated} />
           <div class="btn-row"><button class="btn danger" onClick={() => void remove(current)}>Delete</button></div>
         </div>
       </div>

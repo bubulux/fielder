@@ -6,6 +6,7 @@ import { FRAME_MODES, frameModeLabel, ShotFrame, type FrameMode } from "../compo
 import { TagsForm } from "../components/TagsForm";
 import { Button, Chip, ChipRow, colors } from "../components/ui";
 import { ensureLocation } from "../namedSync";
+import { store } from "../storage";
 import type { LocationEntry, Settings, ShotTags } from "../types";
 import { badgeOf, photoCountLabel, placeLabel, rigLabel, shotTitle, tagsLabel, type useShots } from "./Gallery";
 
@@ -86,6 +87,7 @@ export function Review({ settings, data, locations, onLocations, countAt }: Prop
         initial={{ name: current.name, light: current.light, artificial: current.artificial, weather: current.weather, int_ext: current.int_ext, location_id: current.location_id, extra: current.extra }}
         locations={locations}
         countAt={countAt}
+        fields={store.fieldsForProject(current.project_id)}
         submitLabel="Save"
         onSubmit={(t, l) => void saveTags(current, t, l)}
         onCancel={() => setEditing(false)}

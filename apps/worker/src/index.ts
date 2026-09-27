@@ -5,6 +5,7 @@
  */
 import { AccessError, verifyAccessJwt, type AccessIdentity } from "./access.ts";
 import { registerAuthRoutes } from "./auth.ts";
+import { registerFieldRoutes } from "./fields.ts";
 import { HttpError, json, Router } from "./http.ts";
 import { registerLocationRoutes } from "./locations.ts";
 import { registerPresetRoutes } from "./presets.ts";
@@ -53,6 +54,7 @@ router.on("GET", "/health", async ({ env, identity }) => {
 registerAuthRoutes(router);
 registerPresetRoutes(router);
 registerProjectRoutes(router);
+registerFieldRoutes(router);
 registerLocationRoutes(router);
 registerShotRoutes(router);
 registerViewRoutes(router);

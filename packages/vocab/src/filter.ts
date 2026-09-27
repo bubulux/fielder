@@ -3,6 +3,7 @@
  * (validation of saved views). A filter is a group of rules joined by all/any;
  * groups nest so "A and (B or C)" is expressible.
  */
+import { allSelectOptions, leafFields, type FieldDef } from "./fields.ts";
 import { INT_EXT, LIGHT, SHOT_STATES, WEATHER, type Extra } from "./vocab.ts";
 
 /** "set" = multi-valued enum (the shot holds a list, e.g. light phases). */
@@ -61,7 +62,18 @@ export const OP_LABELS: Record<FilterOp, string> = {
   empty: "is empty", not_empty: "is set",
 };
 
-export const filterField = (id: string): FilterField | undefined => FILTER_FIELDS.find((f) => f.id === id);
+/** Filterable leaves of the extra-field definitions, as `extra.<path>` fields. */
+export function extraFilterFields(defs: readonly FieldDef[]): FilterField[] {
+  return leafFields(defs).map(({ path, label, def }): FilterField => {
+    const id = `extra.${path}`;
+    if (def.type === "select") return { id, label, kind: def.multiple ? "set" : "enum", options: allSelectOptions(def) };
+    if (def.type === "boolean") return { id, label, kind: "enum", options: ["yes", "no"] };
+    return { id, label, kind: def.type === "number" ? "number" : "text" };
+  });
+}
+
+export const filterField = (id: string, extra: readonly FilterField[] = []): FilterField | undefined =>
+  FILTER_FIELDS.find((f) => f.id === id) ?? extra.find((f) => f.id === id);
 
 /** The subset of a shot the evaluator needs (both clients map their Shot type to this). */
 export interface FilterableShot {
@@ -84,14 +96,18 @@ export interface FilterableShot {
 }
 
 function fieldValue(s: FilterableShot, id: string): unknown {
-  if (id.startsWith("extra.")) return s.extra?.[id.slice(6)] ?? null;
+  if (id.startsWith("extra.")) {
+    let v: unknown = s.extra;
+    for (const k of id.slice(6).split(".")) v = v && typeof v === "object" && !Array.isArray(v) ? (v as Record<string, unknown>)[k] : undefined;
+    return typeof v === "boolean" ? (v ? "yes" : "no") : v ?? null;
+  }
   return (s as unknown as Record<string, unknown>)[id] ?? null;
 }
 
 const isBlank = (v: unknown) => v === null || v === undefined || v === "" || (Array.isArray(v) && v.length === 0);
 
-export function evaluateRule(r: FilterRule, s: FilterableShot): boolean {
-  const f = filterField(r.field);
+export function evaluateRule(r: FilterRule, s: FilterableShot, extra: readonly FilterField[] = []): boolean {
+  const f = filterField(r.field, extra);
   if (!f) return true; // unknown field (older client): ignore the rule
   const v = fieldValue(s, r.field);
   if (r.op === "empty") return isBlank(v);
@@ -143,9 +159,9 @@ export function evaluateRule(r: FilterRule, s: FilterableShot): boolean {
   }
 }
 
-export function evaluateFilter(g: FilterGroup, s: FilterableShot): boolean {
+export function evaluateFilter(g: FilterGroup, s: FilterableShot, extra: readonly FilterField[] = []): boolean {
   if (g.rules.length === 0) return true;
-  const results = g.rules.map((r) => (isGroup(r) ? evaluateFilter(r, s) : evaluateRule(r, s)));
+  const results = g.rules.map((r) => (isGroup(r) ? evaluateFilter(r, s, extra) : evaluateRule(r, s, extra)));
   return g.match === "any" ? results.some(Boolean) : results.every(Boolean);
 }
 
@@ -164,9 +180,12 @@ export function validateFilter(v: unknown, depth = 0, counter = { n: 0 }): strin
     if (typeof r !== "object" || r === null) return "rule must be an object";
     const rr = r as Record<string, unknown>;
     if ("rules" in rr) { const err = validateFilter(rr, depth + 1, counter); if (err) return err; continue; }
-    const f = typeof rr.field === "string" ? filterField(rr.field) : undefined;
+    // Extra fields are user-defined and may change; only their path is checked here.
+    const isExtra = typeof rr.field === "string" && /^extra(\.[a-z][a-z0-9_]*)+$/.test(rr.field);
+    const f = typeof rr.field === "string" ? filterField(rr.field) ?? (isExtra ? { id: rr.field, label: rr.field, kind: "text" as const } : undefined) : undefined;
     if (!f) return `unknown field ${String(rr.field)}`;
-    if (!OPS_BY_KIND[f.kind].includes(rr.op as FilterOp)) return `operator ${String(rr.op)} not valid for ${f.label}`;
+    const ops: readonly FilterOp[] = isExtra ? Object.keys(OP_LABELS) as FilterOp[] : OPS_BY_KIND[f.kind];
+    if (!ops.includes(rr.op as FilterOp)) return `operator ${String(rr.op)} not valid for ${f.label}`;
     if (rr.value !== undefined && typeof rr.value !== "string" && typeof rr.value !== "number" && !Array.isArray(rr.value)) return `bad value for ${f.label}`;
     if (Array.isArray(rr.value) && rr.value.length > 200) return `too many values for ${f.label}`;
   }

@@ -4,6 +4,7 @@ import { Image } from "expo-image";
 import { FramedImage, FRAME_MODES, frameModeLabel, type FrameMode } from "../components/FramedImage";
 import { TagsForm } from "../components/TagsForm";
 import { Chip, ChipRow, colors } from "../components/ui";
+import type { FieldDef } from "@fielder/vocab";
 import type { CaptureDraft, LocationEntry, Settings, ShotTags } from "../types";
 
 interface Props {
@@ -12,6 +13,8 @@ interface Props {
   locations: LocationEntry[];
   /** Shots already taken at a location (uploaded + pending). */
   countAt: (locationId: string) => number;
+  /** Extra fields of the active project. */
+  fields: readonly FieldDef[];
   onUpload: (tags: ShotTags, newLocation: LocationEntry | null) => void;
   onDiscard: () => void;
 }
@@ -20,7 +23,7 @@ interface Props {
 let lastTags: Partial<ShotTags> = {};
 
 /** Capture (or finished sequence) -> this form -> Upload or Discard. Every field is optional. */
-export function ShotReview({ draft, settings, locations, countAt, onUpload, onDiscard }: Props) {
+export function ShotReview({ draft, settings, locations, countAt, fields, onUpload, onDiscard }: Props) {
   const { width, height } = useWindowDimensions();
   const portrait = height >= width;
   const [mode, setMode] = useState<FrameMode>("mask");
@@ -53,6 +56,7 @@ export function ShotReview({ draft, settings, locations, countAt, onUpload, onDi
       initial={{ ...lastTags, name: null }}
       locations={locations}
       countAt={countAt}
+      fields={fields}
       submitLabel={draft.photos.length > 1 ? `Upload ${draft.photos.length} photos` : "Upload"}
       cancelLabel="Discard"
       onCancel={onDiscard}

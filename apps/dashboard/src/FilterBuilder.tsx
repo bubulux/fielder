@@ -1,26 +1,26 @@
-import { label, FILTER_FIELDS, filterField, isGroup, OP_LABELS, OPS_BY_KIND, type FilterGroup, type FilterOp, type FilterRule } from "@fielder/vocab";
+import { label, FILTER_FIELDS, filterField, isGroup, OP_LABELS, OPS_BY_KIND, type FilterField, type FilterGroup, type FilterOp, type FilterRule } from "@fielder/vocab";
 import type { Location, Preset, Project } from "./api";
 import { Combobox } from "./Combobox";
 
-interface Ctx { projects: Project[]; locations: Location[]; presets: Preset[] }
+interface Ctx { projects: Project[]; locations: Location[]; presets: Preset[]; /** Filterable extra fields of the current scope. */ extra: readonly FilterField[] }
 
 const needsValue = (op: FilterOp) => op !== "empty" && op !== "not_empty";
 const isList = (op: FilterOp) => op === "in" || op === "not_in";
 const isPair = (op: FilterOp) => op === "between";
 
 function options(fieldId: string, ctx: Ctx): { value: string; label: string }[] {
-  const f = filterField(fieldId);
+  const f = filterField(fieldId, ctx.extra);
   if (!f) return [];
   if (f.kind === "ref") return (f.ref === "location" ? ctx.locations : f.ref === "project" ? ctx.projects : ctx.presets).map((x) => ({ value: x.id, label: x.name }));
-  return (f.options ?? []).map((v) => ({ value: v, label: label(v) }));
+  return (f.options ?? []).map((v) => ({ value: v, label: f.id.startsWith("extra.") ? v : label(v) }));
 }
 
 function defaultRule(): FilterRule { return { field: "state", op: "is", value: "approved" }; }
 
 function RuleRow({ rule, ctx, onChange, onRemove }: { rule: FilterRule; ctx: Ctx; onChange: (r: FilterRule) => void; onRemove: () => void }) {
-  const f = filterField(rule.field) ?? FILTER_FIELDS[0];
+  const f = filterField(rule.field, ctx.extra) ?? FILTER_FIELDS[0];
   const ops = OPS_BY_KIND[f.kind];
-  const setField = (id: string) => { const nf = filterField(id)!; const op = OPS_BY_KIND[nf.kind][0]; onChange({ field: id, op, value: undefined }); };
+  const setField = (id: string) => { const nf = filterField(id, ctx.extra)!; const op = OPS_BY_KIND[nf.kind][0]; onChange({ field: id, op, value: undefined }); };
   const setOp = (op: FilterOp) => onChange({ ...rule, op, value: isList(op) ? (Array.isArray(rule.value) ? rule.value : []) : isPair(op) ? ["", ""] : Array.isArray(rule.value) ? undefined : rule.value });
   const opts = options(f.id, ctx);
   const pair = Array.isArray(rule.value) && rule.value.length === 2 ? rule.value.map(String) : ["", ""];
@@ -55,6 +55,7 @@ function RuleRow({ rule, ctx, onChange, onRemove }: { rule: FilterRule; ctx: Ctx
     <div class="rule">
       <select value={f.id} onChange={(e) => setField((e.target as HTMLSelectElement).value)}>
         {FILTER_FIELDS.map((x) => <option key={x.id} value={x.id}>{x.label}</option>)}
+        {ctx.extra.length > 0 && <optgroup label="Extra fields">{ctx.extra.map((x) => <option key={x.id} value={x.id}>{x.label}</option>)}</optgroup>}
       </select>
       <select value={rule.op} onChange={(e) => setOp((e.target as HTMLSelectElement).value as FilterOp)}>
         {ops.map((o) => <option key={o} value={o}>{OP_LABELS[o]}</option>)}

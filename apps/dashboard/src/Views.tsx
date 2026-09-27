@@ -1,5 +1,5 @@
 import { useMemo, useState } from "preact/hooks";
-import { emptyFilter, evaluateFilter, type FilterGroup } from "@fielder/vocab";
+import { emptyFilter, evaluateFilter, extraFilterFields, type FieldDef, type FilterGroup } from "@fielder/vocab";
 import { deleteView, putView, type Location, type Preset, type Project, type SavedView, type Shot } from "./api";
 import { FilterBuilderResults } from "./ViewsResults";
 import { GroupEditor } from "./FilterBuilder";
@@ -9,6 +9,8 @@ import type { MaskMode } from "./Framed";
 interface Props {
   shots: Shot[];
   projects: Project[];
+  /** Extra fields that can be filtered on. */
+  fieldDefs: readonly FieldDef[];
   locations: Location[];
   presets: Preset[];
   views: SavedView[] | null;
@@ -18,7 +20,7 @@ interface Props {
 }
 
 /** Filter tool: build a query, see matching shots, save it as a named view on the server. */
-export function Views({ shots, projects, locations, presets, views, onViews, mask, onOpen }: Props) {
+export function Views({ shots, projects, fieldDefs, locations, presets, views, onViews, mask, onOpen }: Props) {
   const [current, setCurrent] = useState<SavedView | null>(null);
   const [filter, setFilter] = useState<FilterGroup>(emptyFilter);
   const [name, setName] = useState("");
@@ -26,7 +28,8 @@ export function Views({ shots, projects, locations, presets, views, onViews, mas
   const [error, setError] = useState<string | null>(null);
   const [dirty, setDirty] = useState(false);
 
-  const results = useMemo(() => shots.filter((s) => evaluateFilter(filter, filterable(s))), [shots, filter]);
+  const extra = useMemo(() => extraFilterFields(fieldDefs), [fieldDefs]);
+  const results = useMemo(() => shots.filter((s) => evaluateFilter(filter, filterable(s), extra)), [shots, filter, extra]);
 
   const load = (v: SavedView) => { setCurrent(v); setFilter(v.filter); setName(v.name); setDirty(false); setError(null); };
   const fresh = () => { setCurrent(null); setFilter(emptyFilter()); setName(""); setDirty(false); setError(null); };
@@ -54,7 +57,7 @@ export function Views({ shots, projects, locations, presets, views, onViews, mas
           {!views ? <div class="meta">Loading…</div> : views.length === 0 ? <div class="meta">None yet. Build a filter and save it.</div> : views.map((v) => (
             <button key={v.id} class={`view-item ${current?.id === v.id ? "active" : ""}`} onClick={() => load(v)}>
               <span>{v.name}</span>
-              <span class="meta">{shots.filter((s) => evaluateFilter(v.filter, filterable(s))).length}</span>
+              <span class="meta">{shots.filter((s) => evaluateFilter(v.filter, filterable(s), extra)).length}</span>
             </button>
           ))}
         </div>
@@ -70,7 +73,7 @@ export function Views({ shots, projects, locations, presets, views, onViews, mas
         </div>
       </aside>
       <section class="views-main">
-        <GroupEditor group={filter} ctx={{ projects, locations, presets }} onChange={change} />
+        <GroupEditor group={filter} ctx={{ projects, locations, presets, extra }} onChange={change} />
         <FilterBuilderResults shots={results} total={shots.length} mask={mask} onOpen={onOpen} />
       </section>
     </div>

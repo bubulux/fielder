@@ -8,9 +8,15 @@ export interface ProjectRow {
   created_at: string;
   updated_at: string | null;
   shot_count?: number;
+  /** JSON array of field definition ids, in order. */
+  field_ids?: string;
 }
 
-const LIST_SQL = `SELECT pr.*, count(s.id) AS shot_count FROM projects pr LEFT JOIN shots s ON s.project_id = pr.id`;
+const toApi = (p: ProjectRow) => ({ ...p, field_ids: JSON.parse(p.field_ids ?? "[]") as string[] });
+
+const LIST_SQL = `SELECT pr.*, (SELECT count(*) FROM shots s WHERE s.project_id = pr.id) AS shot_count,
+  (SELECT json_group_array(field_id) FROM (SELECT field_id FROM project_fields WHERE project_id = pr.id ORDER BY position)) AS field_ids
+  FROM projects pr`;
 
 export async function assertProjectExists(env: Ctx["env"], id: string) {
   const p = await env.DB.prepare("SELECT 1 FROM projects WHERE id = ?1").bind(id).first();
@@ -20,8 +26,8 @@ export async function assertProjectExists(env: Ctx["env"], id: string) {
 /** Every shot belongs to one project. Client-owned UUIDs with upsert semantics, like locations. */
 export function registerProjectRoutes(r: Router<Ctx>) {
   r.on("GET", "/api/projects", async ({ env }) => {
-    const { results } = await env.DB.prepare(`${LIST_SQL} GROUP BY pr.id ORDER BY pr.name COLLATE NOCASE`).all<ProjectRow>();
-    return json({ projects: results });
+    const { results } = await env.DB.prepare(`${LIST_SQL} ORDER BY pr.name COLLATE NOCASE`).all<ProjectRow>();
+    return json({ projects: results.map(toApi) });
   });
 
   // Names are unique case-insensitively: a clash answers 409 + existing_id so the client can adopt that project.
@@ -37,8 +43,8 @@ export function registerProjectRoutes(r: Router<Ctx>) {
       `INSERT INTO projects (id, name, notes, updated_at) VALUES (?1, ?2, ?3, ?4)
        ON CONFLICT(id) DO UPDATE SET name = ?2, notes = ?3, updated_at = ?4`,
     ).bind(pid, name, notes, now).run();
-    const row = await env.DB.prepare(`${LIST_SQL} WHERE pr.id = ?1 GROUP BY pr.id`).bind(pid).first<ProjectRow>();
-    return json({ project: row });
+    const row = await env.DB.prepare(`${LIST_SQL} WHERE pr.id = ?1`).bind(pid).first<ProjectRow>();
+    return json({ project: toApi(row!) });
   });
 
   // Only empty projects can be deleted; shots are never removed as a side effect.

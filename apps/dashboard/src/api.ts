@@ -1,5 +1,6 @@
 /** Same-origin API; the Access session cookie is sent automatically. */
-import type { Extra, FilterGroup } from "@fielder/vocab";
+import type { Extra, FieldDef, FieldDefinition, FilterGroup } from "@fielder/vocab";
+export type { FieldDefinition };
 export type ShotState = "unreviewed" | "approved" | "archived";
 
 /** One image of a shot. Rig/lens framing and GPS are per photo (a sequence can change lens). */
@@ -43,7 +44,7 @@ export interface Shot {
   /** Ordered; never empty. */
   photos: Photo[];
 }
-export interface Project { id: string; name: string; notes: string | null; created_at: string; updated_at: string | null; shot_count: number }
+export interface Project { id: string; name: string; notes: string | null; created_at: string; updated_at: string | null; shot_count: number; /** Extra-field definitions the project uses, in order. */ field_ids: string[] }
 export interface Preset {
   id: string;
   name: string;
@@ -116,6 +117,13 @@ export const fetchProjects = () => get<{ projects: Project[] }>("/api/projects")
 export const putProject = (p: { id: string; name: string; notes: string | null }) =>
   send<{ project: Project }>("PUT", `/api/projects/${p.id}`, { name: p.name, notes: p.notes }).then((r) => r.project);
 export const deleteProject = (id: string) => send<{ deleted: string }>("DELETE", `/api/projects/${id}`).then(() => undefined);
+
+export const fetchFields = () => get<{ fields: FieldDefinition[] }>("/api/fields").then((r) => r.fields);
+export const putField = (id: string, definition: FieldDef) => send<{ field: FieldDefinition }>("PUT", `/api/fields/${id}`, { definition }).then((r) => r.field);
+export const deleteField = (id: string) => send<{ deleted: string }>("DELETE", `/api/fields/${id}`).then(() => undefined);
+/** Creates new keys, replaces existing ones; returns the full list. */
+export const importFields = (fields: unknown[]) => send<{ fields: FieldDefinition[]; created: number; updated: number }>("POST", "/api/fields/import", { fields });
+export const putProjectFields = (projectId: string, fieldIds: string[]) => send<{ field_ids: string[] }>("PUT", `/api/projects/${projectId}/fields`, { field_ids: fieldIds }).then((r) => r.field_ids);
 
 export const fetchPresets = () => get<{ presets: Preset[] }>("/api/presets").then((r) => r.presets);
 export const putPreset = (p: Omit<Preset, "created_at" | "updated_at">) =>

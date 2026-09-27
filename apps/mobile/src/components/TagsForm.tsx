@@ -1,8 +1,9 @@
 import { useMemo, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import * as Crypto from "expo-crypto";
-import { INT_EXT, label, LIGHT, WEATHER } from "@fielder/vocab";
+import { INT_EXT, label, LIGHT, WEATHER, type Extra, type FieldDef } from "@fielder/vocab";
 import type { LocationEntry, ShotTags } from "../types";
+import { ExtraEditor } from "./ExtraEditor";
 import { Button, Chip, ChipRow, colors, Hint, Input, Row } from "./ui";
 
 interface Props {
@@ -11,6 +12,8 @@ interface Props {
   locations: LocationEntry[];
   /** Shots already at a location (for the "shot #n" hint). */
   countAt: (locationId: string) => number;
+  /** The project's extra fields (cached definitions). */
+  fields?: readonly FieldDef[];
   submitLabel: string;
   onSubmit: (tags: ShotTags, newLocation: LocationEntry | null) => void;
   cancelLabel?: string;
@@ -19,7 +22,7 @@ interface Props {
 }
 
 /** The scouting-tags form: name, location (pick or add), INT/EXT, light phases + artificial, weather. Everything is optional. */
-export function TagsForm({ initial, locations, countAt, submitLabel, onSubmit, cancelLabel, onCancel, busy }: Props) {
+export function TagsForm({ initial, locations, countAt, fields = [], submitLabel, onSubmit, cancelLabel, onCancel, busy }: Props) {
   const [name, setName] = useState(initial?.name ?? "");
   const [light, setLight] = useState<string[]>(initial?.light ?? []);
   const [artificial, setArtificial] = useState(initial?.artificial ?? false);
@@ -30,6 +33,7 @@ export function TagsForm({ initial, locations, countAt, submitLabel, onSubmit, c
   const [picked, setPicked] = useState<LocationEntry | null>(initialLoc);
   /** Name of a location to create on submit. */
   const [newLoc, setNewLoc] = useState<string | null>(null);
+  const [extra, setExtra] = useState<Extra>(initial?.extra ?? {});
 
   const matches = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -53,7 +57,7 @@ export function TagsForm({ initial, locations, countAt, submitLabel, onSubmit, c
       created = { id: Crypto.randomUUID(), name: newLoc, createdAt: new Date().toISOString(), synced: false };
       id = created.id;
     }
-    onSubmit({ name: name.trim() || null, light, artificial, weather, int_ext: intExt, location_id: id, extra: initial?.extra ?? {} }, created);
+    onSubmit({ name: name.trim() || null, light, artificial, weather, int_ext: intExt, location_id: id, extra }, created);
   };
 
   return (
@@ -101,6 +105,7 @@ export function TagsForm({ initial, locations, countAt, submitLabel, onSubmit, c
       <Row label="Weather">
         <ChipRow>{WEATHER.map((v) => <Chip key={v} label={label(v)} selected={weather === v} onPress={() => setWeather(weather === v ? null : v)} />)}</ChipRow>
       </Row>
+      {fields.length > 0 && <ExtraEditor defs={fields} value={extra} onChange={setExtra} />}
       <View style={{ flexDirection: "row", gap: 12, marginTop: 8 }}>
         {onCancel && <View style={{ flex: 1 }}><Button label={cancelLabel ?? "Cancel"} kind={cancelLabel === "Discard" ? "danger" : "ghost"} onPress={onCancel} /></View>}
         <View style={{ flex: 2 }}><Button label={submitLabel} onPress={submit} disabled={busy} /></View>

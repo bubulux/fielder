@@ -1,4 +1,5 @@
-import { INT_EXT, LIGHT, SHOT_STATES, validateExtra, WEATHER, type Extra } from "@fielder/vocab";
+import { INT_EXT, LIGHT, pruneExtra, SHOT_STATES, validateExtra, validateValues, WEATHER, type Extra } from "@fielder/vocab";
+import { projectFieldDefs } from "./fields.ts";
 import { assertEnum, assertIsoTimestamp, assertNumber, assertString, assertUuid, HttpError, json, readJson, type Router } from "./http.ts";
 import type { Ctx } from "./index.ts";
 import { assertProjectExists } from "./projects.ts";
@@ -148,7 +149,7 @@ function parseTags(m: Record<string, unknown>, all: boolean): Partial<Tags> {
     const extra = blank(m.extra) ? {} : m.extra;
     const err = validateExtra(extra);
     if (err) throw new HttpError(400, err);
-    out.extra = JSON.stringify(extra);
+    out.extra = JSON.stringify(pruneExtra(extra as Extra));
   }
   return out;
 }
@@ -332,6 +333,15 @@ export function registerShotRoutes(r: Router<Ctx>) {
       const pid = assertUuid(b.project_id, "project_id");
       await assertProjectExists(env, pid);
       args.push(pid); sets.push(`project_id = ?${args.length}`);
+    }
+    // Interactive edits are checked against the project's field definitions. Uploads are not:
+    // a phone with stale definitions must never have a capture rejected.
+    if (tags.extra !== undefined) {
+      const cur = await env.DB.prepare("SELECT project_id FROM shots WHERE id = ?1").bind(sid).first<{ project_id: string }>();
+      if (!cur) throw new HttpError(404, "shot not found");
+      const projectId = typeof b.project_id === "string" ? b.project_id.toLowerCase() : cur.project_id;
+      const err = validateValues(await projectFieldDefs(env, projectId), JSON.parse(tags.extra) as Extra);
+      if (err) throw new HttpError(400, err);
     }
     if (sets.length === 0) throw new HttpError(400, "nothing to update");
     if (tags.location_id) await assertLocationExists(env, tags.location_id);

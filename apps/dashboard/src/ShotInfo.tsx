@@ -1,5 +1,5 @@
 import { useEffect, useState } from "preact/hooks";
-import { extraLabel, label, lightLabel } from "@fielder/vocab";
+import { extraSummary, label, lightLabel, type FieldDef } from "@fielder/vocab";
 import { patchShot, type Location, type Photo, type Project, type Shot, type ShotState } from "./api";
 import { Combobox } from "./Combobox";
 import { coords, fovLabel, photoCountLabel, placeLabel, rigDescription, shotTitle, stateColor, when } from "./format";
@@ -17,13 +17,15 @@ interface Props {
   projects: Project[];
   locations: Location[];
   onLocations: (l: Location[]) => void;
+  /** Extra-field definitions of the shot's project. */
+  fields: readonly FieldDef[];
   onUpdated: (s: Shot) => void;
   /** Called after a state change, e.g. so the review queue can move on. */
   onStateChanged?: (s: Shot) => void;
 }
 
 /** Title, scouting + camera facts, review-state buttons and in-place tag editing. Used by the dialog and the review page. */
-export function ShotInfo({ shot, photo, projects, locations, onLocations, onUpdated, onStateChanged }: Props) {
+export function ShotInfo({ shot, photo, projects, locations, onLocations, fields, onUpdated, onStateChanged }: Props) {
   const [editing, setEditing] = useState(false);
   const [movingPin, setMovingPin] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -46,6 +48,7 @@ export function ShotInfo({ shot, photo, projects, locations, onLocations, onUpda
           initial={{ name: shot.name ?? "", light: shot.light, artificial: shot.artificial, weather: shot.weather, int_ext: shot.int_ext, location_id: shot.location_id, extra: shot.extra }}
           locations={locations}
           onLocations={onLocations}
+          fields={fields}
           submitLabel="Save"
           onSubmit={async (tags) => { onUpdated(await patchShot(shot.id, tags)); setEditing(false); }}
           onCancel={() => setEditing(false)}
@@ -63,7 +66,7 @@ export function ShotInfo({ shot, photo, projects, locations, onLocations, onUpda
               <dt>Int/Ext</dt><dd>{label(shot.int_ext) || "—"}</dd>
               <dt>Light</dt><dd>{lightLabel(shot.light, shot.artificial) || "—"}</dd>
               <dt>Weather</dt><dd>{label(shot.weather) || "—"}</dd>
-              <dt>Extra</dt><dd>{extraLabel(shot.extra) || "—"}</dd>
+              <dt>Extra</dt><dd>{extraSummary(fields, shot.extra) || "—"}</dd>
             </dl>
           </section>
           <section>

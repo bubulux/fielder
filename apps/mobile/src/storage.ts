@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import Storage from "expo-sqlite/kv-store";
 import { DEFAULT_SETTINGS } from "./defaults";
+import type { FieldDef, FieldDefinition } from "@fielder/vocab";
 import type { CaptureDraft, LocationEntry, PendingUpload, Preset, ProjectEntry, Settings } from "./types";
 
 export { DEFAULT_SETTINGS };
@@ -16,6 +17,7 @@ const KEYS = {
   projects: "projects.v1",
   activeProjectId: "activeProjectId.v1",
   sequence: "sequence.v1",
+  fields: "fields.v1",
 } as const;
 
 
@@ -74,6 +76,15 @@ export const store = {
   /** The sequence being shot (survives an app restart), or null. */
   loadSequence: (): CaptureDraft | null => { try { const raw = Storage.getItemSync(KEYS.sequence); return raw ? (JSON.parse(raw) as CaptureDraft) : null; } catch { return null; } },
   saveSequence: (d: CaptureDraft | null) => (d ? write(KEYS.sequence, d) : Storage.removeItemSync(KEYS.sequence)),
+
+  loadFields: (): FieldDefinition[] => readArray<FieldDefinition>(KEYS.fields),
+  saveFields: (f: FieldDefinition[]) => write(KEYS.fields, f),
+  /** Extra-field definitions a project uses, in its order (cached, works offline). */
+  fieldsForProject: (projectId: string | null | undefined): FieldDef[] => {
+    const ids = readArray<ProjectEntry>(KEYS.projects).find((p) => p.id === projectId)?.fieldIds ?? [];
+    const all = readArray<FieldDefinition>(KEYS.fields);
+    return ids.map((id) => all.find((f) => f.id === id)?.definition).filter((d): d is FieldDef => !!d);
+  },
 
   loadActiveProjectId: (): string | null => Storage.getItemSync(KEYS.activeProjectId),
   saveActiveProjectId: (id: string | null) =>

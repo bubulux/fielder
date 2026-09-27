@@ -2,7 +2,7 @@ import { File } from "expo-file-system";
 import { getToken, setToken } from "./auth";
 import { API_URL, isConfigured } from "./config";
 import { log } from "./log";
-import type { Extra } from "@fielder/vocab";
+import type { Extra, FieldDefinition } from "@fielder/vocab";
 import type { LocationEntry, Preset, ProjectEntry, ShotMetadata, ShotTags } from "./types";
 
 export class ApiError extends Error {
@@ -121,8 +121,8 @@ export interface Shot {
 export const cover = (s: Shot): Photo => s.photos[0];
 
 /** Locations and projects share this shape as far as the app is concerned. */
-interface ServerNamed { id: string; name: string; created_at: string }
-const namedFromServer = (l: ServerNamed): LocationEntry & ProjectEntry => ({ id: l.id, name: l.name, createdAt: l.created_at, synced: true });
+interface ServerNamed { id: string; name: string; created_at: string; field_ids?: string[] }
+const namedFromServer = (l: ServerNamed): LocationEntry => ({ id: l.id, name: l.name, createdAt: l.created_at, synced: true });
 
 type Cursor = { before: string; before_id: string } | null;
 interface ShotsPage { shots: Shot[]; next: Cursor }
@@ -164,9 +164,11 @@ export const api = {
       body: JSON.stringify({ name: l.name }),
     }),
 
+  listFields: () => call<{ fields: FieldDefinition[] }>("/api/fields").then((r) => r.fields),
+
   listProjects: async (): Promise<ProjectEntry[]> => {
     const r = await call<{ projects: ServerNamed[] }>("/api/projects");
-    return r.projects.map(namedFromServer);
+    return r.projects.map((p): ProjectEntry => ({ ...namedFromServer(p), fieldIds: p.field_ids ?? [] }));
   },
   /** Upsert; a 409 means another project already has this name (ApiError.body.existing_id). */
   putProject: (p: ProjectEntry) =>

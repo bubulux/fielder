@@ -67,6 +67,7 @@ export function flush(): Promise<FlushResult> {
       const active = store.loadActiveProjectId();
       if (active && projects.remap[active]) store.saveActiveProjectId(projects.remap[active]);
     }
+    try { store.saveFields(await api.listFields()); } catch { /* offline: keep the cached definitions */ }
     const locations = await syncLocations(store.loadLocations());
     if (locations) {
       store.saveLocations(locations.items);

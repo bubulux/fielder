@@ -196,3 +196,14 @@ main { min-height: 0; position: relative; }
 .pos-pin div { width: 22px; height: 22px; border-radius: 50%; background: var(--accent); border: 3px solid #000; box-shadow: 0 0 0 2px var(--accent); cursor: grab; }
 .check { display: flex; align-items: center; gap: 6px; cursor: pointer; user-select: none; }
 .link { background: none; border: 0; padding: 0; color: var(--accent); cursor: pointer; font: inherit; font-size: 13px; text-decoration: underline; }
+
+/* Extra fields */
+.extra-editor { display: flex; flex-direction: column; gap: 10px; }
+.extra-group { border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px 12px; margin: 0; }
+.extra-group legend { font-size: 12px; color: var(--dim); padding: 0 4px; }
+.extra-editor label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--dim); }
+.extra-editor input { background: var(--bg); color: var(--text); border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; font: inherit; font-size: 14px; }
+textarea.json { width: 100%; font: 12px/1.45 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; background: var(--bg); color: var(--text); border: 1px solid var(--border); border-radius: 8px; padding: 10px; resize: vertical; }
+.field-edit { max-width: 1100px; }
+.field-edit-cols { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); gap: 16px; }
+@media (max-width: 900px) { .field-edit-cols { grid-template-columns: 1fr; } }

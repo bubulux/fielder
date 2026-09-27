@@ -8,6 +8,7 @@ import { TagsForm } from "../components/TagsForm";
 import { PhotoStrip } from "../components/PhotoStrip";
 import { PositionPicker } from "../components/PositionPicker";
 import { ensureLocation } from "../namedSync";
+import { store } from "../storage";
 import type { LocationEntry, ShotTags } from "../types";
 import type { Settings } from "../types";
 
@@ -125,6 +126,7 @@ export function ShotDetail({ shot, onClose, settings, mode: initialMode, onDelet
           initial={{ name: shot.name, light: shot.light, artificial: shot.artificial, weather: shot.weather, int_ext: shot.int_ext, location_id: shot.location_id, extra: shot.extra }}
           locations={locations}
           countAt={countAt}
+          fields={store.fieldsForProject(shot.project_id)}
           submitLabel="Save"
           onSubmit={(t, l) => void saveTags(t, l)}
           onCancel={() => setEditing(false)}

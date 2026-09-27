@@ -103,6 +103,8 @@ export interface ProjectEntry {
   id: string;
   name: string;
   createdAt: string;
+  /** Extra-field definitions the project uses, in order (see /vocab fields.ts). */
+  fieldIds?: string[];
   /** false until the Worker has acknowledged the PUT. */
   synced: boolean;
 }

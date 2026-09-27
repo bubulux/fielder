@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from "preact/hooks";
-import { SHOT_STATES } from "@fielder/vocab";
-import { deleteShot, fetchAllShots, fetchLocations, fetchPresets, fetchProjects, fetchViews, type Location, type Preset, type Project, type SavedView, type Shot, type ShotState } from "./api";
+import { SHOT_STATES, type FieldDef } from "@fielder/vocab";
+import { deleteShot, fetchAllShots, fetchFields, fetchLocations, fetchPresets, fetchProjects, fetchViews, type FieldDefinition, type Location, type Preset, type Project, type SavedView, type Shot, type ShotState } from "./api";
 import { cover, isFrameMode, photoCountLabel, placeLabel, rigLabel, shotTitle, tagsLabel, when } from "./format";
+import { Fields } from "./Fields";
 import { Framed, type MaskMode } from "./Framed";
 import { Locations } from "./Locations";
 import { MapView } from "./MapView";
@@ -12,8 +13,8 @@ import { Rigs } from "./Rigs";
 import { Badge, ShotDetail } from "./ShotDetail";
 import { Views } from "./Views";
 
-type Tab = "gallery" | "review" | "map" | "views" | "projects" | "rigs" | "locations";
-const TABS: Tab[] = ["gallery", "review", "map", "views", "projects", "rigs", "locations"];
+type Tab = "gallery" | "review" | "map" | "views" | "projects" | "fields" | "rigs" | "locations";
+const TABS: Tab[] = ["gallery", "review", "map", "views", "projects", "fields", "rigs", "locations"];
 type Filter = ShotState | "all";
 type Layout = "grid" | "list";
 
@@ -30,6 +31,7 @@ export function App() {
   const [presets, setPresets] = useState<Preset[] | null>(null);
   const [locations, setLocations] = useState<Location[] | null>(null);
   const [views, setViews] = useState<SavedView[] | null>(null);
+  const [fields, setFields] = useState<FieldDefinition[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [open, setOpen] = useState<Shot | null>(null);
   const [focus, setFocus] = useState<Shot | null>(null);
@@ -51,7 +53,7 @@ export function App() {
   const toggleSelected = (id: string) => setSelected((cur) => { const n = new Set(cur); if (n.has(id)) n.delete(id); else n.add(id); return n; });
 
   const refreshCounts = () => { void fetchLocations().then(setLocations).catch(() => {}); void fetchProjects().then(setProjects).catch(() => {}); };
-  const load = () => Promise.all([fetchAllShots().then(setShots), fetchProjects().then(setProjects), fetchPresets().then(setPresets), fetchLocations().then(setLocations), fetchViews().then(setViews)]).catch((e: Error) => setError(e.message));
+  const load = () => Promise.all([fetchAllShots().then(setShots), fetchProjects().then(setProjects), fetchPresets().then(setPresets), fetchLocations().then(setLocations), fetchViews().then(setViews), fetchFields().then(setFields)]).catch((e: Error) => setError(e.message));
   useEffect(() => { void load(); }, []);
   useEffect(() => { location.hash = tab === "gallery" ? "" : tab; }, [tab]);
 
@@ -63,6 +65,13 @@ export function App() {
   const counts = useMemo(() => Object.fromEntries((["all", ...SHOT_STATES] as Filter[]).map((f) => [f, projectShots.filter((s) => f === "all" || s.state === f).length])), [projectShots]);
   const unreviewed = counts.unreviewed ?? 0;
   const showProjectColumn = active === ALL_PROJECTS;
+  /** Extra-field definitions a project uses, in its order. */
+  const fieldsOf = (projectId: string): FieldDef[] => {
+    const ids = projects?.find((p) => p.id === projectId)?.field_ids ?? [];
+    return ids.map((id) => fields?.find((f) => f.id === id)?.definition).filter((d): d is FieldDef => !!d);
+  };
+  /** For filters: the active project's fields, or every definition when browsing all projects. */
+  const filterDefs = useMemo(() => (active === ALL_PROJECTS ? (fields ?? []).map((f) => f.definition) : active ? fieldsOf(active) : []), [active, fields, projects]);
 
   const updated = (s: Shot) => { setShots((cur) => (cur ?? []).map((x) => (x.id === s.id ? s : x))); setOpen((cur) => (cur?.id === s.id ? s : cur)); refreshCounts(); };
   const deleted = (id: string) => { setShots((cur) => (cur ?? []).filter((x) => x.id !== id)); setSelected((cur) => { const n = new Set(cur); n.delete(id); return n; }); refreshCounts(); };
@@ -118,7 +127,7 @@ export function App() {
       <main>
         {error && <div class="status">Could not load: {error}</div>}
         {!error && !loaded && <div class="status">Loading…</div>}
-        {loaded && !active && <Projects gate projects={projects} onChange={setProjects} active={null} onActivate={activate} />}
+        {loaded && !active && <Projects gate projects={projects} onChange={setProjects} fields={fields ?? []} active={null} onActivate={activate} />}
         {loaded && active && tab === "gallery" && (
           visible.length === 0 ? <div class="status">{filter === "all" ? `No shots in ${activeName} yet. Capture one with the phone app.` : `No ${filter} shots.`}</div>
           : layout === "list" ? (
@@ -172,10 +181,11 @@ export function App() {
             </div>
           )
         )}
-        {loaded && active && tab === "review" && <Review shots={projectShots} mask={mask} projects={projects} locations={locations ?? []} onLocations={setLocations} onUpdated={updated} onDeleted={deleted} />}
+        {loaded && active && tab === "review" && <Review shots={projectShots} mask={mask} projects={projects} fieldsOf={fieldsOf} locations={locations ?? []} onLocations={setLocations} onUpdated={updated} onDeleted={deleted} />}
         {loaded && active && tab === "map" && <MapView shots={visible} onOpen={(s) => openShot(s, visible)} focus={focus} mask={mask} />}
-        {loaded && active && tab === "views" && <Views shots={projectShots} projects={projects} locations={locations ?? []} presets={presets ?? []} views={views} onViews={setViews} mask={mask} onOpen={openShot} />}
-        {loaded && active && tab === "projects" && <Projects projects={projects} onChange={setProjects} active={active} onActivate={(p) => { activate(p); setTab("gallery"); }} />}
+        {loaded && active && tab === "views" && <Views shots={projectShots} projects={projects} fieldDefs={filterDefs} locations={locations ?? []} presets={presets ?? []} views={views} onViews={setViews} mask={mask} onOpen={openShot} />}
+        {loaded && active && tab === "projects" && <Projects projects={projects} onChange={setProjects} fields={fields ?? []} active={active} onActivate={(p) => { activate(p); setTab("gallery"); }} />}
+        {loaded && active && tab === "fields" && <Fields fields={fields} onChange={setFields} projects={projects ?? []} />}
         {loaded && active && tab === "rigs" && <Rigs presets={presets} shots={shots ?? []} onChange={setPresets} />}
         {loaded && active && tab === "locations" && <Locations locations={locations} onChange={setLocations} onShotsChanged={() => void fetchAllShots().then(setShots).catch(() => {})} />}
       </main>
@@ -186,6 +196,7 @@ export function App() {
           mode={dialogMode}
           onMode={setDialogMode}
           projects={projects ?? []}
+          fields={fieldsOf(open.project_id)}
           locations={locations ?? []}
           onLocations={setLocations}
           onUpdated={updated}

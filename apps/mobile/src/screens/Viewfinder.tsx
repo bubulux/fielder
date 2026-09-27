@@ -401,7 +401,7 @@ export function Viewfinder({ settings, onSettings, active: tabActive, project, s
         <Ctl label="Uploads" value={pendingCount ? `${pendingCount}` : "✓"} onPress={() => void retryUploads()} />
       </View>
 
-      <ShotReview draft={draft} settings={settings} locations={locations} countAt={countAt} onUpload={(t, l) => void uploadDraft(t, l)} onDiscard={discardDraft} />
+      <ShotReview draft={draft} settings={settings} locations={locations} countAt={countAt} fields={draft ? store.fieldsForProject(project?.id) : []} onUpload={(t, l) => void uploadDraft(t, l)} onDiscard={discardDraft} />
       <PresetSheet visible={sheet === "rig"} onClose={() => setSheet(null)} presets={presets} activeId={active?.id ?? null}
         onChange={(p, id) => { setPresets(p); setActiveId(id); }} />
       <LensSheet visible={sheet === "lens"} onClose={() => setSheet(null)} lensMm={lensMm} onChange={setLensMm} range={lensRange} />

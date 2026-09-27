@@ -1,12 +1,15 @@
 import { useState } from "preact/hooks";
-import { INT_EXT, label, LIGHT, WEATHER } from "@fielder/vocab";
+import { INT_EXT, label, LIGHT, WEATHER, type Extra, type FieldDef } from "@fielder/vocab";
 import { existingIdOf, putLocation, type Location, type ShotTags } from "./api";
 import { Combobox } from "./Combobox";
+import { ExtraEditor } from "./ExtraEditor";
 
 interface Props {
   initial?: Partial<ShotTags>;
   locations: Location[];
   onLocations: (l: Location[]) => void;
+  /** The project's extra fields. */
+  fields: readonly FieldDef[];
   submitLabel: string;
   onSubmit: (tags: ShotTags) => Promise<void>;
   onCancel: () => void;
@@ -16,7 +19,7 @@ const NEW = "__new__";
 const vocab = (list: readonly string[]) => list.map((v) => ({ value: v, label: label(v) }));
 
 /** Scouting tags: name, location (existing or new), INT/EXT, light phases + artificial, weather. All optional. */
-export function TagsForm({ initial, locations, onLocations, submitLabel, onSubmit, onCancel }: Props) {
+export function TagsForm({ initial, locations, onLocations, fields, submitLabel, onSubmit, onCancel }: Props) {
   const [name, setName] = useState(initial?.name ?? "");
   const [light, setLight] = useState<string[]>(initial?.light ?? []);
   const [artificial, setArtificial] = useState(initial?.artificial ?? false);
@@ -25,6 +28,7 @@ export function TagsForm({ initial, locations, onLocations, submitLabel, onSubmi
   const [locationId, setLocationId] = useState<string | null>(initial?.location_id || null);
   /** Typed into the location box and not existing yet; created on submit. */
   const [newName, setNewName] = useState<string | null>(null);
+  const [extra, setExtra] = useState<Extra>(initial?.extra ?? {});
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -51,7 +55,7 @@ export function TagsForm({ initial, locations, onLocations, submitLabel, onSubmi
           id = existing;
         }
       }
-      await onSubmit({ name: name.trim() || null, light, artificial, weather, int_ext: intExt, location_id: id, extra: initial?.extra ?? {} });
+      await onSubmit({ name: name.trim() || null, light, artificial, weather, int_ext: intExt, location_id: id, extra });
     } catch (err) { setError((err as Error).message); } finally { setBusy(false); }
   }
 
@@ -74,6 +78,7 @@ export function TagsForm({ initial, locations, onLocations, submitLabel, onSubmi
           <button type="button" class={`chip ${artificial ? "active" : ""}`} onClick={() => setArtificial(!artificial)}>Artificial</button>
         </div>
       </div>
+      {fields.length > 0 && <ExtraEditor defs={fields} value={extra} onChange={setExtra} />}
       {error && <div class="error">{error}</div>}
       <div class="actions">
         <button type="button" class="btn" onClick={onCancel}>Cancel</button>

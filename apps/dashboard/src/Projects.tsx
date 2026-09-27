@@ -1,5 +1,5 @@
 import { useState } from "preact/hooks";
-import { deleteProject, existingIdOf, putProject, type Project } from "./api";
+import { deleteProject, existingIdOf, putProject, putProjectFields, type FieldDefinition, type Project } from "./api";
 
 /** The project the dashboard works on, or every project at once (the global explorer). */
 export type ActiveProject = string | "all";
@@ -8,6 +8,8 @@ export const ALL_PROJECTS = "all";
 interface Props {
   projects: Project[] | null;
   onChange: (p: Project[]) => void;
+  /** All extra-field definitions, to pick the ones a project uses. */
+  fields: FieldDefinition[];
   active: ActiveProject | null;
   onActivate: (id: ActiveProject) => void;
   /** First run: no project chosen yet, so this page is all the dashboard shows. */
@@ -17,8 +19,8 @@ interface Props {
 const sortByName = (list: Project[]) => [...list].sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" }));
 
 /** Projects table: pick the one to work on, create, rename, delete (empty projects only). */
-export function Projects({ projects, onChange, active, onActivate, gate }: Props) {
-  const [edit, setEdit] = useState<{ id: string; name: string; notes: string; isNew: boolean } | null>(null);
+export function Projects({ projects, onChange, fields, active, onActivate, gate }: Props) {
+  const [edit, setEdit] = useState<{ id: string; name: string; notes: string; fieldIds: string[]; isNew: boolean } | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   async function save(e: Event) {
@@ -26,6 +28,7 @@ export function Projects({ projects, onChange, active, onActivate, gate }: Props
     if (!edit || !edit.name.trim()) return;
     try {
       const saved = await putProject({ id: edit.id, name: edit.name.trim(), notes: edit.notes.trim() || null });
+      saved.field_ids = await putProjectFields(saved.id, edit.fieldIds);
       onChange(sortByName([...(projects ?? []).filter((p) => p.id !== saved.id), saved]));
       if (edit.isNew) onActivate(saved.id);
       setEdit(null); setError(null);
@@ -42,7 +45,7 @@ export function Projects({ projects, onChange, active, onActivate, gate }: Props
       if (active === p.id) onActivate(ALL_PROJECTS);
     } catch (e) { alert(`Delete failed: ${(e as Error).message}`); }
   }
-  const startNew = () => setEdit({ id: crypto.randomUUID(), name: "", notes: "", isNew: true });
+  const startNew = () => setEdit({ id: crypto.randomUUID(), name: "", notes: "", fieldIds: [], isNew: true });
 
   if (!projects) return <div class="status">Loading…</div>;
   const form = edit && (
@@ -50,6 +53,15 @@ export function Projects({ projects, onChange, active, onActivate, gate }: Props
       <h3>{edit.isNew ? "New project" : "Edit project"}</h3>
       <label>Name<input value={edit.name} autoFocus onInput={(e) => setEdit({ ...edit, name: (e.target as HTMLInputElement).value })} placeholder="e.g. Short film 'Nachtbus'" /></label>
       <label>Notes (optional)<textarea rows={3} value={edit.notes} onInput={(e) => setEdit({ ...edit, notes: (e.target as HTMLTextAreaElement).value })} /></label>
+      <div class="field">
+        <span class="field-label">Extra fields for this project (in the order ticked){fields.length === 0 ? " · none defined yet, see the Fields tab" : ""}</span>
+        <div class="chips">
+          {fields.map((f) => {
+            const on = edit.fieldIds.includes(f.id);
+            return <button type="button" key={f.id} class={`chip ${on ? "active" : ""}`} onClick={() => setEdit({ ...edit, fieldIds: on ? edit.fieldIds.filter((x) => x !== f.id) : [...edit.fieldIds, f.id] })}>{f.definition.label}</button>;
+          })}
+        </div>
+      </div>
       {error && <div class="error">{error}</div>}
       <div class="actions" style="justify-content:flex-start">
         <button type="submit" class="btn primary" disabled={!edit.name.trim()}>{edit.isNew ? "Create and open" : "Save"}</button>
@@ -76,7 +88,7 @@ export function Projects({ projects, onChange, active, onActivate, gate }: Props
               <td>{p.shot_count}</td>
               <td class="actions">
                 {active === p.id ? <span class="meta">active</span> : <button class="btn primary" onClick={() => onActivate(p.id)}>Open</button>}
-                {!gate && <button class="btn" onClick={() => setEdit({ id: p.id, name: p.name, notes: p.notes ?? "", isNew: false })}>Edit</button>}
+                {!gate && <button class="btn" onClick={() => setEdit({ id: p.id, name: p.name, notes: p.notes ?? "", fieldIds: p.field_ids, isNew: false })}>Edit</button>}
                 {!gate && <button class="btn danger" disabled={p.shot_count > 0} title={p.shot_count > 0 ? "Only empty projects can be deleted" : undefined} onClick={() => void remove(p)}>Delete</button>}
               </td>
             </tr>
