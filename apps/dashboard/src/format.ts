@@ -76,9 +76,12 @@ export interface FrameLayout {
 export function frameLayout(f: FrameGeometry, mode: FrameMode, photoAspect: number): FrameLayout {
   const full = { left: 0, top: 0, width: 100, height: 100 };
   if (mode === "off") return { img: full, frame: null, shrunk: false };
-  if (mode === "fit" && f.width_fraction <= 1 && f.height_fraction <= 1) {
+  if (mode === "fit") {
+    // The container is the rig frame. Where the rig saw more than the phone (fraction > 1) the
+    // photo covers less than the container and the rest stays black, like the live view.
     const w = 100 / f.width_fraction, h = 100 / f.height_fraction;
-    return { img: { left: (100 - w) / 2, top: (100 - h) / 2, width: w, height: h }, frame: null, shrunk: false, aspect: photoAspect * (f.width_fraction / f.height_fraction) };
+    const shrunk = f.width_fraction > 1 || f.height_fraction > 1;
+    return { img: { left: (100 - w) / 2, top: (100 - h) / 2, width: w, height: h }, frame: null, shrunk, aspect: photoAspect * (f.width_fraction / f.height_fraction) };
   }
   const scale = 1 / Math.max(1, f.width_fraction, f.height_fraction);
   const img = scale < 1 ? { left: (1 - scale) * 50, top: (1 - scale) * 50, width: scale * 100, height: scale * 100 } : full;

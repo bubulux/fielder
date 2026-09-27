@@ -1,55 +1,66 @@
-import { useMemo, useState } from "preact/hooks";
-import { deleteShot, patchShot, type Shot, type ShotState } from "./api";
-import { cover, photoCountLabel, placeLabel, rigLabel, shotTitle, tagsLabel, when } from "./format";
+import { useEffect, useMemo, useState } from "preact/hooks";
+import { deleteShot, type Location, type Project, type Shot } from "./api";
 import { Framed, type MaskMode } from "./Framed";
-import { ModeSwitch } from "./ModeSwitch";
-import { Badge } from "./ShotDetail";
+import { Filmstrip, isTyping, ShotInfo, usePhotoKeys } from "./ShotInfo";
 
 interface Props {
   shots: Shot[];
+  /** The global view mode (header switch). */
   mask: MaskMode;
+  projects: Project[];
+  locations: Location[];
+  onLocations: (l: Location[]) => void;
   onUpdated: (s: Shot) => void;
   onDeleted: (id: string) => void;
-  onOpen: (s: Shot, list: Shot[]) => void;
 }
 
-/** Unreviewed shots one at a time, oldest first. */
-export function Review({ shots, mask, onUpdated, onDeleted, onOpen }: Props) {
-  const [mode, setMode] = useState<MaskMode>(mask);
-  const [skipped, setSkipped] = useState<string[]>([]);
-  const [busy, setBusy] = useState(false);
+/** Unreviewed shots one at a time, oldest first. ←/→ step through the queue; details are edited in place. */
+export function Review({ shots, mask, projects, locations, onLocations, onUpdated, onDeleted }: Props) {
   const queue = useMemo(() => shots.filter((s) => s.state === "unreviewed").sort((a, b) => a.captured_at.localeCompare(b.captured_at)), [shots]);
-  const current = queue.find((s) => !skipped.includes(s.id)) ?? queue[0];
+  /** Follow the shot, not the position, so edits don't jump; fall back to the same position when it leaves the queue. */
+  const [currentId, setCurrentId] = useState<string | null>(null);
+  const [lastIndex, setLastIndex] = useState(0);
+  const [photoIndex, setPhotoIndex] = useState(0);
+  const found = queue.findIndex((s) => s.id === currentId);
+  const index = found >= 0 ? found : Math.min(lastIndex, queue.length - 1);
+  const current = index >= 0 ? queue[index] : undefined;
+  useEffect(() => { if (current && current.id !== currentId) setCurrentId(current.id); setLastIndex(Math.max(0, index)); }, [current?.id, index]);
+  useEffect(() => { setPhotoIndex(0); }, [current?.id]);
 
-  async function setState(shot: Shot, state: ShotState) {
-    setBusy(true);
-    try { onUpdated(await patchShot(shot.id, { state })); } catch (e) { alert(`Update failed: ${(e as Error).message}`); } finally { setBusy(false); }
-  }
+  const go = (delta: number) => { const n = queue[index + delta]; if (n) setCurrentId(n.id); };
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (isTyping(e) || document.querySelector(".detail-backdrop")) return;
+      if (e.key === "ArrowLeft") { e.preventDefault(); go(-1); }
+      else if (e.key === "ArrowRight") { e.preventDefault(); go(1); }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  });
+  usePhotoKeys(current?.photos.length ?? 0, photoIndex, setPhotoIndex);
+
   async function remove(shot: Shot) {
     if (!confirm("Delete this shot permanently? Archiving keeps it.")) return;
     try { await deleteShot(shot.id); onDeleted(shot.id); } catch (e) { alert(`Delete failed: ${(e as Error).message}`); }
   }
 
   if (!current) return <div class="status">Nothing to review.</div>;
+  const photo = current.photos[Math.min(photoIndex, current.photos.length - 1)];
   return (
     <div class="review">
-      <div class="review-head"><strong>{queue.length} to review</strong><ModeSwitch value={mode} onChange={setMode} /></div>
+      <div class="review-head">
+        <button class="btn outline" disabled={index === 0} onClick={() => go(-1)} title="Previous (←)">‹ Prev</button>
+        <strong>{index + 1} / {queue.length} to review</strong>
+        <button class="btn outline" disabled={index === queue.length - 1} onClick={() => go(1)} title="Next (→)">Next ›</button>
+      </div>
       <div class="review-body">
-        <Framed photo={cover(current)} mode={mode} className="review-img" />
+        <div class="review-stage">
+          <Framed photo={photo} mode={mask} maxHeight="72vh" />
+          <Filmstrip shot={current} index={photoIndex} onPick={setPhotoIndex} />
+        </div>
         <div class="side">
-          <div>
-            <div style="font-weight:600;font-size:16px">{shotTitle(current)} <Badge shot={current} /></div>
-            <div>{placeLabel(current) || "no location"}</div>
-            <div class="meta">{tagsLabel(current) || "no tags"}</div>
-            <div class="meta">{[rigLabel(cover(current)), when(current.captured_at), photoCountLabel(current)].filter(Boolean).join(" · ")}</div>
-          </div>
-          <div class="actions wrap" style="justify-content:flex-start">
-            <button class="btn primary" disabled={busy} onClick={() => void setState(current, "approved")}>Approve</button>
-            <button class="btn" disabled={busy} onClick={() => void setState(current, "archived")}>Archive</button>
-            <button class="btn" onClick={() => onOpen(current, queue)}>Details / edit</button>
-            {queue.length > 1 && <button class="btn" onClick={() => setSkipped((s) => [...s, current.id])}>Skip</button>}
-            <button class="btn danger" onClick={() => void remove(current)}>Delete</button>
-          </div>
+          <ShotInfo shot={current} photo={photo} projects={projects} locations={locations} onLocations={onLocations} onUpdated={onUpdated} />
+          <div class="btn-row"><button class="btn danger" onClick={() => void remove(current)}>Delete</button></div>
         </div>
       </div>
     </div>

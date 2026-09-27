@@ -24,9 +24,9 @@ interface Props {
 
 /** A photo with the rig frame re-applied from its geometry (same layout rules as the live view). */
 export function FramedImage({ source, aspect, frame: f, width, settings, mode, style }: Props) {
-  // Fit = crop to the frame. Only possible when the frame lies inside the photo; a rig that saw
-  // more than the phone falls back to the shrunk photo with a dashed frame (nothing more to show).
-  const fit = mode === "fit" && !!f && f.width <= 1 && f.height <= 1;
+  // Fit = the box is the rig frame. Where the rig saw more than the phone (fraction > 1) the photo
+  // covers less than the box and the rest stays black, like the live view.
+  const fit = mode === "fit" && !!f;
   const box = fit && f
     ? { width, height: width / (aspect * (f.width / f.height)) }
     : { width, height: width / aspect };

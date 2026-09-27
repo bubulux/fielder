@@ -76,7 +76,7 @@ export function Prep({ settings, data }: Props) {
   const availH = portrait ? height - barH - NAV - 60 - insets.top : height - barH - 60;
   const photo = cover(shot);
   const f = frameOf(photo);
-  const aspect = mode === "fit" && f && f.width <= 1 && f.height <= 1 ? imageAspect(photo) * (f.width / f.height) : imageAspect(photo);
+  const aspect = mode === "fit" && f ? imageAspect(photo) * (f.width / f.height) : imageAspect(photo);
   const imgW = Math.max(100, Math.min(availW, availH * aspect));
 
   const navBtn = (dir: -1 | 1) => {

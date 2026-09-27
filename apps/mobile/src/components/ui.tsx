@@ -9,6 +9,8 @@ export const colors = {
   dim: "#9A9AA5",
   accent: "#FFB300",
   danger: "#FF3B30",
+  ok: "#2ECC71",
+  btn: "#2C2C34",
 };
 
 export function Sheet({ visible, title, onClose, children }: { visible: boolean; title: string; onClose: () => void; children: ReactNode }) {
@@ -51,10 +53,11 @@ export function Input(props: TextInputProps) {
   return <TextInput placeholderTextColor={colors.dim} {...props} style={[s.input, props.style]} />;
 }
 
-export function Button({ label, onPress, kind = "primary", disabled }: { label: string; onPress: () => void; kind?: "primary" | "ghost" | "danger"; disabled?: boolean }) {
+/** primary = accent, approve = green, archive = grey, ghost = outlined, danger = red outline. */
+export function Button({ label, onPress, kind = "primary", disabled }: { label: string; onPress: () => void; kind?: "primary" | "approve" | "archive" | "ghost" | "danger"; disabled?: boolean }) {
   return (
-    <Pressable onPress={onPress} disabled={disabled} style={[s.btn, kind === "ghost" && s.btnGhost, kind === "danger" && s.btnDanger, disabled && { opacity: 0.4 }]}>
-      <Text style={[s.btnText, kind !== "primary" && { color: kind === "danger" ? colors.danger : colors.text }]}>{label}</Text>
+    <Pressable onPress={onPress} disabled={disabled} style={[s.btn, kind === "ghost" && s.btnGhost, kind === "danger" && s.btnDanger, kind === "approve" && s.btnApprove, kind === "archive" && s.btnArchive, disabled && { opacity: 0.4 }]}>
+      <Text style={[s.btnText, kind === "danger" ? { color: colors.danger } : (kind === "ghost" || kind === "archive") ? { color: colors.text } : null]}>{label}</Text>
     </Pressable>
   );
 }
@@ -89,6 +92,8 @@ const s = StyleSheet.create({
   btn: { backgroundColor: colors.accent, paddingVertical: 12, borderRadius: 10, alignItems: "center", marginTop: 12 },
   btnGhost: { backgroundColor: "transparent", borderWidth: 1, borderColor: colors.border },
   btnDanger: { backgroundColor: "transparent", borderWidth: 1, borderColor: colors.danger },
+  btnApprove: { backgroundColor: colors.ok },
+  btnArchive: { backgroundColor: colors.btn },
   btnText: { color: "#000", fontSize: 16, fontWeight: "600" },
   hint: { color: colors.dim, fontSize: 12, marginTop: 6, lineHeight: 16 },
   badge: { alignSelf: "flex-start", borderWidth: 1, borderRadius: 999, paddingHorizontal: 7, paddingVertical: 1 },

@@ -1,5 +1,6 @@
 import { label, FILTER_FIELDS, filterField, isGroup, OP_LABELS, OPS_BY_KIND, type FilterGroup, type FilterOp, type FilterRule } from "@fielder/vocab";
 import type { Location, Preset, Project } from "./api";
+import { Combobox } from "./Combobox";
 
 interface Ctx { projects: Project[]; locations: Location[]; presets: Preset[] }
 
@@ -37,12 +38,7 @@ function RuleRow({ rule, ctx, onChange, onRemove }: { rule: FilterRule; ctx: Ctx
         </div>
       );
     } else if (f.kind === "enum" || f.kind === "ref") {
-      valueEditor = (
-        <select value={String(rule.value ?? "")} onChange={(e) => onChange({ ...rule, value: (e.target as HTMLSelectElement).value })}>
-          <option value="">— choose —</option>
-          {opts.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-        </select>
-      );
+      valueEditor = <Combobox options={opts} value={rule.value == null || rule.value === "" ? null : String(rule.value)} onChange={(v) => onChange({ ...rule, value: v ?? "" })} placeholder="— choose —" />;
     } else if (f.kind === "text") {
       valueEditor = <input value={String(rule.value ?? "")} onInput={(e) => onChange({ ...rule, value: (e.target as HTMLInputElement).value })} placeholder="text" />;
     } else if (f.kind === "number") {

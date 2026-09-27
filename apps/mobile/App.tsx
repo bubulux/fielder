@@ -108,7 +108,7 @@ function App() {
         <View style={[{ flex: 1 }, mode !== "shoot" && { display: "none" }]}>
           <Viewfinder settings={settings} onSettings={setSettings} active={mode === "shoot"} project={project} onSwitchProject={() => setProjectSheet(true)} shots={shots.shots} locations={locations} onLocations={setLocations} onSignIn={() => setLogin(true)} />
         </View>
-        {mode === "review" && <Review settings={settings} data={shots} onOpen={(s) => { setOpen(s); setMode("gallery"); }} />}
+        {mode === "review" && <Review settings={settings} data={shots} locations={locations} onLocations={setLocations} countAt={countAt} />}
         {mode === "gallery" && <Gallery settings={settings} data={shots} onShowOnMap={(s) => { setFocus(s); setMode("map"); }} filter={filter} onFilter={setFilter}
           locations={locations} onLocations={setLocations} countAt={countAt} open={open} onOpen={setOpen} />}
         {mode === "prep" && <Prep settings={settings} data={shots} />}

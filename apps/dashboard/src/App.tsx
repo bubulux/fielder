@@ -35,6 +35,8 @@ export function App() {
   const [focus, setFocus] = useState<Shot | null>(null);
   const [filter, setFilter] = useState<Filter>("all");
   const [mask, setMaskState] = useState<MaskMode>(loadMask);
+  /** The dialog starts from the global mode; a change there sticks for prev/next until it closes. */
+  const [dialogMode, setDialogMode] = useState<MaskMode>(mask);
   const [layout, setLayoutState] = useState<Layout>(loadLayout);
   /** Remembered across reloads until changed; null until one is chosen (the project page is shown instead). */
   const [storedProject, setStoredProject] = useState<ActiveProject | null>(() => readStorage("project"));
@@ -79,7 +81,7 @@ export function App() {
     refreshCounts();
     if (failed.length) alert(`${failed.length} deletion(s) failed:\n${failed.join("\n")}`);
   }
-  const openShot = (s: Shot, list?: Shot[]) => { setOpenList(list ?? visible); setOpen(s); };
+  const openShot = (s: Shot, list?: Shot[]) => { setOpenList(list ?? visible); setDialogMode(mask); setOpen(s); };
   const loaded = !!shots && !!projects;
 
   return (
@@ -99,7 +101,7 @@ export function App() {
             {(["all", ...SHOT_STATES] as Filter[]).map((f) => <button key={f} class={filter === f ? "active" : ""} onClick={() => setFilter(f)}>{f} {counts[f] ?? 0}</button>)}
           </div>
         )}
-        {active && (tab === "gallery" || tab === "map" || tab === "views") && <ModeSwitch value={mask} onChange={setMask} />}
+        {active && (tab === "gallery" || tab === "review" || tab === "map" || tab === "views") && <ModeSwitch value={mask} onChange={setMask} />}
         {active && tab === "gallery" && (
           <div class="seg" title="Layout">
             <button class={layout === "grid" ? "active" : ""} onClick={() => setLayout("grid")}>Grid</button>
@@ -170,7 +172,7 @@ export function App() {
             </div>
           )
         )}
-        {loaded && active && tab === "review" && <Review shots={projectShots} mask={mask} onUpdated={updated} onDeleted={deleted} onOpen={openShot} />}
+        {loaded && active && tab === "review" && <Review shots={projectShots} mask={mask} projects={projects} locations={locations ?? []} onLocations={setLocations} onUpdated={updated} onDeleted={deleted} />}
         {loaded && active && tab === "map" && <MapView shots={visible} onOpen={(s) => openShot(s, visible)} focus={focus} mask={mask} />}
         {loaded && active && tab === "views" && <Views shots={projectShots} projects={projects} locations={locations ?? []} presets={presets ?? []} views={views} onViews={setViews} mask={mask} onOpen={openShot} />}
         {loaded && active && tab === "projects" && <Projects projects={projects} onChange={setProjects} active={active} onActivate={(p) => { activate(p); setTab("gallery"); }} />}
@@ -181,7 +183,8 @@ export function App() {
         <ShotDetail
           key={open.id}
           shot={open}
-          initialMode={mask}
+          mode={dialogMode}
+          onMode={setDialogMode}
           projects={projects ?? []}
           locations={locations ?? []}
           onLocations={setLocations}

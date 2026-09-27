@@ -5,6 +5,7 @@ import { FRAME_MODES, frameModeLabel, ShotFrame, type FrameMode } from "../compo
 import { extraLabel, label, lightLabel, SHOT_STATES, STATE_COLORS, type ShotState } from "@fielder/vocab";
 import { Button, Chip, ChipRow, colors, Sheet, StateBadge } from "../components/ui";
 import { TagsForm } from "../components/TagsForm";
+import { PhotoStrip } from "../components/PhotoStrip";
 import { ensureLocation } from "../namedSync";
 import type { LocationEntry, ShotTags } from "../types";
 import type { Settings } from "../types";
@@ -74,9 +75,10 @@ export function ShotDetail({ shot, onClose, settings, mode: initialMode, onDelet
   const [mode, setMode] = useState<FrameMode>(initialMode);
   const [editing, setEditing] = useState(false);
   const [busy, setBusy] = useState(false);
-  useEffect(() => { setMode(initialMode); setEditing(false); }, [initialMode, shot?.id]);
+  const [photoIndex, setPhotoIndex] = useState(0);
+  useEffect(() => { setMode(initialMode); setEditing(false); setPhotoIndex(0); }, [initialMode, shot?.id]);
   if (!shot) return null;
-  const photo = cover(shot);
+  const photo = shot.photos[Math.min(photoIndex, shot.photos.length - 1)];
   const setState = async (state: Shot["state"]) => {
     setBusy(true);
     try { onUpdated(await api.patchShot(shot.id, { state })); } catch (e) { Alert.alert("Update failed", String(e)); } finally { setBusy(false); }
@@ -101,6 +103,7 @@ export function ShotDetail({ shot, onClose, settings, mode: initialMode, onDelet
   return (
     <Sheet visible title={shotTitle(shot)} onClose={onClose}>
       <ShotFrame photo={photo} width={Math.min(width - 32, 720)} settings={settings} mode={mode} style={{ borderRadius: 8, alignSelf: "center" }} />
+      <PhotoStrip shot={shot} index={photoIndex} onPick={setPhotoIndex} />
       <View style={{ marginTop: 10 }}>
         <ChipRow>
           {FRAME_MODES.map((m) => <Chip key={m} label={frameModeLabel(m)} selected={mode === m} onPress={() => setMode(m)} />)}
@@ -128,11 +131,11 @@ export function ShotDetail({ shot, onClose, settings, mode: initialMode, onDelet
       ) : (
         <>
           <View style={{ flexDirection: "row", gap: 12 }}>
-            {shot.state !== "approved" && <View style={{ flex: 1 }}><Button label="Approve" onPress={() => void setState("approved")} disabled={busy} /></View>}
-            {shot.state !== "archived" && <View style={{ flex: 1 }}><Button label="Archive" kind="ghost" onPress={() => void setState("archived")} disabled={busy} /></View>}
-            {shot.state !== "unreviewed" && <View style={{ flex: 1 }}><Button label="Back to review" kind="ghost" onPress={() => void setState("unreviewed")} disabled={busy} /></View>}
+            {shot.state !== "approved" && <View style={{ flex: 1 }}><Button label="Approve" kind="approve" onPress={() => void setState("approved")} disabled={busy} /></View>}
+            {shot.state !== "archived" && <View style={{ flex: 1 }}><Button label="Archive" kind="archive" onPress={() => void setState("archived")} disabled={busy} /></View>}
+            {shot.state !== "unreviewed" && <View style={{ flex: 1 }}><Button label="Back to review" kind="archive" onPress={() => void setState("unreviewed")} disabled={busy} /></View>}
           </View>
-          <Button label="Edit tags" kind="ghost" onPress={() => setEditing(true)} />
+          <Button label="Edit details" kind="ghost" onPress={() => setEditing(true)} />
           <Button label="Show on map" kind="ghost" onPress={() => onShowOnMap(shot)} />
           <Button label="Delete shot" kind="danger" onPress={del} />
         </>
