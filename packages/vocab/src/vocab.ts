@@ -39,11 +39,24 @@ export function lightLabel(light: readonly string[] | null | undefined, artifici
   return [phases, artificial ? "Artificial" : ""].filter(Boolean).join(" + ");
 }
 
-/** Badge colours shared by both UIs. */
+/** Map-pin fills: fixed in both themes because pins sit on map tiles, not on a themed surface. */
 export const STATE_COLORS: Record<ShotState, string> = {
-  unreviewed: "#FFB300",
-  approved: "#00E676",
-  archived: "#9A9AA5",
+  unreviewed: "#FFB000",
+  approved: "#0F8A43",
+  archived: "#6E6E76",
+};
+
+/**
+ * Material Design Icons names, identical on both clients (MDI webfont on the dashboard,
+ * MaterialCommunityIcons on the phone). State and phase are never shown by colour alone.
+ */
+export const STATE_ICONS: Record<ShotState, string> = { unreviewed: "circle-half-full", approved: "check-circle", archived: "archive" };
+export const PHASE_ICONS: Record<Light | "artificial", string> = {
+  dawn: "weather-sunset-up",
+  day: "weather-sunny",
+  dusk: "weather-sunset-down",
+  night: "weather-night",
+  artificial: "lightbulb-on-outline",
 };
 
 export const isOneOf = <T extends readonly string[]>(list: T, v: unknown): v is T[number] =>

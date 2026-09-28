@@ -9,9 +9,9 @@ Tabs are in the URL hash.
 
 | Tab | File | What |
 | --- | --- | --- |
-| Gallery | `App.tsx` | Grid or list (switch in the header, remembered). State filter chips (all/unreviewed/approved/archived with counts). Sequences show a "▤ n" badge. The list layout has row selection with select-all and bulk delete. |
+| Gallery | `App.tsx`, `ShotCard.tsx` | Grid or list (switch in the toolbar, remembered). State filter chips (all/unreviewed/approved/archived with counts). Cards show the review state as an icon marker, and sequences a "SEQ · n" badge. The list layout has row selection with select-all and bulk delete. |
 | Review | `Review.tsx` | See [review and tagging](review-and-tagging.md) |
-| Map | `MapView.tsx` | Leaflet + OSM, one marker per shot at its cover photo, coloured by state. The popup has a framed thumbnail and "Open details". "Show on map" from the dialog focuses a shot. |
+| Map | `MapView.tsx` | Leaflet + OSM, one pin per shot at its cover photo, coloured by state and showing the state icon. The popup has a framed thumbnail and "Open details". "Show on map" from the dialog focuses a shot. |
 | Schedule | `Schedule.tsx` | [Shooting days](schedule.md) |
 | Views | `Views.tsx`, `FilterBuilder.tsx`, `ViewsResults.tsx` | Filter builder: nested all/any groups of rules over state, project, name, location, INT/EXT, light (set), artificial, weather, rig, lens, FF-equivalent, photos in shot, date, and extra fields. Results as grid or map. Save as named views (shared by all projects). The model is `packages/vocab/src/filter.ts` (`evaluateFilter`, `validateFilter`). |
 | Projects | `Projects.tsx` | [Projects](projects.md) |
@@ -19,7 +19,15 @@ Tabs are in the URL hash.
 | Rigs | `Rigs.tsx` | Rig table and editor (camera body/format or custom sensor, speedbooster, lens range), with how many shots used each rig |
 | Locations | `Locations.tsx` | Rename or delete locations; shot and approved counts |
 
-The header also has the project switcher, the global view-mode switch (mask/frame/fit/raw) and ↻ reload.
+The header has:
+- the project switcher
+- the tabs in two groups:
+  - work: Gallery, Review (with the unreviewed count), Map, Schedule, Views
+  - library: Projects, Fields, Rigs, Locations
+- the theme switch (Auto / Sun / Set, see [design](../design.md))
+- reload
+
+Below it, a toolbar shows what applies to the current tab: state filter chips (Gallery, Map), the global view-mode switch (mask/frame/fit/raw) and the grid/list switch.
 
 ## Shared pieces
 
@@ -28,4 +36,6 @@ The header also has the project switcher, the global view-mode switch (mask/fram
 - `Combobox.tsx`: the type-to-search select.
 - `format.ts`: `cover`, labels, frame geometry, `filterable(shot)` for filters.
 - `api.ts`: types and calls. A `401` reloads the page (Access login).
-- Styles in `styles.css`, with CSS variables at the top (`--accent`, `--ok`, `--danger`, `--btn`, …).
+- `ShotCard.tsx`: the gallery card.
+- `ui.tsx`: small design-system components (`Icon`, `Seg`, `Chip`, `LightChips`, `StateMarker`, `SeqBadge`, `Empty`, `Loading`, `ErrorLine`).
+- Styles: design-system tokens and component classes in `design/*.css`, page layouts in `styles.css`. See [design](../design.md).

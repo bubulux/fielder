@@ -1,0 +1,18 @@
+/* Dashboard type scale (px). Phone scale lives in fielder-tokens.rn.json (dp, larger). */
+:root {
+  --font-sans: "Atkinson Hyperlegible Next", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --text-micro: 11px;    /* caps labels, badges only, always 700 */
+  --text-caption: 12px;  /* meta lines, tick labels */
+  --text-small: 13px;    /* dense tables, chips */
+  --text-body: 14px;     /* default UI text */
+  --text-body-lg: 16px;  /* shot info panel, dialog body */
+  --text-title: 18px;    /* section / sheet titles */
+  --text-heading: 22px;  /* shot name in dialog */
+  --text-display: 28px;  /* page-level numbers, day date */
+  --lh-tight: 1.15; /* @kind font */
+  --lh-snug: 1.3; /* @kind font */
+  --lh-body: 1.45; /* @kind font */
+  --weight-regular: 400; --weight-medium: 500; --weight-semibold: 600; --weight-bold: 700; --weight-heavy: 800;
+  --tracking-caps: 0.06em;
+}

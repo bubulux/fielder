@@ -1,0 +1,41 @@
+/* Action buttons: rounded rectangles. Every fill that sits at <3:1 against the page (archive, warn) carries a 2px border. */
+.f-btn{display:inline-flex;align-items:center;justify-content:center;gap:var(--space-2);height:var(--control-md);padding:0 14px;border:var(--bw-strong) solid;border-radius:var(--radius-sm);font:var(--weight-semibold) var(--text-body)/1 var(--font-sans);white-space:nowrap;cursor:pointer;text-decoration:none;transition:background var(--dur-fast) var(--ease),border-color var(--dur-fast) var(--ease);user-select:none}
+.f-btn .mdi{font-size:18px}
+.f-btn{background:var(--accent);color:var(--on-accent);border-color:var(--accent)}
+.f-btn:hover:not(:disabled),.f-btn.is-hover{background:var(--accent-hover);border-color:var(--accent-hover)}
+.f-btn:active:not(:disabled),.f-btn.is-pressed{background:var(--accent-pressed);border-color:var(--accent-pressed)}
+.f-btn--approve{background:var(--ok);color:var(--on-ok);border-color:var(--ok)}
+.f-btn--approve:hover:not(:disabled),.f-btn--approve.is-hover{background:var(--ok-hover);border-color:var(--ok-hover)}
+.f-btn--approve:active:not(:disabled),.f-btn--approve.is-pressed{background:var(--ok-hover);border-color:var(--ok-hover)}
+.f-btn--archive{background:var(--archive);color:var(--on-archive);border-color:var(--border)}
+.f-btn--archive:hover:not(:disabled),.f-btn--archive.is-hover{background:var(--archive-hover);border-color:var(--border-strong)}
+.f-btn--archive:active:not(:disabled),.f-btn--archive.is-pressed{background:var(--archive-hover);border-color:var(--border-strong)}
+.f-btn--secondary{background:transparent;color:var(--text);border-color:var(--border)}
+.f-btn--secondary:hover:not(:disabled),.f-btn--secondary.is-hover{background:var(--surface-sunken);border-color:var(--border-strong)}
+.f-btn--secondary:active:not(:disabled),.f-btn--secondary.is-pressed{background:var(--archive);border-color:var(--border-strong)}
+.f-btn--danger{background:transparent;color:var(--danger);border-color:var(--danger)}
+.f-btn--danger:hover:not(:disabled),.f-btn--danger.is-hover{background:var(--danger-tint);border-color:var(--danger)}
+.f-btn--danger:active:not(:disabled),.f-btn--danger.is-pressed{background:var(--danger-tint);border-color:var(--danger-hover)}
+.f-btn--danger-solid{background:var(--danger);color:var(--on-danger);border-color:var(--danger)}
+.f-btn--danger-solid:hover:not(:disabled),.f-btn--danger-solid.is-hover{background:var(--danger-hover);border-color:var(--danger-hover)}
+.f-btn--danger-solid:active:not(:disabled),.f-btn--danger-solid.is-pressed{background:var(--danger-hover);border-color:var(--danger-hover)}
+.f-btn--ghost{background:transparent;color:var(--text);border-color:transparent}
+.f-btn--ghost:hover:not(:disabled),.f-btn--ghost.is-hover{background:var(--surface-sunken);border-color:var(--border)}
+.f-btn--ghost:active:not(:disabled),.f-btn--ghost.is-pressed{background:var(--archive);border-color:var(--border)}
+.f-btn:active:not(:disabled),.f-btn.is-pressed{transform:translateY(1px)}
+.f-btn:focus-visible,.f-btn.is-focus{outline:var(--focus-width) solid var(--focus);outline-offset:var(--focus-offset)}
+.f-btn:disabled,.f-btn.is-disabled{background:transparent;color:var(--text-disabled);border:var(--bw-strong) dashed var(--text-disabled);cursor:not-allowed;transform:none}
+.f-btn--sm{height:var(--control-sm);padding:0 10px;font-size:var(--text-small)}
+.f-btn--sm .mdi{font-size:16px}
+.f-btn--lg{height:52px;padding:0 20px;font-size:17px;border-radius:8px}
+.f-btn--lg .mdi{font-size:22px}
+.f-btn--block{display:flex;width:100%}
+.f-btn__kbd{margin-left:var(--space-1);opacity:1;font-size:var(--text-micro);font-weight:var(--weight-bold);padding:1px 5px;border-radius:var(--radius-xs);border:1px solid currentColor}
+.f-btn.is-loading{cursor:progress}
+/* Icon-only button: square, same kinds */
+.f-btn--icon{width:var(--control-md);padding:0}
+.f-btn--icon.f-btn--sm{width:var(--control-sm)}
+.f-btn--icon.f-btn--lg{width:52px}
+/* Text link-button */
+.f-linkbtn{background:none;border:0;padding:0;color:var(--accent);font:inherit;font-weight:var(--weight-semibold);text-decoration:underline;text-underline-offset:2px;cursor:pointer}
+.f-linkbtn:hover{color:var(--accent-hover);text-decoration-thickness:2px}

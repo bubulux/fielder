@@ -11,11 +11,30 @@ import { ALL_PROJECTS, Projects, type ActiveProject } from "./Projects";
 import { Review } from "./Review";
 import { Rigs } from "./Rigs";
 import { Schedule } from "./Schedule";
-import { Badge, ShotDetail } from "./ShotDetail";
+import { ShotCard } from "./ShotCard";
+import { ShotDetail } from "./ShotDetail";
+import { useTheme, type ThemeChoice } from "./theme";
+import { Chip, Empty, Icon, Loading, Seg, StateMarker } from "./ui";
 import { Views } from "./Views";
 
 type Tab = "gallery" | "review" | "map" | "schedule" | "views" | "projects" | "fields" | "rigs" | "locations";
-const TABS: Tab[] = ["gallery", "review", "map", "schedule", "views", "projects", "fields", "rigs", "locations"];
+/** Work tabs first, then the library/settings pages, split by a divider in the header. */
+const WORK_TABS: { id: Tab; label: string; icon: string }[] = [
+  { id: "gallery", label: "Gallery", icon: "view-grid-outline" },
+  { id: "review", label: "Review", icon: "checkbox-marked-outline" },
+  { id: "map", label: "Map", icon: "map-outline" },
+  { id: "schedule", label: "Schedule", icon: "calendar-clock" },
+  { id: "views", label: "Views", icon: "filter-variant" },
+];
+const LIBRARY_TABS: { id: Tab; label: string }[] = [
+  { id: "projects", label: "Projects" }, { id: "fields", label: "Fields" }, { id: "rigs", label: "Rigs" }, { id: "locations", label: "Locations" },
+];
+const TABS: Tab[] = [...WORK_TABS, ...LIBRARY_TABS].map((t) => t.id);
+const THEMES: { id: ThemeChoice; icon: string; title: string }[] = [
+  { id: "auto", icon: "theme-light-dark", title: "Follow the system" },
+  { id: "sun", icon: "white-balance-sunny", title: "Sun: light, for daylight" },
+  { id: "set", icon: "weather-night", title: "Set: dark" },
+];
 type Filter = ShotState | "all";
 type Layout = "grid" | "list";
 
@@ -27,6 +46,7 @@ const tabFromHash = (): Tab => (TABS as string[]).includes(location.hash.slice(1
 
 export function App() {
   const [tab, setTab] = useState<Tab>(tabFromHash);
+  const [theme, setTheme] = useTheme();
   const [shots, setShots] = useState<Shot[] | null>(null);
   const [projects, setProjects] = useState<Project[] | null>(null);
   const [presets, setPresets] = useState<Preset[] | null>(null);
@@ -96,8 +116,8 @@ export function App() {
 
   return (
     <div class="app">
-      <header>
-        <h1><span>▣</span> Fielder</h1>
+      <header class="app-header">
+        <span class="brand"><Icon name="camera-iris" />Fielder</span>
         {loaded && active && (
           <select class="project-switch" value={active} title="Active project" onChange={(e) => { const v = (e.target as HTMLSelectElement).value; if (v === "__manage__") setTab("projects"); else activate(v); }}>
             {projects!.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
@@ -105,32 +125,41 @@ export function App() {
             <option value="__manage__">Manage projects…</option>
           </select>
         )}
-        <span class="meta">{loaded ? `${projectShots.length} shots · ${presets?.length ?? 0} rigs · ${locations?.length ?? 0} locations` : "loading…"}</span>
+        {active && (
+          <>
+            <nav class="f-tabs" role="tablist" aria-label="Work">
+              {WORK_TABS.map((t) => (
+                <button key={t.id} type="button" role="tab" class="f-tab" aria-selected={tab === t.id} onClick={() => setTab(t.id)}>
+                  <Icon name={t.icon} />{t.label}{t.id === "review" && unreviewed > 0 && <span class="f-tab__count" title={`${unreviewed} to review`}>{unreviewed}</span>}
+                </button>
+              ))}
+            </nav>
+            <span class="tab-divider" />
+            <nav class="f-tabs" role="tablist" aria-label="Library">
+              {LIBRARY_TABS.map((t) => <button key={t.id} type="button" role="tab" class="f-tab" aria-selected={tab === t.id} onClick={() => setTab(t.id)}>{t.label}</button>)}
+            </nav>
+          </>
+        )}
+        <span class="grow" />
+        <Seg label="Theme" options={THEMES} value={theme} onChange={setTheme} />
+        <button type="button" class="f-btn f-btn--ghost f-btn--icon" title="Reload" aria-label="Reload" onClick={() => { setShots(null); setProjects(null); setPresets(null); setLocations(null); void load(); }}><Icon name="refresh" /></button>
+      </header>
+      <div class="toolbar">
         {active && (tab === "gallery" || tab === "map") && (
-          <div class="seg" title="Review state">
-            {(["all", ...SHOT_STATES] as Filter[]).map((f) => <button key={f} class={filter === f ? "active" : ""} onClick={() => setFilter(f)}>{f} {counts[f] ?? 0}</button>)}
+          <div class="f-chips" role="group" aria-label="Review state">
+            {(["all", ...SHOT_STATES] as Filter[]).map((f) => <Chip key={f} selected={filter === f} onClick={() => setFilter(f)}>{f === "all" ? "All" : f[0].toUpperCase() + f.slice(1)} <span class="num">{counts[f] ?? 0}</span></Chip>)}
           </div>
         )}
         {active && (tab === "gallery" || tab === "review" || tab === "map" || tab === "views") && <ModeSwitch value={mask} onChange={setMask} />}
-        {active && tab === "gallery" && (
-          <div class="seg" title="Layout">
-            <button class={layout === "grid" ? "active" : ""} onClick={() => setLayout("grid")}>Grid</button>
-            <button class={layout === "list" ? "active" : ""} onClick={() => setLayout("list")}>List</button>
-          </div>
-        )}
-        {active && (
-          <nav class="tabs">
-            {TABS.map((t) => <button key={t} class={tab === t ? "active" : ""} onClick={() => setTab(t)}>{t === "review" && unreviewed ? `Review (${unreviewed})` : t[0].toUpperCase() + t.slice(1)}</button>)}
-            <button onClick={() => { setShots(null); setProjects(null); setPresets(null); setLocations(null); void load(); }} title="Reload">↻</button>
-          </nav>
-        )}
-      </header>
+        {active && tab === "gallery" && <Seg label="Layout" value={layout} onChange={setLayout} options={[{ id: "grid", icon: "view-grid-outline", label: "Grid" }, { id: "list", icon: "view-list-outline", label: "List" }]} />}
+        {active && (tab === "gallery" || tab === "map") && <><span class="grow" /><span class="meta num">{loaded ? `${projectShots.length} shots · ${presets?.length ?? 0} rigs · ${locations?.length ?? 0} locations` : ""}</span></>}
+      </div>
       <main>
-        {error && <div class="status">Could not load: {error}</div>}
-        {!error && !loaded && <div class="status">Loading…</div>}
+        {error && <Empty icon="cloud-alert" title="Could not load">{error}</Empty>}
+        {!error && !loaded && <Loading />}
         {loaded && !active && <Projects gate projects={projects} onChange={setProjects} fields={fields ?? []} active={null} onActivate={activate} />}
         {loaded && active && tab === "gallery" && (
-          visible.length === 0 ? <div class="status">{filter === "all" ? `No shots in ${activeName} yet. Capture one with the phone app.` : `No ${filter} shots.`}</div>
+          visible.length === 0 ? <Empty icon="camera-iris" title={filter === "all" ? `No shots in ${activeName} yet` : `No ${filter} shots`}>{filter === "all" ? "Capture one with the phone app." : null}</Empty>
           : layout === "list" ? (
             <div class="list">
               {(() => {
@@ -139,13 +168,13 @@ export function App() {
                 return (
                   <div class="bulk-bar">
                     <label class="check"><input type="checkbox" checked={allSelected} onChange={() => setSelected(allSelected ? new Set() : new Set(visible.map((s) => s.id)))} /> {allSelected ? "Deselect all" : "Select all"}</label>
-                    <span class="meta">{selectedVisible} selected</span>
-                    <button class="btn danger" disabled={selectedVisible === 0 || bulkBusy} onClick={() => void deleteSelected()}>{bulkBusy ? "Deleting…" : `Delete selected (${selectedVisible})`}</button>
-                    {selectedVisible > 0 && <button class="btn" onClick={() => setSelected(new Set())}>Clear</button>}
+                    <span class="meta num">{selectedVisible} selected</span>
+                    <button class="f-btn f-btn--danger f-btn--sm" disabled={selectedVisible === 0 || bulkBusy} onClick={() => void deleteSelected()}><Icon name="delete-outline" />{bulkBusy ? "Deleting…" : `Delete selected (${selectedVisible})`}</button>
+                    {selectedVisible > 0 && <button class="f-btn f-btn--ghost f-btn--sm" onClick={() => setSelected(new Set())}>Clear</button>}
                   </div>
                 );
               })()}
-              <table>
+              <table class="table">
                 <thead><tr><th></th><th></th><th>Name</th>{showProjectColumn && <th>Project</th>}<th>Location</th><th>Tags</th><th>Rig · lens</th><th>Date</th><th>State</th></tr></thead>
                 <tbody>
                   {visible.map((s) => (
@@ -157,8 +186,8 @@ export function App() {
                       <td>{placeLabel(s) || "—"}</td>
                       <td class="meta">{tagsLabel(s) || "—"}</td>
                       <td class="meta">{rigLabel(cover(s))}</td>
-                      <td class="meta">{when(s.captured_at)}</td>
-                      <td><Badge shot={s} /></td>
+                      <td class="meta num">{when(s.captured_at)}</td>
+                      <td><StateMarker state={s.state} /></td>
                     </tr>
                   ))}
                 </tbody>
@@ -166,26 +195,14 @@ export function App() {
             </div>
           ) : (
             <div class="gallery">
-              {visible.map((s) => (
-                <article class="card" key={s.id} onClick={() => openShot(s)}>
-                  <div class="card-img">
-                    <Framed photo={cover(s)} mode={mask} />
-                    {s.photos.length > 1 && <span class="count-badge" title={photoCountLabel(s)}>▤ {s.photos.length}</span>}
-                  </div>
-                  <div class="body">
-                    <div class="title">{shotTitle(s)}</div>
-                    <div class="sub">{[showProjectColumn ? s.project_name : null, placeLabel(s) || rigLabel(cover(s))].filter(Boolean).join(" · ")}</div>
-                    <div class="sub row"><span>{when(s.captured_at)}</span><Badge shot={s} /></div>
-                  </div>
-                </article>
-              ))}
+              {visible.map((s) => <ShotCard key={s.id} shot={s} mask={mask} project={showProjectColumn ? s.project_name : null} onClick={() => openShot(s)} />)}
             </div>
           )
         )}
         {loaded && active && tab === "review" && <Review shots={projectShots} mask={mask} projects={projects} fieldsOf={fieldsOf} locations={locations ?? []} onLocations={setLocations} onUpdated={updated} onDeleted={deleted} />}
         {loaded && active && tab === "map" && <MapView shots={visible} onOpen={(s) => openShot(s, visible)} focus={focus} mask={mask} />}
         {loaded && active && tab === "schedule" && (active === ALL_PROJECTS
-          ? <div class="status">Shooting days belong to a project: pick one in the header to plan its days.</div>
+          ? <Empty icon="calendar-clock" title="Pick a project">Shooting days belong to a project: pick one in the header to plan its days.</Empty>
           : <Schedule projectId={active} shots={projectShots} mask={mask} onOpen={openShot} />)}
         {loaded && active && tab === "views" && <Views shots={projectShots} projects={projects} fieldDefs={filterDefs} locations={locations ?? []} presets={presets ?? []} views={views} onViews={setViews} mask={mask} onOpen={openShot} />}
         {loaded && active && tab === "projects" && <Projects projects={projects} onChange={setProjects} fields={fields ?? []} active={active} onActivate={(p) => { activate(p); setTab("gallery"); }} />}

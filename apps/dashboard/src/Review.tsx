@@ -3,6 +3,7 @@ import type { FieldDef } from "@fielder/vocab";
 import { deleteShot, type Location, type Project, type Shot } from "./api";
 import { Framed, type MaskMode } from "./Framed";
 import { Filmstrip, isTyping, ShotInfo, usePhotoKeys } from "./ShotInfo";
+import { Empty, Icon } from "./ui";
 
 interface Props {
   shots: Shot[];
@@ -46,14 +47,16 @@ export function Review({ shots, mask, projects, fieldsOf, locations, onLocations
     try { await deleteShot(shot.id); onDeleted(shot.id); } catch (e) { alert(`Delete failed: ${(e as Error).message}`); }
   }
 
-  if (!current) return <div class="status">Nothing to review.</div>;
+  if (!current) return <Empty icon="check-all" title="Nothing to review">New shots from the phone show up here.</Empty>;
   const photo = current.photos[Math.min(photoIndex, current.photos.length - 1)];
   return (
     <div class="review">
       <div class="review-head">
-        <button class="btn outline" disabled={index === 0} onClick={() => go(-1)} title="Previous (←)">‹ Prev</button>
+        <button class="f-btn f-btn--secondary" disabled={index === 0} onClick={() => go(-1)} title="Previous (←)"><Icon name="chevron-left" />Prev</button>
         <strong>{index + 1} / {queue.length} to review</strong>
-        <button class="btn outline" disabled={index === queue.length - 1} onClick={() => go(1)} title="Next (→)">Next ›</button>
+        <button class="f-btn f-btn--secondary" disabled={index === queue.length - 1} onClick={() => go(1)} title="Next (→)">Next<Icon name="chevron-right" /></button>
+        <span class="grow" />
+        <div class="keys"><span><kbd>←</kbd><kbd>→</kbd> shots</span>{current.photos.length > 1 && <span><kbd>,</kbd><kbd>.</kbd> photos</span>}</div>
       </div>
       <div class="review-body">
         <div class="review-stage">
@@ -62,7 +65,7 @@ export function Review({ shots, mask, projects, fieldsOf, locations, onLocations
         </div>
         <div class="side">
           <ShotInfo shot={current} photo={photo} projects={projects} fields={fieldsOf(current.project_id)} locations={locations} onLocations={onLocations} onUpdated={onUpdated} />
-          <div class="btn-row"><button class="btn danger" onClick={() => void remove(current)}>Delete</button></div>
+          <div class="btn-row"><button class="f-btn f-btn--danger" onClick={() => void remove(current)}><Icon name="delete-outline" />Delete</button></div>
         </div>
       </div>
     </div>

@@ -1,6 +1,7 @@
 import { useState } from "preact/hooks";
 import { CAMERAS, CUSTOM_CAMERA_ID, findFormat, SPEEDBOOSTER_PRESETS } from "@fielder/fov-math";
 import { deletePreset, putPreset, type Preset, type Shot } from "./api";
+import { Chip, ErrorLine, Icon, Loading } from "./ui";
 
 interface Props { presets: Preset[] | null; shots: Shot[]; onChange: (p: Preset[]) => void }
 
@@ -61,38 +62,38 @@ export function Rigs({ presets, shots, onChange }: Props) {
 
   const cam = d ? CAMERAS.find((c) => c.id === d.cameraId) : undefined;
   return (
-    <div class="rigs">
-      {!presets ? <div class="status">Loading…</div> : (
-        <table>
+    <div class="page">
+      {!presets ? <Loading /> : (
+        <table class="table">
           <thead><tr><th>Name</th><th>Camera / format</th><th>Sensor area</th><th>Speedbooster</th><th>Lens range</th><th>Shots</th><th></th></tr></thead>
           <tbody>
             {presets.map((p) => (
               <tr key={p.id}>
-                <td>{p.name}</td>
+                <td class="name">{p.name}</td>
                 <td class="meta">{p.camera_id && p.format_id ? `${p.camera_id} / ${p.format_id}` : "custom"}</td>
                 <td>{p.sensor_width_mm} × {p.sensor_height_mm} mm</td>
                 <td>{p.speedbooster_factor === 1 ? "none" : `×${p.speedbooster_factor}`}</td>
                 <td>{p.lens_min_mm != null && p.lens_max_mm != null ? `${p.lens_min_mm}–${p.lens_max_mm} mm` : "any"}</td>
                 <td>{usedBy(shots, p.id)}</td>
-                <td class="actions"><button class="btn" onClick={() => startEdit(p)}>Edit</button><button class="btn danger" onClick={() => void remove(p)}>Delete</button></td>
+                <td class="actions"><button class="f-btn f-btn--secondary f-btn--sm" onClick={() => startEdit(p)}>Edit</button><button class="f-btn f-btn--danger f-btn--sm" onClick={() => void remove(p)}>Delete</button></td>
               </tr>
             ))}
             {presets.length === 0 && <tr><td colSpan={7} class="meta">No rigs yet.</td></tr>}
           </tbody>
         </table>
       )}
-      {!d ? <p><button class="btn primary" onClick={startNew}>New rig</button></p> : (
+      {!d ? <p><button class="f-btn" onClick={startNew}><Icon name="plus" />New rig</button></p> : (
         <form class="rig-form" onSubmit={save}>
           <h3>{d.isNew ? "New rig" : "Edit rig"}</h3>
           <label>Camera body
-            <div class="chips">
-              {CAMERAS.map((c) => <button type="button" key={c.id} class={`chip ${d.cameraId === c.id ? "active" : ""}`} onClick={() => pickCamera(c.id)}>{c.name}</button>)}
-              <button type="button" class={`chip ${d.cameraId === CUSTOM_CAMERA_ID ? "active" : ""}`} onClick={() => pickCamera(CUSTOM_CAMERA_ID)}>Custom sensor</button>
+            <div class="f-chips">
+              {CAMERAS.map((c) => <Chip key={c.id} selected={d.cameraId === c.id} onClick={() => pickCamera(c.id)}>{c.name}</Chip>)}
+              <Chip selected={d.cameraId === CUSTOM_CAMERA_ID} onClick={() => pickCamera(CUSTOM_CAMERA_ID)}>Custom sensor</Chip>
             </div>
           </label>
           {cam ? (
             <label>Recording format (active sensor area)
-              <div class="chips">{cam.formats.map((f) => <button type="button" key={f.id} class={`chip ${d.formatId === f.id ? "active" : ""}`} onClick={() => pickFormat(f.id)}>{f.name}</button>)}</div>
+              <div class="f-chips">{cam.formats.map((f) => <Chip key={f.id} selected={d.formatId === f.id} onClick={() => pickFormat(f.id)}>{f.name}</Chip>)}</div>
               <span class="meta">{d.w} × {d.h} mm{findFormat(d.cameraId, d.formatId)?.windowed ? " · windowed crop of the sensor" : ""}</span>
             </label>
           ) : (
@@ -102,7 +103,7 @@ export function Rigs({ presets, shots, onChange }: Props) {
             </div>
           )}
           <label>Speedbooster / focal reducer
-            <div class="chips">{SPEEDBOOSTER_PRESETS.map((f) => <button type="button" key={f} class={`chip ${num(d.sb) === f ? "active" : ""}`} onClick={() => patch({ sb: String(f) })}>{f === 1 ? "none" : `×${f}`}</button>)}</div>
+            <div class="f-chips">{SPEEDBOOSTER_PRESETS.map((f) => <Chip key={f} selected={num(d.sb) === f} onClick={() => patch({ sb: String(f) })}>{f === 1 ? "none" : `×${f}`}</Chip>)}</div>
             <input value={d.sb} onInput={(e) => patch({ sb: (e.target as HTMLInputElement).value })} placeholder="custom factor, e.g. 0.71" />
           </label>
           <div class="row2">
@@ -110,10 +111,10 @@ export function Rigs({ presets, shots, onChange }: Props) {
             <label>Lens range max (mm)<input value={d.lmax} onInput={(e) => patch({ lmax: (e.target as HTMLInputElement).value })} placeholder="e.g. 35" /></label>
           </div>
           <label>Name (optional)<input value={d.name} onInput={(e) => patch({ name: (e.target as HTMLInputElement).value })} placeholder={autoName(d)} /></label>
-          {error && <div class="error">{error}</div>}
-          <div class="actions" style="justify-content:flex-start">
-            <button type="submit" class="btn primary">Save rig</button>
-            <button type="button" class="btn" onClick={() => { setD(null); setError(null); }}>Cancel</button>
+          {error && <ErrorLine>{error}</ErrorLine>}
+          <div class="form-actions">
+            <button type="submit" class="f-btn">Save rig</button>
+            <button type="button" class="f-btn f-btn--secondary" onClick={() => { setD(null); setError(null); }}>Cancel</button>
           </div>
         </form>
       )}

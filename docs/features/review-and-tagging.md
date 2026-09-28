@@ -23,7 +23,10 @@ The light model feeds the [schedule](schedule.md): phases are defined by sun ele
   - Details are edited **in place** (`ShotInfo.tsx` + `TagsForm.tsx`), without opening the dialog.
   - Sequences show a **photo strip**; `,` and `.` step through its photos.
 - **Phone Review tab** (`screens/Review.tsx`): same idea, with Prev/Next in the top bar, in-place editing and a photo strip.
-- **Buttons**: action buttons are rounded rectangles; tabs and segmented switches are pills that show which one is on. Approve is green, Archive and Back to review are grey, secondary actions are outlined, Delete is a red outline. Mobile `Button` kinds: `primary | approve | archive | ghost | danger`.
+- **Buttons** ([design](../design.md)):
+  - Action buttons are rounded rectangles and carry an icon.
+  - Tabs, segmented switches and chips are pills; the selected one is filled, bold and checked.
+  - Approve is green. Archive and Back to review are neutral grey with a border. Secondary actions are outlined. Delete is a red outline. Mobile `Button` kinds: `primary | approve | archive | ghost | danger`.
 
 ## Tag editing UI
 
@@ -32,7 +35,7 @@ The light model feeds the [schedule](schedule.md): phases are defined by sun ele
 
 ## View modes (how the rig frame is drawn on a photo)
 
-`mask` (tint outside the frame), `frame` (border only), `fit` (crop to exactly the frame), `raw`.
+`mask` (neutral dark mask outside the frame), `frame` (border only), `fit` (crop to exactly the frame), `raw`.
 
 - **Fit** always shows exactly the rig frame. Where the rig saw more than the phone (fraction > 1) the rest stays black, like the live view (`frameLayout` in `apps/dashboard/src/format.ts`, `FramedImage.tsx` on the phone).
 - **Dashboard**: the header switch sets the global mode (`localStorage["maskMode"]`) for gallery, review, map and views. The shot dialog starts from it; a change inside the dialog sticks for prev/next until the dialog closes (`dialogMode` in `App.tsx`).

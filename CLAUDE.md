@@ -19,7 +19,7 @@ The owner talks to you in English.
 | --- | --- |
 | `apps/worker/src` | API routes (`shots.ts`, `projects.ts`, `fields.ts`, `days.ts`, …), `http.ts` router + `assert*` helpers |
 | `apps/worker/migrations` | D1 schema, numbered, additive |
-| `apps/dashboard/src` | `App.tsx` (state, tabs), one file per tab/component, `styles.css` |
+| `apps/dashboard/src` | `App.tsx` (state, tabs), one file per tab/component, `ui.tsx` (design-system components), `design/` (tokens + component CSS), `styles.css` (layouts) |
 | `apps/mobile/src` | `screens/` (Viewfinder, Review, Gallery, Map, ShootDay, Setup), `uploads.ts` (queue), `storage.ts` (kv), `api.ts` |
 | `packages/vocab` | Shared vocabularies, filters, extra-field definitions, daylight math: anything both the Worker and a client must agree on |
 | `packages/fov-math` | Camera/lens/FOV/overlay/reframe math |
@@ -38,7 +38,7 @@ A **shot** holds the metadata (name, location, INT/EXT, light phases + artificia
   Keep it that way.
 - **Shared rules go in `packages/vocab`** and are reused by the Worker. Interactive edits are validated strictly, uploads leniently.
 - **Migrations**: a new numbered file for every change; never edit an applied one. Production holds real data now: ask before anything destructive.
-- **Match the surrounding code**: terse doc comments on exported functions explaining *why*; plain CSS with the variables in `styles.css`; mobile UI from `components/ui.tsx`. No new dependencies without a reason (the sun math and combobox are hand-written on purpose).
+- **Match the surrounding code**: terse doc comments on exported functions explaining *why*; plain CSS on the design tokens, never hard-coded colours (`docs/design.md`; both themes, Sun and Set, must stay high contrast); mobile UI from `components/ui.tsx`. No new dependencies without a reason (the sun math and combobox are hand-written on purpose).
 - **Deploys to production are done by the owner** (`pnpm -C apps/worker run deploy`). You prepare, check and commit. You may apply additive remote migrations when asked. Commit only when asked or when working through an agreed plan; work on a branch.
 
 ## Verify before you say "done"

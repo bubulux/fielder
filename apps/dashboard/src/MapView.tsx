@@ -2,7 +2,8 @@ import { useEffect, useRef } from "preact/hooks";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import type { Photo, Shot } from "./api";
-import { cover, frameLayout, frameOf, imageAspect, placeLabel, rigLabel, shotTitle, stateColor, when } from "./format";
+import { label, STATE_ICONS } from "@fielder/vocab";
+import { cover, frameLayout, frameOf, imageAspect, placeLabel, rigLabel, shotTitle, when } from "./format";
 import type { MaskMode } from "./Framed";
 
 interface Props { shots: Shot[]; onOpen: (shot: Shot) => void; focus?: Shot | null; mask: MaskMode }
@@ -32,17 +33,18 @@ export function MapView({ shots, onOpen, focus, mask }: Props) {
     for (const s of shots) {
       const p = cover(s);
       bounds.push([p.lat, p.lon]);
-      const c = stateColor(s);
-      const marker = L.circleMarker([p.lat, p.lon], { radius: 8, color: c, weight: 2, fillColor: c, fillOpacity: 0.6 });
+      // Pin colour + glyph per review state (fixed colours: pins sit on map tiles, not on a themed surface).
+      const icon = L.divIcon({ className: "f-pin-icon", html: `<span class="f-pin f-pin--${s.state}" title="${label(s.state)}"><i class="mdi mdi-${STATE_ICONS[s.state]}"></i></span>`, iconSize: [26, 26], iconAnchor: [13, 13], popupAnchor: [0, -14] });
+      const marker = L.marker([p.lat, p.lon], { icon, title: shotTitle(s) });
       const html = document.createElement("div");
       html.className = "popup";
-      html.innerHTML = `<div class="framed popup-img"></div><div class="title"></div><div class="sub"></div><div class="sub"></div><a href="#">Open details</a>`;
+      html.innerHTML = `<div class="framed popup-img"></div><div class="title"></div><div class="sub"></div><div class="sub"></div><a href="#">Open details <i class="mdi mdi-arrow-right"></i></a>`;
       const box = html.querySelector(".framed") as HTMLElement;
       const popup = popupFrameHtml(p, mask);
       box.innerHTML = popup.html;
       box.style.aspectRatio = String(popup.aspect ?? imageAspect(p));
       html.querySelector(".title")!.textContent = shotTitle(s);
-      html.querySelectorAll(".sub")[0]!.textContent = `${placeLabel(s) || rigLabel(p)} · ${s.state}`;
+      html.querySelectorAll(".sub")[0]!.textContent = `${placeLabel(s) || rigLabel(p)} · ${label(s.state)}`;
       html.querySelectorAll(".sub")[1]!.textContent = when(s.captured_at);
       html.querySelector("a")!.addEventListener("click", (e) => { e.preventDefault(); onOpen(s); });
       marker.bindPopup(html, { maxWidth: 280 });

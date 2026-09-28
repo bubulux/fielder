@@ -5,6 +5,7 @@ import { FilterBuilderResults } from "./ViewsResults";
 import { GroupEditor } from "./FilterBuilder";
 import { filterable } from "./format";
 import type { MaskMode } from "./Framed";
+import { ErrorLine, Icon } from "./ui";
 
 interface Props {
   shots: Shot[];
@@ -53,23 +54,23 @@ export function Views({ shots, projects, fieldDefs, locations, presets, views, o
     <div class="views">
       <aside class="views-side">
         <div class="views-list">
-          <div class="views-head"><strong>Saved views</strong><button class="btn" onClick={fresh}>＋ New</button></div>
+          <div class="views-head"><strong>Saved views</strong><button class="f-btn f-btn--sm" onClick={fresh}><Icon name="plus" />New</button></div>
           {!views ? <div class="meta">Loading…</div> : views.length === 0 ? <div class="meta">None yet. Build a filter and save it.</div> : views.map((v) => (
             <button key={v.id} class={`view-item ${current?.id === v.id ? "active" : ""}`} onClick={() => load(v)}>
               <span>{v.name}</span>
-              <span class="meta">{shots.filter((s) => evaluateFilter(v.filter, filterable(s), extra)).length}</span>
+              <span class="count">{shots.filter((s) => evaluateFilter(v.filter, filterable(s), extra)).length}</span>
             </button>
           ))}
         </div>
         <div class="views-save">
           <input value={name} onInput={(e) => { setName((e.target as HTMLInputElement).value); setDirty(true); }} placeholder="View name" />
-          <div class="actions" style="justify-content:flex-start">
-            <button class="btn primary" disabled={busy} onClick={() => void save(false)}>{current ? "Save" : "Save view"}</button>
-            {current && <button class="btn" disabled={busy} onClick={() => void save(true)}>Save as new</button>}
-            {current && <button class="btn danger" disabled={busy} onClick={() => void remove()}>Delete</button>}
+          <div class="form-actions">
+            <button class="f-btn" disabled={busy} onClick={() => void save(false)}>{current ? "Save" : "Save view"}</button>
+            {current && <button class="f-btn f-btn--secondary" disabled={busy} onClick={() => void save(true)}>Save as new</button>}
+            {current && <button class="f-btn f-btn--danger" disabled={busy} onClick={() => void remove()}><Icon name="delete-outline" />Delete</button>}
           </div>
-          {dirty && current && <div class="meta">Unsaved changes.</div>}
-          {error && <div class="error">{error}</div>}
+          {dirty && current && <div class="warn"><Icon name="circle-edit-outline" /> Unsaved changes</div>}
+          {error && <ErrorLine>{error}</ErrorLine>}
         </div>
       </aside>
       <section class="views-main">

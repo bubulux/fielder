@@ -1,5 +1,6 @@
 import { selectOptions, type Extra, type ExtraValue, type FieldDef } from "@fielder/vocab";
 import { Combobox } from "./Combobox";
+import { Chip } from "./ui";
 
 interface Props {
   defs: readonly FieldDef[];
@@ -46,8 +47,8 @@ function Field({ def, value, siblings, onChange }: { def: FieldDef; value: Extra
       return (
         <div class="field">
           <span class="field-label">{def.label}{help}</span>
-          <div class="chips">
-            {([true, false] as const).map((b) => <button type="button" key={String(b)} class={`chip ${value === b ? "active" : ""}`} onClick={() => onChange(value === b ? null : b)}>{b ? "Yes" : "No"}</button>)}
+          <div class="f-chips">
+            {([true, false] as const).map((b) => <Chip key={String(b)} selected={value === b} onClick={() => onChange(value === b ? null : b)}>{b ? "Yes" : "No"}</Chip>)}
           </div>
         </div>
       );
@@ -60,8 +61,8 @@ function Field({ def, value, siblings, onChange }: { def: FieldDef; value: Extra
           <div class="field">
             <span class="field-label">{def.label}{help}</span>
             {waiting ? <span class="meta">Choose {def.optionsBy!.field} first</span> : (
-              <div class="chips">
-                {opts.map((o) => <button type="button" key={o} class={`chip ${sel.includes(o) ? "active" : ""}`} onClick={() => onChange(sel.includes(o) ? sel.filter((x) => x !== o) : [...sel, o])}>{o}</button>)}
+              <div class="f-chips">
+                {opts.map((o) => <Chip key={o} selected={sel.includes(o)} onClick={() => onChange(sel.includes(o) ? sel.filter((x) => x !== o) : [...sel, o])}>{o}</Chip>)}
               </div>
             )}
           </div>

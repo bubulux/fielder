@@ -1,0 +1,22 @@
+:root {
+  --space-0-5: 2px; --space-1: 4px; --space-2: 8px; --space-3: 12px; --space-4: 16px; --space-5: 20px; --space-6: 24px; --space-8: 32px; --space-10: 40px; --space-12: 48px;
+  --radius-xs: 3px;   /* badges, markers, project tag */
+  --radius-sm: 6px;   /* action buttons, inputs */
+  --radius-md: 10px;  /* cards, panels, popovers */
+  --radius-lg: 14px;  /* modal, bottom sheet top corners */
+  --radius-pill: 999px; /* tabs, segmented, chips — "pills show which one is on" */
+  --control-sm: 28px; --control-md: 36px; --control-lg: 44px; /* dashboard; phone minimum is 48dp */
+  --bw: 1px; --bw-strong: 2px; --bw-selected: 3px;
+  --focus-width: 2px; --focus-offset: 2px;
+  --dur-fast: 90ms; /* @kind other */
+  --dur: 160ms; /* @kind other */
+  --dur-slow: 240ms; /* @kind other */
+  --ease: cubic-bezier(.2, 0, 0, 1); /* @kind other */
+}
+/* Elevation: Sun uses a soft shadow + border; Set uses lighter surfaces + border, shadows only to separate from photos. */
+:root, [data-theme="sun"] {
+  --elev-1: 0 1px 2px rgba(11,11,12,.10);
+  --elev-2: 0 6px 18px rgba(11,11,12,.18);
+  --elev-3: 0 16px 40px rgba(11,11,12,.28);
+}
+[data-theme="set"] { --elev-1: none; --elev-2: 0 8px 24px rgba(0,0,0,.6); --elev-3: 0 20px 48px rgba(0,0,0,.7); }

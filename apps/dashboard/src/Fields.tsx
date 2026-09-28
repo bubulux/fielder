@@ -2,6 +2,7 @@ import { useMemo, useState } from "preact/hooks";
 import { FIELD_PROMPT, validateFieldDef, type Extra, type FieldDef } from "@fielder/vocab";
 import { deleteField, importFields, putField, type FieldDefinition, type Project } from "./api";
 import { ExtraEditor } from "./ExtraEditor";
+import { Chip, ErrorLine, Icon, Loading } from "./ui";
 
 interface Props { fields: FieldDefinition[] | null; onChange: (f: FieldDefinition[]) => void; projects: Project[] }
 
@@ -60,44 +61,44 @@ export function Fields({ fields, onChange, projects }: Props) {
     void navigator.clipboard.writeText(text).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1500); });
   }
 
-  if (!fields) return <div class="status">Loading…</div>;
+  if (!fields) return <Loading />;
   return (
-    <div class="rigs fields-page">
-      <p class="meta" style="max-width:820px">
+    <div class="page">
+      <p class="meta">
         Extra fields describe project-specific details of a shot (e.g. the nearest U-Bahn station, access notes). They are defined once here and each project picks the ones it uses (Projects → Edit).
         Definitions are JSON, so an AI can write them: copy the prompt, describe what you need, paste the answer into Import.
       </p>
-      <div class="actions" style="justify-content:flex-start;margin-bottom:12px;flex-wrap:wrap">
-        <button class="btn primary" onClick={() => { setEdit({ id: crypto.randomUUID(), text: pretty(TEMPLATES.text), isNew: true }); setPreview({}); }}>＋ New field</button>
-        <button class="btn" onClick={() => setImportText("")}>Import JSON…</button>
-        <button class="btn outline" onClick={() => copy(pretty(fields.map((f) => f.definition)))} disabled={fields.length === 0}>Copy all as JSON</button>
-        <button class="btn outline" onClick={() => copy(FIELD_PROMPT)}>Copy prompt for AI</button>
-        {copied && <span class="meta">Copied.</span>}
+      <div class="form-actions" style="margin-bottom:12px">
+        <button class="f-btn" onClick={() => { setEdit({ id: crypto.randomUUID(), text: pretty(TEMPLATES.text), isNew: true }); setPreview({}); }}><Icon name="plus" />New field</button>
+        <button class="f-btn f-btn--secondary" onClick={() => setImportText("")}><Icon name="import" />Import JSON…</button>
+        <button class="f-btn f-btn--secondary" onClick={() => copy(pretty(fields.map((f) => f.definition)))} disabled={fields.length === 0}><Icon name="content-copy" />Copy all as JSON</button>
+        <button class="f-btn f-btn--secondary" onClick={() => copy(FIELD_PROMPT)}><Icon name="robot-outline" />Copy prompt for AI</button>
+        {copied && <span class="meta"><Icon name="check" /> Copied</span>}
       </div>
       {importText !== null && (
         <div class="rig-form">
           <h3>Import field definitions</h3>
           <textarea class="json" rows={14} value={importText} placeholder='[{ "key": "...", "label": "...", "type": "text" }]' onInput={(e) => setImportText((e.target as HTMLTextAreaElement).value)} />
           <div class="meta">A JSON array (or a single field). Existing keys are replaced, new keys are added.</div>
-          {error && <div class="error">{error}</div>}
-          <div class="actions" style="justify-content:flex-start">
-            <button class="btn primary" disabled={!importText.trim()} onClick={() => void runImport()}>Import</button>
-            <button class="btn" onClick={() => { setImportText(null); setError(null); }}>Cancel</button>
+          {error && <ErrorLine>{error}</ErrorLine>}
+          <div class="form-actions">
+            <button class="f-btn" disabled={!importText.trim()} onClick={() => void runImport()}>Import</button>
+            <button class="f-btn f-btn--secondary" onClick={() => { setImportText(null); setError(null); }}>Cancel</button>
           </div>
         </div>
       )}
-      <table>
+      <table class="table">
         <thead><tr><th>Label</th><th>Key</th><th>Type</th><th>Used by</th><th></th></tr></thead>
         <tbody>
           {fields.map((f) => (
             <tr key={f.id} class={edit?.id === f.id ? "selected" : ""}>
-              <td>{f.definition.label}</td>
+              <td class="name">{f.definition.label}</td>
               <td class="meta">{f.key}</td>
               <td class="meta">{f.definition.type}{f.definition.type === "group" ? ` (${f.definition.fields?.length ?? 0})` : ""}</td>
               <td class="meta">{usedBy(f.id).join(", ") || "—"}</td>
               <td class="actions">
-                <button class="btn" onClick={() => { setEdit({ id: f.id, text: pretty(f.definition), isNew: false }); setPreview({}); setError(null); }}>Edit</button>
-                <button class="btn danger" onClick={() => void remove(f)}>Delete</button>
+                <button class="f-btn f-btn--secondary f-btn--sm" onClick={() => { setEdit({ id: f.id, text: pretty(f.definition), isNew: false }); setPreview({}); setError(null); }}>Edit</button>
+                <button class="f-btn f-btn--danger f-btn--sm" onClick={() => void remove(f)}>Delete</button>
               </td>
             </tr>
           ))}
@@ -108,22 +109,22 @@ export function Fields({ fields, onChange, projects }: Props) {
         <div class="rig-form field-edit">
           <h3>{edit.isNew ? "New field" : "Edit field"}</h3>
           {edit.isNew && (
-            <div class="chips">
+            <div class="f-chips">
               <span class="meta">Start from:</span>
-              {Object.keys(TEMPLATES).map((t) => <button type="button" key={t} class="chip" onClick={() => setEdit({ ...edit, text: pretty(TEMPLATES[t]) })}>{t}</button>)}
+              {Object.keys(TEMPLATES).map((t) => <Chip key={t} onClick={() => setEdit({ ...edit, text: pretty(TEMPLATES[t]) })}>{t}</Chip>)}
             </div>
           )}
           <div class="field-edit-cols">
             <textarea class="json" rows={18} value={edit.text} spellcheck={false} onInput={(e) => setEdit({ ...edit, text: (e.target as HTMLTextAreaElement).value })} />
             <div>
-              <div class="meta" style="margin-bottom:6px">Preview</div>
-              {parsed.def ? <div class="tags-form"><ExtraEditor defs={[parsed.def]} value={preview} onChange={setPreview} /></div> : <div class="error">{parsed.err}</div>}
+              <div class="section-title">Preview</div>
+              {parsed.def ? <div class="tags-form preview"><ExtraEditor defs={[parsed.def]} value={preview} onChange={setPreview} /></div> : <ErrorLine>{parsed.err}</ErrorLine>}
             </div>
           </div>
-          {error && <div class="error">{error}</div>}
-          <div class="actions" style="justify-content:flex-start">
-            <button class="btn primary" disabled={!parsed.def} onClick={() => void save()}>Save field</button>
-            <button class="btn" onClick={() => { setEdit(null); setError(null); }}>Cancel</button>
+          {error && <ErrorLine>{error}</ErrorLine>}
+          <div class="form-actions">
+            <button class="f-btn" disabled={!parsed.def} onClick={() => void save()}>Save field</button>
+            <button class="f-btn f-btn--secondary" onClick={() => { setEdit(null); setError(null); }}>Cancel</button>
           </div>
         </div>
       )}

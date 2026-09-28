@@ -1,8 +1,9 @@
 import { useState } from "preact/hooks";
-import { INT_EXT, label, LIGHT, WEATHER, type Extra, type FieldDef } from "@fielder/vocab";
+import { INT_EXT, label, WEATHER, type Extra, type FieldDef } from "@fielder/vocab";
 import { existingIdOf, putLocation, type Location, type ShotTags } from "./api";
 import { Combobox } from "./Combobox";
 import { ExtraEditor } from "./ExtraEditor";
+import { ErrorLine, LightChips } from "./ui";
 
 interface Props {
   initial?: Partial<ShotTags>;
@@ -32,7 +33,6 @@ export function TagsForm({ initial, locations, onLocations, fields, submitLabel,
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const toggleLight = (v: string) => setLight((cur) => (cur.includes(v) ? cur.filter((x) => x !== v) : [...cur, v]));
   const locationOptions = [
     ...locations.map((l) => ({ value: l.id, label: l.name, hint: l.shot_count ? `${l.shot_count} shot${l.shot_count === 1 ? "" : "s"}` : undefined })),
     ...(newName ? [{ value: NEW, label: newName, hint: "new" }] : []),
@@ -73,16 +73,14 @@ export function TagsForm({ initial, locations, onLocations, fields, submitLabel,
       </div>
       <div class="field">
         <span class="field-label">Light (every phase the shot works in)</span>
-        <div class="chips">
-          {LIGHT.map((v) => <button type="button" key={v} class={`chip ${light.includes(v) ? "active" : ""}`} onClick={() => toggleLight(v)}>{label(v)}</button>)}
-          <button type="button" class={`chip ${artificial ? "active" : ""}`} onClick={() => setArtificial(!artificial)}>Artificial</button>
-        </div>
+        <LightChips light={light} artificial={artificial} onChange={(l, a) => { setLight(l); setArtificial(a); }} />
       </div>
       {fields.length > 0 && <ExtraEditor defs={fields} value={extra} onChange={setExtra} />}
-      {error && <div class="error">{error}</div>}
-      <div class="actions">
-        <button type="button" class="btn" onClick={onCancel}>Cancel</button>
-        <button type="submit" class="btn primary" disabled={busy}>{submitLabel}</button>
+      {error && <ErrorLine>{error}</ErrorLine>}
+      <div class="form-actions">
+        <button type="submit" class="f-btn" disabled={busy}>{submitLabel}</button>
+        <button type="button" class="f-btn f-btn--ghost" onClick={onCancel}>Cancel</button>
+        <span class="meta"><kbd>Esc</kbd> cancel</span>
       </div>
     </form>
   );

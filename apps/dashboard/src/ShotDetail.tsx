@@ -6,8 +6,7 @@ import { downloadCrop, Framed, type MaskMode } from "./Framed";
 import { ModeSwitch } from "./ModeSwitch";
 import { RigExplorer } from "./RigExplorer";
 import { Filmstrip, isTyping, ShotInfo, usePhotoKeys } from "./ShotInfo";
-
-export { Badge } from "./ShotInfo";
+import { Icon } from "./ui";
 
 interface Props {
   shot: Shot;
@@ -66,26 +65,35 @@ export function ShotDetail({ shot, mode, onMode, projects, presets, fields, loca
   }
   return (
     <div class="detail-backdrop" onClick={onClose}>
-      <div class="detail" onClick={(e) => e.stopPropagation()}>
+      <div class="detail" role="dialog" aria-modal="true" aria-label={shot.name ?? "Shot"} onClick={(e) => e.stopPropagation()}>
         <div class="stage">
           <Framed photo={photo} mode={mode} maxHeight="80vh" />
-          <button class="nav left" title="Previous (←)" disabled={!prev} onClick={() => prev && onNavigate(prev)}>‹</button>
-          <button class="nav right" title="Next (→)" disabled={!next} onClick={() => next && onNavigate(next)}>›</button>
+          <button class="nav left" title="Previous (←)" aria-label="Previous shot" disabled={!prev} onClick={() => prev && onNavigate(prev)}><Icon name="chevron-left" /></button>
+          <button class="nav right" title="Next (→)" aria-label="Next shot" disabled={!next} onClick={() => next && onNavigate(next)}><Icon name="chevron-right" /></button>
           {index >= 0 && list.length > 1 && <span class="counter">{index + 1} / {list.length}</span>}
           <Filmstrip shot={shot} index={photoIndex} onPick={setPhotoIndex} />
         </div>
         <div class="side">
-          <div class="side-top"><span /><ModeSwitch value={mode} onChange={onMode} /></div>
+          <div class="side-top">
+            <ModeSwitch value={mode} onChange={onMode} />
+            <button class="f-btn f-btn--ghost f-btn--icon" title="Close (Esc)" aria-label="Close" onClick={onClose}><Icon name="close" /></button>
+          </div>
           <ShotInfo shot={shot} photo={photo} projects={projects} fields={fields} locations={locations} onLocations={onLocations} onUpdated={onUpdated} />
           <details><summary class="meta">Raw metadata · {shot.id}</summary><pre>{JSON.stringify({ framing: photo.framing, device: photo.device }, null, 2)}</pre></details>
-          <div class="btn-row footer">
-            <button class="btn outline" onClick={() => void downloadCrop(photo)} title="Download the photo cropped to the rig frame">Download crop</button>
-            <a class="btn outline" href={photo.image_url} download target="_blank" rel="noreferrer">Original</a>
-            <button class="btn outline" onClick={() => onShowOnMap(shot)}>Show on map</button>
-            <button class="btn outline" onClick={() => setExploring(true)} title="Frame this photo with other rigs and lenses">Explore rigs</button>
-            <span style="flex:1" />
-            <button class="btn danger" onClick={() => void remove()}>Delete</button>
-            <button class="btn outline" onClick={onClose}>Close</button>
+          <div class="dialog-foot">
+            <div class="btn-row">
+              <button class="f-btn f-btn--secondary" onClick={() => void downloadCrop(photo)} title="Download the photo cropped to the rig frame"><Icon name="crop" />Download crop</button>
+              <a class="f-btn f-btn--secondary" href={photo.image_url} download target="_blank" rel="noreferrer"><Icon name="image-outline" />Original</a>
+              <button class="f-btn f-btn--secondary" onClick={() => onShowOnMap(shot)}><Icon name="map-marker-outline" />Show on map</button>
+              <button class="f-btn f-btn--secondary" onClick={() => setExploring(true)} title="Frame this photo with other rigs and lenses"><Icon name="camera-control" />Explore rigs</button>
+              <span class="grow" />
+              <button class="f-btn f-btn--danger" onClick={() => void remove()}><Icon name="delete-outline" />Delete</button>
+            </div>
+            <div class="keys">
+              <span><kbd>←</kbd><kbd>→</kbd> shots</span>
+              {shot.photos.length > 1 && <span><kbd>,</kbd><kbd>.</kbd> photos</span>}
+              <span><kbd>Esc</kbd> close</span>
+            </div>
           </div>
         </div>
       </div>

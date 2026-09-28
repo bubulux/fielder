@@ -1,10 +1,7 @@
 import { FRAME_MODES, frameModeLabel } from "./format";
 import type { MaskMode } from "./Framed";
+import { Seg } from "./ui";
 
 export function ModeSwitch({ value, onChange }: { value: MaskMode; onChange: (m: MaskMode) => void }) {
-  return (
-    <div class="seg" title="How to show the rig frame on photos">
-      {FRAME_MODES.map((m) => <button key={m} class={value === m ? "active" : ""} onClick={() => onChange(m)}>{frameModeLabel(m)}</button>)}
-    </div>
-  );
+  return <Seg label="How to show the rig frame on photos" value={value} onChange={onChange} options={FRAME_MODES.map((m) => ({ id: m, label: frameModeLabel(m) }))} />;
 }

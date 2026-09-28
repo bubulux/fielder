@@ -1,6 +1,7 @@
 import { label, FILTER_FIELDS, filterField, isGroup, OP_LABELS, OPS_BY_KIND, type FilterField, type FilterGroup, type FilterOp, type FilterRule } from "@fielder/vocab";
 import type { Location, Preset, Project } from "./api";
 import { Combobox } from "./Combobox";
+import { Chip, Icon, Seg } from "./ui";
 
 interface Ctx { projects: Project[]; locations: Location[]; presets: Preset[]; /** Filterable extra fields of the current scope. */ extra: readonly FilterField[] }
 
@@ -30,10 +31,10 @@ function RuleRow({ rule, ctx, onChange, onRemove }: { rule: FilterRule; ctx: Ctx
     if ((f.kind === "enum" || f.kind === "set" || f.kind === "ref") && isList(rule.op)) {
       const sel = Array.isArray(rule.value) ? rule.value.map(String) : [];
       valueEditor = (
-        <div class="chips small">
+        <div class="f-chips">
           {opts.map((o) => (
-            <button type="button" key={o.value} class={`chip ${sel.includes(o.value) ? "active" : ""}`}
-              onClick={() => onChange({ ...rule, value: sel.includes(o.value) ? sel.filter((x) => x !== o.value) : [...sel, o.value] })}>{o.label}</button>
+            <Chip key={o.value} selected={sel.includes(o.value)}
+              onClick={() => onChange({ ...rule, value: sel.includes(o.value) ? sel.filter((x) => x !== o.value) : [...sel, o.value] })}>{o.label}</Chip>
           ))}
         </div>
       );
@@ -61,7 +62,7 @@ function RuleRow({ rule, ctx, onChange, onRemove }: { rule: FilterRule; ctx: Ctx
         {ops.map((o) => <option key={o} value={o}>{OP_LABELS[o]}</option>)}
       </select>
       <div class="value">{valueEditor}</div>
-      <button type="button" class="btn icon" title="Remove rule" onClick={onRemove}>✕</button>
+      <button type="button" class="f-btn f-btn--ghost f-btn--icon f-btn--sm" title="Remove rule" aria-label="Remove rule" onClick={onRemove}><Icon name="close" /></button>
     </div>
   );
 }
@@ -73,17 +74,14 @@ export function GroupEditor({ group, ctx, onChange, onRemove, depth = 0 }: { gro
     <div class={`group depth-${depth}`}>
       <div class="group-head">
         <span>Match</span>
-        <div class="seg">
-          <button type="button" class={group.match === "all" ? "active" : ""} onClick={() => onChange({ ...group, match: "all" })}>all</button>
-          <button type="button" class={group.match === "any" ? "active" : ""} onClick={() => onChange({ ...group, match: "any" })}>any</button>
-        </div>
+        <Seg label="Match" value={group.match} onChange={(match) => onChange({ ...group, match })} options={[{ id: "all", label: "all" }, { id: "any", label: "any" }]} />
         <span class="meta">of the following</span>
-        <span style="flex:1" />
-        <button type="button" class="btn" onClick={() => onChange({ ...group, rules: [...group.rules, defaultRule()] })}>＋ Rule</button>
-        {depth < 3 && <button type="button" class="btn" onClick={() => onChange({ ...group, rules: [...group.rules, { match: group.match === "all" ? "any" : "all", rules: [defaultRule()] }] })}>＋ Group</button>}
-        {onRemove && <button type="button" class="btn icon" title="Remove group" onClick={onRemove}>✕</button>}
+        <span class="grow" />
+        <button type="button" class="f-btn f-btn--secondary f-btn--sm" onClick={() => onChange({ ...group, rules: [...group.rules, defaultRule()] })}><Icon name="plus" />Rule</button>
+        {depth < 3 && <button type="button" class="f-btn f-btn--secondary f-btn--sm" onClick={() => onChange({ ...group, rules: [...group.rules, { match: group.match === "all" ? "any" : "all", rules: [defaultRule()] }] })}><Icon name="plus" />Group</button>}
+        {onRemove && <button type="button" class="f-btn f-btn--ghost f-btn--icon f-btn--sm" title="Remove group" aria-label="Remove group" onClick={onRemove}><Icon name="close" /></button>}
       </div>
-      {group.rules.length === 0 && <div class="meta" style="padding:4px 0 8px">No rules: matches every shot.</div>}
+      {group.rules.length === 0 && <div class="meta">No rules: matches every shot.</div>}
       {group.rules.map((r, i) => isGroup(r)
         ? <GroupEditor key={i} group={r} ctx={ctx} depth={depth + 1} onChange={(g) => setRule(i, g)} onRemove={() => removeRule(i)} />
         : <RuleRow key={i} rule={r} ctx={ctx} onChange={(x) => setRule(i, x)} onRemove={() => removeRule(i)} />)}

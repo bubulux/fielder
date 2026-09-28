@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from "preact/hooks";
-import { dayLight, lightLabel, localDay, shootableWindows, type DayLight, type Interval } from "@fielder/vocab";
+import { dayLight, lightLabel, localDay, PHASE_ICONS, shootableWindows, type DayLight, type Interval } from "@fielder/vocab";
 import { deleteDay, fetchDays, putDay, type DayShot, type Shot, type ShootingDay } from "./api";
 import { Combobox } from "./Combobox";
 import { cover, shotTitle } from "./format";
 import { Framed, type MaskMode } from "./Framed";
+import { Empty, ErrorLine, Icon } from "./ui";
 import { fetchForecast, weatherText, type HourForecast } from "./weather";
 
 interface Props {
@@ -15,7 +16,6 @@ interface Props {
 }
 
 const BERLIN = { lat: 52.52, lon: 13.405 };
-const PHASE_COLORS: Record<string, string> = { night: "#1c2340", dawn: "#e0925a", day: "#f2d36b", dusk: "#b8628a" };
 const hhmm = (d: Date) => d.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
 const windowsText = (w: Interval[]) => (w.length ? w.map((x) => `${hhmm(x.start)}–${hhmm(x.end)}`).join(", ") : "not on this day");
 const dateLabel = (date: string) => new Date(`${date}T12:00:00`).toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short", year: "numeric" });
@@ -77,22 +77,22 @@ export function Schedule({ projectId, shots, mask, onOpen }: Props) {
     <div class="schedule">
       <aside class="views-side">
         <div class="views-list">
-          <div class="views-head"><strong>Shooting days</strong><button class="btn" onClick={() => void create()}>＋ New day</button></div>
+          <div class="views-head"><strong>Shooting days</strong><button class="f-btn f-btn--sm" onClick={() => void create()}><Icon name="plus" />New day</button></div>
           {!days ? <div class="meta">Loading…</div> : days.length === 0 ? <div class="meta">No shooting days yet.</div> : days.map((d) => (
             <button key={d.id} class={`view-item ${d.id === selectedId ? "active" : ""} ${d.date < today ? "past" : ""}`} onClick={() => setSelectedId(d.id)}>
               <span>{dateLabel(d.date)}{d.title ? <span class="meta"> · {d.title}</span> : null}</span>
-              <span class="meta">{d.shots.length}</span>
+              <span class="count" title={`${d.shots.length} shots planned`}>{d.shots.length}</span>
             </button>
           ))}
         </div>
         <div class="views-save">
-          <span class="meta">{saving === "pending" || saving === "saving" ? "Saving…" : saving === "error" ? "Not saved" : "All changes saved"}</span>
-          {error && <div class="error">{error}</div>}
+          <span class={saving === "error" ? "warn" : "meta"}><Icon name={saving === "error" ? "alert" : saving === "idle" ? "check" : "cloud-upload-outline"} /> {saving === "pending" || saving === "saving" ? "Saving…" : saving === "error" ? "Not saved" : "All changes saved"}</span>
+          {error && <ErrorLine>{error}</ErrorLine>}
         </div>
       </aside>
       <section class="views-main">
         {day ? <DayEditor key={day.id} day={day} shots={shots} mask={mask} onChange={change} onDelete={() => void remove(day)} onOpen={onOpen} />
-          : <div class="status">{days && days.length ? "Pick a day." : "Create a shooting day to start planning."}</div>}
+          : <Empty icon="calendar-blank-outline" title={days && days.length ? "Pick a day" : "No shooting days yet"}>{days && days.length ? null : "Create a shooting day to start planning."}</Empty>}
       </section>
     </div>
   );
@@ -126,36 +126,39 @@ function DayEditor({ day, shots, mask, onChange, onDelete, onOpen }: { day: Shoo
   return (
     <div class="day-editor">
       <div class="day-head">
-        <input type="date" value={day.date} onInput={(e) => { const v = (e.target as HTMLInputElement).value; if (v) onChange({ ...day, date: v }); }} />
+        <input type="date" class="day-date" value={day.date} onInput={(e) => { const v = (e.target as HTMLInputElement).value; if (v) onChange({ ...day, date: v }); }} />
         <input class="grow" placeholder="Title, e.g. Park + U-Bahn" value={day.title ?? ""} onInput={(e) => onChange({ ...day, title: (e.target as HTMLInputElement).value || null })} />
-        <button class="btn danger" onClick={onDelete}>Delete day</button>
+        <button class="f-btn f-btn--danger" onClick={onDelete}><Icon name="delete-outline" />Delete day</button>
       </div>
       <textarea class="day-notes" rows={2} placeholder="Notes for the day (call time, permits, crew…)" value={day.notes ?? ""} onInput={(e) => onChange({ ...day, notes: (e.target as HTMLTextAreaElement).value || null })} />
 
       <Timeline light={light} forecast={forecast} start={start} hours={hours} />
 
       <div class="day-shots">
+        <div class="panel-title"><Icon name="format-list-numbered" />Planned shots</div>
         {groups.length === 0 && <div class="meta">No shots planned yet.</div>}
         {groups.map((g, gi) => {
           const union = mergeIntervals(g.items.flatMap(({ shot }) => shootableWindows(light, shot.light)));
           return (
             <div class="loc-group" key={`${g.name}-${gi}`}>
-              <div class="loc-head"><strong>{g.name}</strong><span class="meta"> · {g.items.length} shot{g.items.length === 1 ? "" : "s"} · light fits {windowsText(union)}</span></div>
+              <div class="loc-head"><Icon name="map-marker-outline" /><strong>{g.name}</strong><span class="meta num">{g.items.length} shot{g.items.length === 1 ? "" : "s"} · light fits {windowsText(union)}</span></div>
               {g.items.map(({ ds, shot, index }) => {
                 const w = shootableWindows(light, shot.light);
+                const fits = plannedFits(ds.planned_time, start, w);
                 return (
                   <div class="plan-row" key={shot.id}>
                     <div class="thumb" onClick={() => onOpen(shot, planned.map((x) => x.shot))}><Framed photo={cover(shot)} mode={mask} /></div>
                     <div class="plan-main">
                       <div class="plan-title">{shotTitle(shot)}{shot.photos.length > 1 && <span class="meta"> · {shot.photos.length} photos</span>}</div>
-                      <div class="meta">{lightLabel(shot.light, shot.artificial) || "no light requirement"} · {windowsText(w)}</div>
-                      <WindowBar light={light} windows={w} planned={ds.planned_time} start={start} hours={hours} />
+                      <div class="meta num">{lightLabel(shot.light, shot.artificial) || "No light requirement"} · {windowsText(w)}</div>
+                      <WindowBar light={light} windows={w} planned={ds.planned_time} fits={fits} start={start} hours={hours} />
+                      {!fits && <span class="f-tl__warn"><Icon name="alert" />Planned {ds.planned_time} is outside the window</span>}
                     </div>
-                    <label class="plan-time">Planned<input type="time" value={ds.planned_time ?? ""} onInput={(e) => setShots(day.shots.map((x) => (x === ds ? { ...x, planned_time: (e.target as HTMLInputElement).value || null } : x)))} /></label>
+                    <label class={`plan-time ${fits ? "" : "bad"}`}>Planned<input type="time" value={ds.planned_time ?? ""} onInput={(e) => setShots(day.shots.map((x) => (x === ds ? { ...x, planned_time: (e.target as HTMLInputElement).value || null } : x)))} /></label>
                     <div class="plan-actions">
-                      <button class="btn outline" title="Earlier" disabled={index === 0} onClick={() => move(index, -1)}>↑</button>
-                      <button class="btn outline" title="Later" disabled={index === day.shots.length - 1} onClick={() => move(index, 1)}>↓</button>
-                      <button class="btn danger" title="Remove from the day" onClick={() => setShots(day.shots.filter((x) => x !== ds))}>✕</button>
+                      <button class="f-btn f-btn--secondary f-btn--icon f-btn--sm" title="Earlier" aria-label="Earlier" disabled={index === 0} onClick={() => move(index, -1)}><Icon name="arrow-up" /></button>
+                      <button class="f-btn f-btn--secondary f-btn--icon f-btn--sm" title="Later" aria-label="Later" disabled={index === day.shots.length - 1} onClick={() => move(index, 1)}><Icon name="arrow-down" /></button>
+                      <button class="f-btn f-btn--danger f-btn--icon f-btn--sm" title="Remove from the day" aria-label="Remove from the day" onClick={() => setShots(day.shots.filter((x) => x !== ds))}><Icon name="close" /></button>
                     </div>
                   </div>
                 );
@@ -164,9 +167,9 @@ function DayEditor({ day, shots, mask, onChange, onDelete, onOpen }: { day: Shoo
           );
         })}
       </div>
-      <div class="actions" style="justify-content:flex-start">
-        <button class="btn" onClick={() => setAdding(!adding)}>{adding ? "Hide shot picker" : "＋ Add shots"}</button>
-        {planned.some((x) => x.ds.planned_time) && <button class="btn outline" onClick={() => setShots([...day.shots].sort((a, b) => (a.planned_time ?? "99").localeCompare(b.planned_time ?? "99")))}>Sort by planned time</button>}
+      <div class="form-actions">
+        <button class={adding ? "f-btn f-btn--secondary" : "f-btn"} onClick={() => setAdding(!adding)}><Icon name={adding ? "chevron-up" : "plus"} />{adding ? "Hide shot picker" : "Add shots"}</button>
+        {planned.some((x) => x.ds.planned_time) && <button class="f-btn f-btn--secondary" onClick={() => setShots([...day.shots].sort((a, b) => (a.planned_time ?? "99").localeCompare(b.planned_time ?? "99")))}><Icon name="sort-clock-ascending-outline" />Sort by planned time</button>}
       </div>
       {adding && <ShotPicker shots={shots} light={light} taken={new Set(day.shots.map((x) => x.shot_id))} mask={mask} onAdd={(ids) => setShots([...day.shots, ...ids.map((shot_id) => ({ shot_id, planned_time: null, notes: null }))])} />}
     </div>
@@ -186,48 +189,84 @@ function mergeIntervals(list: Interval[]): Interval[] {
 
 const pctOf = (d: Date, start: Date, hours: number) => ((d.getTime() - start.getTime()) / (hours * 3_600_000)) * 100;
 
+/** Whether a planned HH:MM on the day falls inside one of the windows (no time planned counts as fitting). */
+function plannedFits(planned: string | null, start: Date, windows: Interval[]): boolean {
+  if (!planned) return true;
+  const at = atTime(start, planned);
+  return windows.some((w) => at >= w.start && at < w.end);
+}
+function atTime(start: Date, hm: string): Date {
+  const [h, m] = hm.split(":").map(Number);
+  const d = new Date(start); d.setHours(h, m, 0, 0); return d;
+}
+
+/** The day's light phases, sunrise/sunset and now, with the hourly forecast on the same time axis below. */
 function Timeline({ light, forecast, start, hours }: { light: DayLight; forecast: HourForecast[] | null | "loading"; start: Date; hours: number }) {
+  const x = (d: Date) => `${pctOf(d, start, hours)}%`;
+  const w = (a: Date, b: Date) => pctOf(b, start, hours) - pctOf(a, start, hours);
   const ticks = Array.from({ length: Math.floor(hours / 3) + 1 }, (_, i) => new Date(start.getTime() + i * 3 * 3_600_000));
+  const now = new Date();
+  const showNow = now >= start && now.getTime() < start.getTime() + hours * 3_600_000;
+  const twilight = light.phases.filter((p) => p.phase === "dawn" || p.phase === "dusk");
   return (
-    <div class="timeline">
-      <div class="tl-bar">
-        {light.phases.map((p) => (
-          <div key={p.start.toISOString()} class={`tl-seg ${p.phase}`} title={`${p.phase} ${hhmm(p.start)}–${hhmm(p.end)}`}
-            style={{ left: `${pctOf(p.start, start, hours)}%`, width: `${pctOf(p.end, start, hours) - pctOf(p.start, start, hours)}%`, background: PHASE_COLORS[p.phase] }}>
-            <span>{p.phase}</span>
+    <div class="panel">
+      <div class="panel-title"><Icon name="weather-sunset" />Light and forecast</div>
+      <div class="tl-grid">
+        <span class="f-wx__lbl"><Icon name="white-balance-sunny" />Light</span>
+        <div class="f-tl__track">
+          {light.phases.map((p) => {
+            const width = w(p.start, p.end);
+            return (
+              <div key={p.start.toISOString()} class={`f-tl__seg f-tl__seg--${p.phase}`} title={`${p.phase} ${hhmm(p.start)}–${hhmm(p.end)}`} style={{ left: x(p.start), width: `${width}%` }}>
+                {width > 4 && <Icon name={PHASE_ICONS[p.phase]} />}{width > 9 && p.phase}
+              </div>
+            );
+          })}
+          <div class="f-tl__overlay">
+            {light.sunrise && <div class="f-tl__mark f-tl__mark--sun" style={{ left: x(light.sunrise) }} title={`Sunrise ${hhmm(light.sunrise)}`} />}
+            {light.sunset && <div class="f-tl__mark f-tl__mark--sun" style={{ left: x(light.sunset) }} title={`Sunset ${hhmm(light.sunset)}`} />}
+            {showNow && <div class="f-tl__mark f-tl__mark--now" style={{ left: x(now) }} title={`Now ${hhmm(now)}`} />}
           </div>
-        ))}
+        </div>
+        <span />
+        <div class="f-tl__ticks">{ticks.map((t, i) => <span key={t.toISOString()} style={{ left: x(t), transform: i === 0 ? "none" : i === ticks.length - 1 && pctOf(t, start, hours) >= 99 ? "translateX(-100%)" : undefined }}>{hhmm(t)}</span>)}</div>
+        {forecast === "loading" ? <><span /><span class="f-loading meta"><span class="f-spinner" />Loading forecast…</span></>
+          : forecast === null ? <><span /><div class="f-wx__none"><Icon name="calendar-question" />No forecast for this date yet: Open-Meteo reaches about 16 days ahead.</div></>
+          : (
+            <>
+              <span class="f-wx__lbl"><Icon name="weather-cloudy" />Cloud</span>
+              <div class="wx-track wx-cloud">
+                {forecast.map((h) => <div key={h.time.toISOString()} class="f-wx__cloud" style={{ left: x(h.time), width: `${100 / hours}%` }} title={hourTitle(h)}><i style={{ top: "auto", right: 0, height: `${h.cloudPct}%` }} /></div>)}
+              </div>
+              <span class="f-wx__lbl"><Icon name="weather-rainy" />Rain</span>
+              <div class="wx-track wx-rain">
+                {forecast.map((h) => <div key={h.time.toISOString()} class="f-wx__rain" style={{ left: x(h.time), width: `${100 / hours}%` }} title={hourTitle(h)}><i class={(h.precipProb ?? 0) < 30 ? "is-low" : ""} style={{ height: `${Math.max(h.precipProb ?? 0, 8)}%` }} /></div>)}
+              </div>
+              <span class="f-wx__lbl"><Icon name="thermometer" />Temp</span>
+              <div class="wx-track wx-temp">
+                {forecast.filter((h) => h.time.getHours() % 3 === 0).map((h) => <span key={h.time.toISOString()} class="f-wx__temp" style={{ left: x(h.time) }} title={hourTitle(h)}>{Math.round(h.tempC)}°</span>)}
+              </div>
+            </>
+          )}
       </div>
-      <div class="tl-ticks">{ticks.map((t) => <span key={t.toISOString()} style={{ left: `${pctOf(t, start, hours)}%` }}>{hhmm(t)}</span>)}</div>
-      <div class="tl-facts meta">
-        {light.sunrise && <>Sunrise {hhmm(light.sunrise)} · </>}{light.sunset && <>Sunset {hhmm(light.sunset)} · </>}
-        {light.phases.filter((p) => p.phase === "dawn" || p.phase === "dusk").map((p) => `${p.phase} ${hhmm(p.start)}–${hhmm(p.end)}`).join(" · ")}
-        {" "}· sun max {light.maxElevation.toFixed(0)}°
+      <div class="f-tl__keys num">
+        {light.sunrise && <span><Icon name="weather-sunset-up" />Sunrise <b>{hhmm(light.sunrise)}</b></span>}
+        {light.sunset && <span><Icon name="weather-sunset-down" />Sunset <b>{hhmm(light.sunset)}</b></span>}
+        {twilight.map((p) => <span key={p.start.toISOString()}>{p.phase === "dawn" ? "Dawn" : "Dusk"} <b>{hhmm(p.start)}–{hhmm(p.end)}</b></span>)}
+        <span>Sun max <b>{light.maxElevation.toFixed(0)}°</b></span>
+        {Array.isArray(forecast) && <span class="meta">Rain bars from 30 %. Hover for details.</span>}
       </div>
-      <div class="tl-weather">
-        {forecast === "loading" ? <span class="meta">Loading forecast…</span>
-          : forecast === null ? <span class="meta">No forecast for this date yet (Open-Meteo reaches about 16 days ahead).</span>
-          : forecast.map((h) => (
-            <div key={h.time.toISOString()} class="tl-hour" style={{ left: `${pctOf(h.time, start, hours)}%`, width: `${100 / hours}%` }}
-              title={`${hhmm(h.time)}: ${weatherText(h.code)}, ${Math.round(h.tempC)}°C, clouds ${h.cloudPct}%${h.precipProb != null ? `, rain ${h.precipProb}%` : ""}`}>
-              <div class="cloud" style={{ opacity: 0.15 + (h.cloudPct / 100) * 0.85 }} />
-              {h.precipProb != null && h.precipProb >= 30 && <div class="rain" style={{ height: `${h.precipProb}%` }} />}
-              {h.time.getHours() % 3 === 0 && <span>{Math.round(h.tempC)}°</span>}
-            </div>
-          ))}
-      </div>
-      {Array.isArray(forecast) && <div class="meta">Forecast: grey = cloud cover, blue = chance of rain (≥ 30%), numbers = temperature. Hover for details.</div>}
     </div>
   );
 }
 
-function WindowBar({ light, windows, planned, start, hours }: { light: DayLight; windows: Interval[]; planned: string | null; start: Date; hours: number }) {
-  let plannedAt: Date | null = null;
-  if (planned) { const [h, m] = planned.split(":").map(Number); plannedAt = new Date(start); plannedAt.setHours(h, m, 0, 0); }
-  const fits = !plannedAt || windows.some((w) => plannedAt! >= w.start && plannedAt! < w.end);
+const hourTitle = (h: HourForecast) => `${hhmm(h.time)}: ${weatherText(h.code)}, ${Math.round(h.tempC)} °C, cloud ${h.cloudPct} %${h.precipProb != null ? `, rain ${h.precipProb} %` : ""}`;
+
+function WindowBar({ light, windows, planned, fits, start, hours }: { light: DayLight; windows: Interval[]; planned: string | null; fits: boolean; start: Date; hours: number }) {
+  const plannedAt = planned ? atTime(start, planned) : null;
   return (
     <div class="win-bar">
-      {light.phases.map((p) => <div key={p.start.toISOString()} class="win-phase" style={{ left: `${pctOf(p.start, start, hours)}%`, width: `${pctOf(p.end, start, hours) - pctOf(p.start, start, hours)}%`, background: PHASE_COLORS[p.phase] }} />)}
+      {light.phases.map((p) => <div key={p.start.toISOString()} class={`win-phase phase-${p.phase}`} style={{ left: `${pctOf(p.start, start, hours)}%`, width: `${pctOf(p.end, start, hours) - pctOf(p.start, start, hours)}%` }} />)}
       {windows.map((w) => <div key={w.start.toISOString()} class="win-ok" style={{ left: `${pctOf(w.start, start, hours)}%`, width: `${pctOf(w.end, start, hours) - pctOf(w.start, start, hours)}%` }} />)}
       {plannedAt && <div class={`win-planned ${fits ? "" : "bad"}`} style={{ left: `${pctOf(plannedAt, start, hours)}%` }} title={fits ? "Planned time" : "Planned outside the shot's light"} />}
     </div>
@@ -244,13 +283,13 @@ function ShotPicker({ shots, light, taken, mask, onAdd }: { shots: Shot[]; light
   return (
     <div class="shot-picker">
       <div class="picker-head">
-        <label>Location<Combobox options={locations} value={location} onChange={setLocation} placeholder="All locations" /></label>
+        <label class="labelled">Location<Combobox options={locations} value={location} onChange={setLocation} placeholder="All locations" /></label>
         <label class="check"><input type="checkbox" checked={onlyApproved} onChange={() => setOnlyApproved(!onlyApproved)} /> Approved only</label>
       </div>
       {candidates.length === 0 && <div class="meta">No more shots to add{onlyApproved ? " (approve shots in Review first, or untick “Approved only”)" : ""}.</div>}
       {[...byLocation.entries()].map(([name, list]) => (
         <div key={name} class="picker-group">
-          <div class="loc-head"><strong>{name}</strong> <button class="link" onClick={() => onAdd(list.map((s) => s.id))}>add all {list.length}</button></div>
+          <div class="loc-head"><Icon name="map-marker-outline" /><strong>{name}</strong> <button class="f-linkbtn" onClick={() => onAdd(list.map((s) => s.id))}>Add all {list.length}</button></div>
           <div class="picker-grid">
             {list.map((s) => {
               const w = shootableWindows(light, s.light);
@@ -258,7 +297,7 @@ function ShotPicker({ shots, light, taken, mask, onAdd }: { shots: Shot[]; light
                 <button key={s.id} class="picker-card" onClick={() => onAdd([s.id])} title="Add to the day">
                   <Framed photo={cover(s)} mode={mask} />
                   <div class="title">{shotTitle(s)}</div>
-                  <div class={`meta ${w.length ? "" : "warn"}`}>{lightLabel(s.light, s.artificial) || "any light"} · {w.length ? windowsText(w) : "no fitting light"}</div>
+                  <div class={`meta num ${w.length ? "" : "warn"}`}>{!w.length && <Icon name="alert" />} {lightLabel(s.light, s.artificial) || "Any light"} · {w.length ? windowsText(w) : "no fitting light"}</div>
                 </button>
               );
             })}

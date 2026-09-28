@@ -47,7 +47,7 @@ export function Combobox({ options, value, onChange, placeholder, onCreate, clea
   ];
 
   useEffect(() => { setHi(0); }, [q, open]);
-  useEffect(() => { list.current?.querySelector(".hi")?.scrollIntoView({ block: "nearest" }); }, [hi]);
+  useEffect(() => { list.current?.querySelector(".is-hi")?.scrollIntoView({ block: "nearest" }); }, [hi]);
 
   const close = () => { setOpen(false); setQuery(null); };
   const take = (e: Entry | undefined) => {
@@ -67,40 +67,52 @@ export function Combobox({ options, value, onChange, placeholder, onCreate, clea
   }
 
   return (
-    <div class="combo">
-      <input
-        id={id}
-        ref={input}
-        autoFocus={autoFocus}
-        value={query ?? selected?.label ?? ""}
-        placeholder={placeholder ?? "Type to search…"}
-        onFocus={() => setOpen(true)}
-        onClick={() => setOpen(true)}
-        onBlur={close}
-        onInput={(e) => { setQuery((e.target as HTMLInputElement).value); setOpen(true); }}
-        onKeyDown={onKeyDown}
-        autoComplete="off"
-        role="combobox"
-        aria-expanded={open}
-      />
+    <div class="combo f-combo">
+      <div class="f-input">
+        <input
+          id={id}
+          ref={input}
+          autoFocus={autoFocus}
+          value={query ?? selected?.label ?? ""}
+          placeholder={placeholder ?? "Type to search…"}
+          onFocus={() => setOpen(true)}
+          onClick={() => setOpen(true)}
+          onBlur={close}
+          onInput={(e) => { setQuery((e.target as HTMLInputElement).value); setOpen(true); }}
+          onKeyDown={onKeyDown}
+          autoComplete="off"
+          role="combobox"
+          aria-expanded={open}
+        />
+        <i class={`mdi f-combo__caret mdi-${open ? "chevron-up" : "chevron-down"}`} aria-hidden="true" />
+      </div>
       {open && entries.length > 0 && (
-        <ul class="combo-list" ref={list} role="listbox">
+        <ul class="f-combo__list" ref={list} role="listbox">
           {entries.map((e, i) => (
             <li
               key={e.kind === "option" ? e.option.value : e.kind}
-              class={`${i === hi ? "hi" : ""} ${e.kind === "option" && e.option.value === value ? "sel" : ""} ${e.kind !== "option" ? "special" : ""}`}
+              class={`f-combo__opt ${i === hi ? "is-hi" : ""} ${e.kind === "option" && e.option.value === value ? "is-sel" : ""} ${e.kind === "create" ? "f-combo__opt--create" : ""}`}
               // mousedown, not click: runs before the input's blur closes the list
               onMouseDown={(ev) => { ev.preventDefault(); take(e); }}
               onMouseEnter={() => setHi(i)}
               role="option"
+              aria-selected={e.kind === "option" && e.option.value === value}
             >
-              {e.kind === "option" ? <>{e.option.label}{e.option.hint && <span class="meta"> {e.option.hint}</span>}</>
-                : e.kind === "create" ? <>＋ Create “{(query ?? "").trim()}”</>
-                : <>— none —</>}
+              {e.kind === "option" ? <><i class={`mdi ${e.option.value === value ? "mdi-check" : ""}`} aria-hidden="true" />{highlight(e.option.label, q)}{e.option.hint && <span class="meta">{e.option.hint}</span>}</>
+                : e.kind === "create" ? <><i class="mdi mdi-plus" aria-hidden="true" />Create “{(query ?? "").trim()}”</>
+                : <><i class="mdi mdi-close" aria-hidden="true" /><span class="meta">None</span></>}
             </li>
           ))}
+          <li class="f-combo__hint" aria-hidden="true"><span><kbd>↑</kbd> <kbd>↓</kbd> move</span><span><kbd>↵</kbd>/<kbd>Tab</kbd> take</span><span><kbd>Esc</kbd> cancel</span></li>
         </ul>
       )}
     </div>
   );
+}
+
+/** Bold + underline the typed text inside a label. */
+function highlight(label: string, q: string) {
+  const i = q ? label.toLowerCase().indexOf(q) : -1;
+  if (i < 0) return label;
+  return <>{label.slice(0, i)}<mark>{label.slice(i, i + q.length)}</mark>{label.slice(i + q.length)}</>;
 }

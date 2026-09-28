@@ -1,5 +1,5 @@
 import type { RigLens } from "@fielder/fov-math";
-import { extraLabel, label, lightLabel, STATE_COLORS, type FilterableShot } from "@fielder/vocab";
+import { extraLabel, label, lightLabel, type FilterableShot } from "@fielder/vocab";
 import type { Photo, Shot } from "./api";
 
 /** The photo that stands for the shot in lists, maps and filters: the first one. */
@@ -17,7 +17,6 @@ export const shotTitle = (s: Shot): string => s.name?.trim() || rigLabel(cover(s
 export const placeLabel = (s: Shot): string => s.location_name ?? "";
 export const tagsLabel = (s: Shot): string =>
   [label(s.int_ext), lightLabel(s.light, s.artificial), label(s.weather), extraLabel(s.extra)].filter(Boolean).join(" · ");
-export const stateColor = (s: Shot): string => STATE_COLORS[s.state] ?? "#9a9aa5";
 /** "3 photos" for sequences, "" for single shots. */
 export const photoCountLabel = (s: Shot): string => (s.photos.length > 1 ? `${s.photos.length} photos` : "");
 

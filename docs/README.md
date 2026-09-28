@@ -11,6 +11,7 @@ Reference documentation for the whole app. Start with [architecture](architectur
 | [api.md](api.md) | Every Worker endpoint, with request and response shapes |
 | [development.md](development.md) | Local dev loops, checks, deploy, migrations, APK builds |
 | [infrastructure.md](infrastructure.md) | Cloudflare resources, Access, EAS, secrets |
+| [design.md](design.md) | Design system: Sun/Set themes, contrast rules, tokens, icons, where the styles live |
 
 ## Features
 
@@ -31,3 +32,4 @@ Reference documentation for the whole app. Start with [architecture](architectur
 
 - Before 2026-09-27: prototype with one shot = one photo, districts and a hard-coded U-Bahn list.
 - 2026-09-27: rework from [GitHub issue #1](https://github.com/bubulux/fielder/issues/1). Schema reset to `0001_baseline.sql` (prototype data dropped), then all features above. The implementation plan is in the git history of branch `rework/phase-1-projects-photos`.
+- 2026-09-28: redesign on a design system from Claude Design ([design.md](design.md)); features unchanged.
