@@ -16,6 +16,6 @@ export const DEFAULT_SETTINGS: Settings = {
   humanViewButton: "cycle",
   directUpload: false,
   loggingEnabled: false,
-  hudEnabled: true,
+  hudChips: { project: true, rig: true, fov: true, gps: true, warnings: true },
   theme: "auto",
 };

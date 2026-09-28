@@ -26,6 +26,9 @@ export type RigOrientation = "landscape" | "portrait";
 /** Screen orientation the app locks to on launch; "auto" follows the sensor. */
 export type OrientationLock = "auto" | "landscape" | "portrait";
 
+/** Viewfinder HUD chips. "warnings" covers no project, no/poor GPS, sign-in and rig-wider-than-phone notices. */
+export interface HudChips { project: boolean; rig: boolean; fov: boolean; gps: boolean; warnings: boolean }
+
 export interface Settings {
   /** 35mm-equivalent focal length of the phone's main camera. Calibrate from EXIF or edit. */
   phoneEquivalentFocalMm: number;
@@ -46,8 +49,8 @@ export interface Settings {
   directUpload: boolean;
   /** Record a detailed log on the phone that can be shared for debugging. */
   loggingEnabled: boolean;
-  /** Show the info overlay (rig, math, warnings) on the live view. */
-  hudEnabled: boolean;
+  /** Which info chips the live view shows (Setup → Viewfinder); each is switched on its own. */
+  hudChips: HudChips;
   /** "auto" follows the phone's dark mode; "sun" = light (daylight), "set" = dark. */
   theme: "auto" | "sun" | "set";
 }

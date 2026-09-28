@@ -40,6 +40,6 @@ Project-specific details of a shot (nearest U-Bahn station, access notes, parkin
   - a JSON editor with line numbers; a parse error highlights its line and shows the message. Save field (⌘S) or Revert.
   - a live form preview (`ExtraEditor.tsx`, showing the last valid version while the JSON is broken)
   - Import JSON…, Copy all, Copy prompt for AI
-- **Tag forms**: dashboard `ExtraEditor.tsx` (combobox selects), phone `components/ExtraEditor.tsx` (chips, with a search list above 12 options). They render the fields of the shot's project.
+- **Tag forms**: dashboard `ExtraEditor.tsx` (combobox selects), phone `components/TagEditor.tsx` (a row per field that opens a sheet: chips up to 12 options, a search list above; groups expand in place). They render the fields of the shot's project.
 - **Phone offline**: definitions and each project's `fieldIds` are cached during `flush()`. `store.fieldsForProject(projectId)` reads them.
 - **Filters**: `extraFilterFields(defs)` turns every leaf into a filter field `extra.<path>` (select → enum/set, boolean → yes/no, number, text). The Shots filter panel shows them under "Extra fields" (the active project's fields, or all of them for "All projects").

@@ -9,7 +9,7 @@ interface Props {
   settings: Settings;
   exceedsPreview: boolean;
   /** Optional human-view reference frame (thin cyan line, no blackout). */
-  human?: { rect: Rect; fits: boolean } | null;
+  human?: { rect: Rect; fits: boolean; focalMm?: number } | null;
   /** Stored photos: neutral mask and white frame regardless of the live-view settings (photos never take a colour). */
   neutral?: boolean;
 }
@@ -54,7 +54,7 @@ export function Overlay({ preview, rect, settings, exceedsPreview, human, neutra
             borderStyle: human.fits ? "solid" : "dashed",
           }}
         >
-          <Text style={s.humanLabel}>HUMAN</Text>
+          <Text style={s.humanLabel}>HUMAN{human.focalMm ? ` ${human.focalMm}` : ""}</Text>
         </View>
       )}
     </View>

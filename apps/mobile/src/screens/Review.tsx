@@ -1,160 +1,176 @@
 import { useEffect, useMemo, useState } from "react";
-import { Alert, Pressable, ScrollView, Text, useWindowDimensions, View } from "react-native";
-import { api, type Shot } from "../api";
+import { RefreshControl, ScrollView, Text, useWindowDimensions, View } from "react-native";
+import type { Shot } from "../api";
+import { useApp } from "../appState";
+import { useOnline } from "../net";
+import { store, usePref } from "../storage";
+import { ActionBar, AppHeader } from "../components/chrome";
+import { EditTagsSheet } from "../components/EditTagsSheet";
+import { useToastOffset } from "../components/feedback";
 import { PhotoStrip } from "../components/PhotoStrip";
-import { FrameModeSeg, ShotFrame, type FrameMode } from "../components/ShotFrame";
-import { TagsForm } from "../components/TagsForm";
-import { Button, Empty, Icon, StateMarker } from "../components/ui";
-import { makeStyles, num, RADIUS, type, useTheme } from "../theme";
-import { ensureLocation } from "../namedSync";
-import { store } from "../storage";
-import type { LocationEntry, Settings, ShotTags } from "../types";
-import { photoCountLabel, placeLabel, rigLabel, shotTitle, tagsLabel, type useShots } from "./Gallery";
+import { FRAME_MODES, FrameModeSeg, type FrameMode } from "../components/ShotFrame";
+import { FullPhoto, MoreSheet, ShotPhoto, ShotSummary, useShotActions } from "../components/ShotParts";
+import { Button, Empty, IconButton, Skeleton, useLayoutSize } from "../components/ui";
+import { makeStyles, num, type, useTheme } from "../theme";
 
-interface Props {
-  settings: Settings;
-  data: ReturnType<typeof useShots>;
-  locations: LocationEntry[];
-  onLocations: (l: LocationEntry[]) => void;
-  countAt: (locationId: string) => number;
-}
+/** Portrait decision bar: Prev · n of m · Next, then Archive | Approve. */
+const BAR_H = 10 + 52 + 8 + 52 + 12 + 2;
 
-const fmt = (iso: string) => new Date(iso).toLocaleString();
-
-/** Unreviewed shots one at a time, oldest first, with prev/next. Approve or Archive (both keep the photos); details are edited in place. */
-export function Review({ settings, data, locations, onLocations, countAt }: Props) {
-  const r = useStyles();
+/**
+ * Unreviewed shots of the active project, oldest first, one at a time: photo first, the decision
+ * pinned at the thumb. Approve/Archive take the shot out; the next one takes its position (no
+ * skip). Edit opens the same tag editor as Tag; Delete lives in ⋯ with Archive as the safe choice.
+ */
+export function Review() {
+  const s = useStyles();
   const { c } = useTheme();
+  const app = useApp();
+  const online = useOnline();
   const { width, height } = useWindowDimensions();
   const portrait = height >= width;
-  const [mode, setMode] = useState<FrameMode>("mask");
-  const [busy, setBusy] = useState(false);
-  const [editing, setEditing] = useState(false);
+  const [mode, setMode] = usePref<FrameMode>("reviewMode.v1", "mask", FRAME_MODES);
   const [photoIndex, setPhotoIndex] = useState(0);
-  /** Follow the shot, not the position; when it leaves the queue (approved/archived) stay at the same position. */
+  const [sheet, setSheet] = useState<"edit" | "more" | null>(null);
+  const [full, setFull] = useState(false);
+  const [busy, setBusy] = useState(false);
+  /** Follow the shot, not the position; when it leaves the queue stay at the same position. */
   const [currentId, setCurrentId] = useState<string | null>(null);
   const [lastIndex, setLastIndex] = useState(0);
-  const { shots, error, update, remove } = data;
+  const { shots, error, refreshing, load } = app.shots;
+  const { setState } = useShotActions();
+  const [box, onBox] = useLayoutSize();
+  useToastOffset(portrait ? BAR_H : 0);
 
-  const queue = useMemo(
-    () => (shots ?? []).filter((s) => s.state === "unreviewed").sort((a, b) => a.captured_at.localeCompare(b.captured_at)),
-    [shots],
-  );
-  const found = queue.findIndex((s) => s.id === currentId);
+  const queue = useMemo(() => (shots ?? []).filter((x) => x.state === "unreviewed").sort((a, b) => a.captured_at.localeCompare(b.captured_at)), [shots]);
+  const found = queue.findIndex((x) => x.id === currentId);
   const index = found >= 0 ? found : Math.min(lastIndex, queue.length - 1);
-  const current = index >= 0 ? queue[index] : null;
+  const current: Shot | null = index >= 0 ? queue[index] : null;
   useEffect(() => { if (current && current.id !== currentId) setCurrentId(current.id); setLastIndex(Math.max(0, index)); }, [current?.id, index]);
-  useEffect(() => { setPhotoIndex(0); setEditing(false); }, [current?.id]);
-  const go = (delta: number) => { const n = queue[index + delta]; if (n) setCurrentId(n.id); };
-
-  async function setState(shot: Shot, state: Shot["state"]) {
+  useEffect(() => { setPhotoIndex(0); }, [current?.id]);
+  const go = (delta: number) => { const nx = queue[index + delta]; if (nx) setCurrentId(nx.id); };
+  const decide = async (state: Shot["state"]) => {
+    if (!current || busy) return;
     setBusy(true);
-    try { update(await api.patchShot(shot.id, { state })); } catch (e) { Alert.alert("Update failed", String(e)); } finally { setBusy(false); }
-  }
-  async function saveTags(shot: Shot, tags: ShotTags, newLoc: LocationEntry | null) {
-    setBusy(true);
-    try {
-      if (newLoc) {
-        const id = await ensureLocation(newLoc);
-        onLocations([...locations.filter((l) => l.id !== newLoc.id && l.id !== id), { ...newLoc, id, synced: true }]);
-        tags = { ...tags, location_id: id };
-      }
-      update(await api.patchShot(shot.id, tags));
-      setEditing(false);
-    } catch (e) { Alert.alert("Save failed", String(e)); } finally { setBusy(false); }
-  }
-  const del = (shot: Shot) =>
-    Alert.alert("Delete shot", "Removes the images and their metadata permanently. Archive keeps them.", [
-      { text: "Cancel", style: "cancel" },
-      { text: "Delete", style: "destructive", onPress: async () => { try { await api.deleteShot(shot.id); remove(shot.id); } catch (e) { Alert.alert("Delete failed", String(e)); } } },
-    ]);
+    try { await setState(current, state); } finally { setBusy(false); }
+  };
 
-  if (error) return <View style={r.root}><Empty icon="cloud-alert" title="Could not load" body={error} /></View>;
-  if (!shots) return <View style={r.root}><Empty loading title="Loading shots…" /></View>;
-  if (!current) return <View style={r.root}><Empty icon="check-all" title="Nothing to review" body="New shots show up here after they are uploaded." /></View>;
+  const header = <AppHeader offlineMeta="Decisions need the server. The loaded queue stays browsable." />;
+  const refresh = <RefreshControl refreshing={refreshing} onRefresh={() => void load()} tintColor={c.accent} colors={[c.accent]} progressBackgroundColor={c.surface} />;
+
+  if (error && !shots) {
+    return (
+      <View style={s.root}>{header}
+        <ScrollView refreshControl={refresh}>
+          <Empty icon="cloud-alert" title="Couldn't load the review queue" body={`${error}. Queued uploads are safe on the phone.`}>
+            <Button icon="refresh" label="Try again" onPress={() => void load()} />
+          </Empty>
+        </ScrollView>
+      </View>
+    );
+  }
+  if (!shots) {
+    return (
+      <View style={s.root}>{header}
+        <View style={{ padding: 16, gap: 12 }}>
+          <Skeleton style={{ height: Math.min(width * 0.75, 262), marginHorizontal: -16, borderRadius: 0 }} />
+          <Skeleton style={{ height: 48, borderRadius: 999 }} />
+          <Skeleton style={{ height: 24, width: "70%" }} />
+          <Skeleton style={{ height: 18, width: "50%" }} />
+          <Skeleton style={{ height: 18, width: "60%" }} />
+        </View>
+      </View>
+    );
+  }
+  if (!current) {
+    const approved = shots.filter((x) => x.state === "approved").length;
+    const archived = shots.filter((x) => x.state === "archived").length;
+    return (
+      <View style={s.root}>{header}
+        <ScrollView refreshControl={refresh}>
+          <Empty icon="check-all" title="Nothing to review" body={shots.length ? `${approved} approved · ${archived} archived in ${app.project?.name ?? "this project"}. New shots show up here after they upload.` : "New shots show up here after they upload."}>
+            {shots.length > 0 && <Button kind="secondary" icon="view-grid-outline" label="Browse shots" onPress={() => { store.savePref("shotsFilter.v1", "all"); app.setShotsView("grid"); app.setTab("shots"); }} />}
+          </Empty>
+        </ScrollView>
+      </View>
+    );
+  }
 
   const photo = current.photos[Math.min(photoIndex, current.photos.length - 1)];
-  const photoWidth = portrait ? width - 32 : Math.min(width * 0.55, height * 1.25);
-  const photoView = (
-    <View style={{ alignItems: "center" }}>
-      <ShotFrame photo={photo} width={photoWidth} settings={settings} mode={mode} style={{ borderRadius: RADIUS.sm }} />
-      <PhotoStrip shot={current} index={photoIndex} onPick={setPhotoIndex} />
-      <View style={{ marginTop: 8 }}><FrameModeSeg value={mode} onChange={setMode} /></View>
+  const disabled = busy || !online;
+  const nav = (big: boolean) => (
+    <View style={s.navRow}>
+      {big ? <Button style={{ flex: 1 }} kind="secondary" icon="chevron-left" label="Prev" onPress={() => go(-1)} disabled={index === 0} />
+        : <IconButton icon="chevron-left" label="Previous shot" size={52} onPress={() => go(-1)} disabled={index === 0} />}
+      <Text style={s.pos}>{index + 1} of {queue.length}</Text>
+      {big ? <Button style={{ flex: 1 }} kind="secondary" icon="chevron-right" label="Next" onPress={() => go(1)} disabled={index === queue.length - 1} />
+        : <IconButton icon="chevron-right" label="Next shot" size={52} onPress={() => go(1)} disabled={index === queue.length - 1} />}
     </View>
   );
-  const info = editing ? (
-    <View style={{ flex: 1 }}>
-      <TagsForm
-        initial={{ name: current.name, light: current.light, artificial: current.artificial, weather: current.weather, int_ext: current.int_ext, location_id: current.location_id, extra: current.extra }}
-        locations={locations}
-        countAt={countAt}
-        fields={store.fieldsForProject(current.project_id)}
-        submitLabel="Save"
-        onSubmit={(t, l) => void saveTags(current, t, l)}
-        onCancel={() => setEditing(false)}
-        busy={busy}
-      />
+  const decisions = (
+    <View style={{ flexDirection: "row", gap: 8 }}>
+      <Button style={{ flex: 1 }} kind="archive" icon="archive-outline" label="Archive" onPress={() => void decide("archived")} disabled={disabled} />
+      <Button style={{ flex: 1 }} kind="approve" icon="check" label="Approve" onPress={() => void decide("approved")} disabled={disabled} />
     </View>
-  ) : (
-    <View style={{ flex: 1 }}>
-      <Text style={r.title}>{shotTitle(current)}</Text>
-      <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginTop: 6 }}><StateMarker state={current.state} /><Text style={r.line}>{placeLabel(current) || "No location"}</Text></View>
-      {!!tagsLabel(current) && <Text style={r.dim}>{tagsLabel(current)}</Text>}
-      <Text style={r.dim}>{rigLabel(photo)}</Text>
-      <Text style={[r.dim, num]}>{[fmt(current.captured_at), photoCountLabel(current)].filter(Boolean).join(" · ")}</Text>
-      <View style={{ flexDirection: "row", gap: 12, marginTop: 12 }}>
-        <View style={{ flex: 1 }}><Button label="Archive" icon="archive-outline" kind="archive" onPress={() => void setState(current, "archived")} disabled={busy} /></View>
-        <View style={{ flex: 1 }}><Button label="Approve" icon="check" kind="approve" onPress={() => void setState(current, "approved")} disabled={busy} /></View>
-      </View>
-      <View style={{ flexDirection: "row", gap: 12 }}>
-        <View style={{ flex: 2 }}><Button label="Edit details" icon="pencil-outline" kind="ghost" onPress={() => setEditing(true)} /></View>
-        <View style={{ flex: 1 }}><Button label="Delete" icon="delete-outline" kind="danger" onPress={() => del(current)} /></View>
-      </View>
+  );
+  const tools = (
+    <View style={{ flexDirection: "row", gap: 8 }}>
+      <IconButton icon="pencil-outline" label="Edit details" size={52} onPress={() => setSheet("edit")} disabled={!online} />
+      <IconButton icon="dots-horizontal" label="More" size={52} onPress={() => setSheet("more")} />
     </View>
+  );
+  const summary = (
+    <View style={{ flexDirection: "row", gap: 12, alignItems: "flex-start" }}>
+      <View style={{ flex: 1 }}><ShotSummary shot={current} photo={photo} /></View>
+      {tools}
+    </View>
+  );
+  const sheets = (
+    <>
+      <EditTagsSheet shot={current} visible={sheet === "edit"} onClose={() => setSheet(null)} />
+      <MoreSheet shot={current} photo={photo} visible={sheet === "more"} onClose={() => setSheet(null)} />
+      {full && <FullPhoto shot={current} index={photoIndex} mode={mode} onMode={setMode} settings={app.settings} onClose={() => setFull(false)} />}
+    </>
   );
 
-  return (
-    <View style={r.root}>
-      <View style={r.bar}>
-        <NavButton dir={-1} disabled={index === 0} onPress={() => go(-1)} />
-        <Text style={r.barTitle}>{index + 1} / {queue.length} to review</Text>
-        <NavButton dir={1} disabled={index === queue.length - 1} onPress={() => go(1)} />
-      </View>
-      {portrait ? (
-        <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ padding: 16, paddingBottom: 32, gap: 12 }}>{photoView}{info}</ScrollView>
-      ) : (
-        <View style={{ flex: 1, flexDirection: "row", padding: 16, gap: 16 }}>
-          {photoView}
-          <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: 24 }} style={{ flex: 1 }}>{info}</ScrollView>
+  if (!portrait) {
+    return (
+      <View style={[s.root, { flexDirection: "row" }]}>
+        <View style={{ flex: 1 }} onLayout={onBox}>
+          {box.width > 0 && <ShotPhoto shot={current} index={photoIndex} mode={mode} settings={app.settings} maxW={box.width} maxH={box.height} onNext={() => go(1)} onPrev={() => go(-1)} onOpen={() => setFull(true)} />}
+          <View style={s.floatMode}><FrameModeSeg value={mode} onChange={setMode} /></View>
         </View>
-      )}
-    </View>
-  );
-}
-
-/** Big Prev/Next in the top bar: outlined, dashed when there is nothing that way. */
-function NavButton({ dir, disabled, onPress }: { dir: -1 | 1; disabled: boolean; onPress: () => void }) {
-  const r = useStyles();
-  const { c } = useTheme();
-  const fg = disabled ? c.textDisabled : c.text;
+        <View style={s.side}>
+          <PhotoStrip shot={current} index={photoIndex} onPick={setPhotoIndex} />
+          <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 12, gap: 12 }} refreshControl={refresh}>{summary}</ScrollView>
+          <View style={s.sideBar}>{nav(false)}{decisions}</View>
+        </View>
+        {sheets}
+      </View>
+    );
+  }
   return (
-    <Pressable onPress={onPress} disabled={disabled} accessibilityRole="button" accessibilityLabel={dir < 0 ? "Previous shot" : "Next shot"}
-      style={({ pressed }) => [r.nav, pressed && { backgroundColor: c.surfaceSunken }, disabled && r.navOff]}>
-      {dir < 0 && <Icon name="chevron-left" color={fg} />}
-      <Text style={[r.navText, { color: fg }]}>{dir < 0 ? "Prev" : "Next"}</Text>
-      {dir > 0 && <Icon name="chevron-right" color={fg} />}
-    </Pressable>
+    <View style={s.root}>
+      {header}
+      <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 16 }} refreshControl={refresh}>
+        <ShotPhoto shot={current} index={photoIndex} mode={mode} settings={app.settings} maxW={width} maxH={Math.min(width * 0.75, 262)} onNext={() => go(1)} onPrev={() => go(-1)} onOpen={() => setFull(true)} />
+        <View style={{ paddingHorizontal: 12 }}><PhotoStrip shot={current} index={photoIndex} onPick={setPhotoIndex} /></View>
+        <View style={s.body}>
+          <FrameModeSeg block value={mode} onChange={setMode} />
+          {summary}
+        </View>
+      </ScrollView>
+      <ActionBar style={{ flexDirection: "column", paddingTop: 10 }}>{nav(true)}{decisions}</ActionBar>
+      {sheets}
+    </View>
   );
 }
 
 const useStyles = makeStyles((c) => ({
   root: { flex: 1, backgroundColor: c.bg },
-  bar: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8, paddingHorizontal: 10, paddingVertical: 8, backgroundColor: c.surface, borderBottomWidth: 2, borderBottomColor: c.border },
-  barTitle: { ...type("body", "bold"), color: c.text, ...num },
-  nav: { flexDirection: "row", alignItems: "center", gap: 2, minHeight: 48, paddingHorizontal: 10, borderRadius: RADIUS.sm, borderWidth: 2, borderColor: c.border },
-  navOff: { borderStyle: "dashed", borderColor: c.textDisabled },
-  navText: { ...type("label", "bold") },
-  title: { ...type("heading", "bold"), color: c.text },
-  line: { ...type("body", "semibold"), color: c.text, flexShrink: 1 },
-  dim: { ...type("small"), color: c.textDim, marginTop: 4 },
+  body: { padding: 16, gap: 16 },
+  navRow: { flexDirection: "row", alignItems: "center", gap: 8 },
+  pos: { ...type("body", "bold"), color: c.text, ...num, minWidth: 72, textAlign: "center" },
+  floatMode: { position: "absolute", left: 8, bottom: 8, padding: 4, borderRadius: 999, backgroundColor: c.chromeBg, borderWidth: 1.5, borderColor: c.chromeBorder },
+  side: { width: 292, backgroundColor: c.surface, borderLeftWidth: 2, borderLeftColor: c.border },
+  sideBar: { gap: 8, padding: 12, borderTopWidth: 2, borderTopColor: c.border },
 }));

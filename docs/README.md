@@ -18,18 +18,19 @@ Reference documentation for the whole app. Start with [architecture](architectur
 | Page | What it covers |
 | --- | --- |
 | [features/projects.md](features/projects.md) | Projects, the active project on both clients, "All projects" |
-| [features/capture.md](features/capture.md) | Phone viewfinder: rigs, lenses, overlay, human view, flashlight, sequences, direct upload, upload queue |
+| [features/capture.md](features/capture.md) | Phone Shoot tab: rigs, lenses, overlay, controls, HUD chips, Tag after capture, sequences, direct upload, upload queue |
 | [features/review-and-tagging.md](features/review-and-tagging.md) | Review flow, tags (light model, INT/EXT, weather, location), view modes (mask/frame/fit/raw) |
 | [features/extra-fields.md](features/extra-fields.md) | User-defined fields as JSON, AI import, per-project selection |
 | [features/positions.md](features/positions.md) | GPS acquisition and manual pin correction |
 | [features/rig-explorer.md](features/rig-explorer.md) | Re-framing a photo for other rigs and lenses |
 | [features/schedule.md](features/schedule.md) | Shooting days, daylight phases, forecast, shootable windows |
 | [features/day-mode-offline.md](features/day-mode-offline.md) | Phone "Day" tab and offline days |
-| [features/dashboard.md](features/dashboard.md) | Dashboard tabs: gallery, map, views/filters, rigs, locations, fields |
+| [features/phone-app.md](features/phone-app.md) | Phone shell: 5 tabs, gates, pushed screens, header and sync state, Setup hub, shared components |
+| [features/dashboard.md](features/dashboard.md) | Dashboard shell and sections: Shots (grid/list/map, filters, views), shot view, Review, Plan, Library |
 | [features/debug-log.md](features/debug-log.md) | The phone's background debug log |
 
 ## History
 
 - Before 2026-09-27: prototype with one shot = one photo, districts and a hard-coded U-Bahn list.
 - 2026-09-27: rework from [GitHub issue #1](https://github.com/bubulux/fielder/issues/1). Schema reset to `0001_baseline.sql` (prototype data dropped), then all features above. The implementation plan is in the git history of branch `rework/phase-1-projects-photos`.
-- 2026-09-28: redesign on a design system from Claude Design ([design.md](design.md)); features unchanged.
+- 2026-09-28: redesign on a design system from Claude Design ([design.md](design.md)), then a ground-up rework of the dashboard and the phone screens from Claude Design ([dashboard](features/dashboard.md), [phone app](features/phone-app.md)); features unchanged.

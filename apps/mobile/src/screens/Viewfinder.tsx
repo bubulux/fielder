@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { ActivityIndicator, Alert, Platform, Pressable, StyleSheet, Text, View, type LayoutChangeEvent } from "react-native";
+import { ActivityIndicator, Platform, Pressable, StyleSheet, Text, View, type LayoutChangeEvent } from "react-native";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import * as Location from "expo-location";
 import * as Crypto from "expo-crypto";
@@ -7,57 +7,58 @@ import { ImageManipulator, SaveFormat } from "expo-image-manipulator";
 import { File } from "expo-file-system";
 import { StatusBar } from "expo-status-bar";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { api, type Shot } from "../api";
+import { api } from "../api";
+import { useApp } from "../appState";
 import { isSignedIn, onAuthChange, signedInEmail } from "../auth";
 import { isConfigured } from "../config";
 import { computeOverlay, formatDeg, previewBox, type Box } from "../framing";
+import { clampToRange } from "../lens";
 import { log } from "../log";
 import { PHONE } from "../phone";
+import { saveRig, syncRigs, useRigs } from "../rigs";
 import { addToSequence, deleteDraftFiles, keepPhoto, restoreDraft, startSequence } from "../sequence";
-import { store, usePendingCount } from "../storage";
-import { lensRangeOf, type CaptureDraft, type DraftPhoto, type LocationEntry, type PhotoMetadata, type Preset, type ProjectEntry, type Settings, type ShotMetadata, type ShotTags } from "../types";
+import { store } from "../storage";
+import { useSync } from "../sync";
+import { lensRangeOf, type CaptureDraft, type DraftPhoto, type LocationEntry, type PhotoMetadata, type ShotMetadata, type ShotTags } from "../types";
 import { enqueue, flush } from "../uploads";
-import { syncPresets } from "../presetSync";
-import { LensCarousel } from "../components/LensCarousel";
-import { clampToRange } from "../lens";
+import { Badge } from "../components/chrome";
+import { notice, toast, useToastOffset } from "../components/feedback";
+import { HudChip } from "../components/Hud";
 import { LensSheet } from "../components/LensSheet";
+import { LensStrip } from "../components/LensStrip";
 import { HUMAN_COLOR, Overlay } from "../components/Overlay";
-import { PresetSheet } from "../components/PresetSheet";
-import { ShotReview } from "./ShotReview";
+import { RigSheet } from "../components/RigSheet";
+import { EMPTY_TAGS } from "../components/TagEditor";
 import { Button, Empty, Icon, SeqBadge } from "../components/ui";
+import { retryAll } from "./Uploads";
+import { Tag } from "./Tag";
 import { FIXED, makeStyles, num, RADIUS, SIZE, type, useTheme } from "../theme";
 
-/** Control panel: lens strip + two rows in portrait, a right-hand panel in landscape. */
-const CONTROLS_H = 68 + 56 + 10 + SIZE.shutter + 20;
-const CONTROLS_W = 2 * 56 + 8 + 18;
-const LENS_STRIP = 76;
-/** Minimum clearance between the lens strip and the screen edge (camera cutout in landscape). */
-const EDGE_PAD = 32;
+/** Portrait chrome block: 10 pad · lens strip 56 · 10 gap · control row 76 · 12 pad, plus the 2 dp top edge. */
+const CHROME_H = 10 + 56 + 10 + SIZE.shutter + 12 + 2;
+/** Landscape columns: lens strip (after the cutout pad) and the control column next to the tab bar. */
+const LENS_COL = 80;
+const CONTROL_COL = 80;
 const MAX_UPLOAD_EDGE = 1280;
 const HUMAN_STEPS = [35, 43, 50];
 /** A watched GPS fix younger than this is used as is; otherwise the capture waits briefly for a fresh one. */
 const FIX_MAX_AGE_MS = 15_000;
+/** GPS worse than this is a warning. */
+const GPS_WARN_M = 20;
 
-const NO_TAGS: ShotTags = { name: null, light: [], artificial: false, weather: null, int_ext: null, location_id: null, extra: {} };
+type SheetName = "rig" | "lens" | null;
 
-type Sheet = "rig" | "lens" | null;
-
-interface Props {
-  settings: Settings;
-  onSettings: (s: Settings) => void;
-  /** Whether this tab is on screen; the camera (and GPS watch) is released otherwise. */
-  active: boolean;
-  /** Every capture goes into this project; null blocks the shutter (App asks for one first). */
-  project: ProjectEntry | null;
-  /** Uploaded shots (for per-location counters in the review form). */
-  shots: Shot[] | null;
-  locations: LocationEntry[];
-  onLocations: (l: LocationEntry[]) => void;
-}
-
-export function Viewfinder({ settings, onSettings, active: tabActive, project, shots, locations, onLocations }: Props) {
+/**
+ * The Shoot tab: live camera with the rig frame, one control row (Uploads · Seq · Light · Shutter ·
+ * Fit · Human · Rig; a column in landscape), the lens strip, and HUD chips switched one by one in
+ * Setup. A capture opens Tag (or queues directly); nothing is lost on the way: drafts and running
+ * sequences are persisted, and a failed enqueue keeps the draft.
+ */
+export function Viewfinder({ active: tabActive }: { active: boolean }) {
   const s = useStyles();
-  const { c, name: themeName } = useTheme();
+  const { c } = useTheme();
+  const app = useApp();
+  const { settings, project, locations } = app;
   const [size, setSize] = useState<Box>({ width: 0, height: 0 });
   const onLayout = (e: LayoutChangeEvent) => {
     const { width, height } = e.nativeEvent.layout;
@@ -66,25 +67,20 @@ export function Viewfinder({ settings, onSettings, active: tabActive, project, s
   const window = size;
   const portrait = window.height >= window.width;
   const insets = useSafeAreaInsets();
-  // App.tsx already pads the content by the cutout inset; top up to EDGE_PAD so the strip never touches the edge.
-  const lensPad = portrait ? 0 : Math.max(0, EDGE_PAD - insets.left);
-  const setSettings = (u: Settings | ((s: Settings) => Settings)) => onSettings(typeof u === "function" ? u(settings) : u);
+  // App.tsx already pads by the cutout inset; top up to the 32 dp edge rule so the lens column never touches it.
+  const lensPad = portrait ? 0 : Math.max(0, SIZE.edgePad - insets.left);
+  const setSettings = app.setSettings;
   const [camPerm, requestCamPerm] = useCameraPermissions();
   const [locPerm, requestLocPerm] = Location.useForegroundPermissions();
   const camera = useRef<CameraView>(null);
   const [cameraReady, setCameraReady] = useState(false);
 
-  const [presets, setPresets] = useState<Preset[]>(() => store.loadPresets());
-  const [activeId, setActiveId] = useState<string | null>(() => store.loadActivePresetId());
+  const { active: rig } = useRigs();
   const [lensMm, setLensMm] = useState<number>(() => store.loadLensMm());
-  const [sheet, setSheet] = useState<Sheet>(null);
-  const [busy, setBusy] = useState<"capture" | null>(null);
-  const [toast, setToast] = useState<string | null>(null);
-  const pendingCount = usePendingCount();
-  /** Any queued shot the server keeps rejecting (re-read when the queue changes or a flush reports back). */
-  const [stuck, setStuck] = useState(() => store.loadPending().some((p) => p.stuck));
-  useEffect(() => { setStuck(store.loadPending().some((p) => p.stuck)); }, [pendingCount, toast]);
-  /** Capture or finished sequence waiting in the tag form. */
+  const [sheet, setSheet] = useState<SheetName>(null);
+  const [busy, setBusy] = useState(false);
+  const sync = useSync();
+  /** Capture or finished sequence waiting in Tag. */
   const [draft, setDraft] = useState<CaptureDraft | null>(() => restoreDraft(store.loadCaptureDraft()));
   /** Sequence mode: on while non-null; resumes after an app restart. */
   const [sequence, setSequence] = useState<CaptureDraft | null>(() => store.loadSequence());
@@ -93,40 +89,26 @@ export function Viewfinder({ settings, onSettings, active: tabActive, project, s
   /** Flashlight; deliberately not remembered across launches. */
   const [torch, setTorch] = useState(false);
 
-  const active = presets.find((p) => p.id === activeId) ?? presets[0] ?? null;
-  const lensRange = lensRangeOf(active);
+  const lensRange = lensRangeOf(rig);
   // Keep the lens inside the rig's range when the rig (or its range) changes.
-  useEffect(() => { setLensMm((mm) => clampToRange(mm, lensRange)); }, [active?.id, lensRange?.min, lensRange?.max]);
-
-  // Persist on change.
-  useEffect(() => { store.savePresets(presets); }, [presets]);
-  useEffect(() => { store.saveActivePresetId(activeId); }, [activeId]);
+  useEffect(() => { setLensMm((mm) => clampToRange(mm, lensRange)); }, [rig?.id, lensRange?.min, lensRange?.max]);
   useEffect(() => { store.saveLensMm(lensMm); }, [lensMm]);
 
   // Permissions and background sync on launch.
-  useEffect(() => {
-    if (camPerm && !camPerm.granted && camPerm.canAskAgain) void requestCamPerm();
-  }, [camPerm, requestCamPerm]);
-  useEffect(() => {
-    if (locPerm && !locPerm.granted && locPerm.canAskAgain) void requestLocPerm();
-  }, [locPerm, requestLocPerm]);
+  useEffect(() => { if (camPerm && !camPerm.granted && camPerm.canAskAgain) void requestCamPerm(); }, [camPerm, requestCamPerm]);
+  useEffect(() => { if (locPerm && !locPerm.granted && locPerm.canAskAgain) void requestLocPerm(); }, [locPerm, requestLocPerm]);
   const [authEmail, setAuthEmail] = useState<string | null>(() => signedInEmail());
   useEffect(() => {
     if (!isConfigured) return;
-    const sync = async () => {
+    const run = async () => {
       if (!isSignedIn()) return;
-      // Rigs live on the server; pull the authoritative list after pushing offline edits.
-      const server = await syncPresets(store.loadPresets());
-      if (server) {
-        setPresets(server);
-        setActiveId((cur) => (cur && server.some((p) => p.id === cur) ? cur : server[0]?.id ?? null));
-      }
+      await syncRigs(); // rigs live on the server; offline edits are pushed first
       await flush(); // also pulls the server's project and location lists
-      onLocations(store.loadLocations());
+      app.setLocations(store.loadLocations());
     };
-    void sync();
+    void run();
     // Re-run after a sign-in so queued shots go out right away.
-    return onAuthChange(() => { setAuthEmail(signedInEmail()); void sync(); });
+    return onAuthChange(() => { setAuthEmail(signedInEmail()); void run(); });
   }, []);
 
   // GPS: watch at the best accuracy while the camera is on screen, so a capture has a warm, precise fix.
@@ -141,24 +123,18 @@ export function Viewfinder({ settings, onSettings, active: tabActive, project, s
     Location.watchPositionAsync({ accuracy: Location.Accuracy.BestForNavigation, timeInterval: 1000, distanceInterval: 0 }, (pos) => {
       lastFix.current = pos;
       setGpsAccuracy(pos.coords.accuracy ?? null);
-    }).then((s) => { if (cancelled) s.remove(); else sub = s; }).catch((e) => log("warn", "gps watch failed", e));
+    }).then((x) => { if (cancelled) x.remove(); else sub = x; }).catch((e) => log("warn", "gps watch failed", e));
     return () => { cancelled = true; sub?.remove(); };
   }, [tabActive, locPerm?.granted]);
 
-  const showToast = useCallback((msg: string) => {
-    setToast(msg);
-    setTimeout(() => setToast((t) => (t === msg ? null : t)), 2500);
-  }, []);
+  // Toasts sit above the chrome block (portrait); in landscape the controls are a side column.
+  useToastOffset(portrait ? CHROME_H : 0, tabActive);
 
-  // Layout: preview box fills the space left after the control strip.
   const area: Box = portrait
-    ? { width: window.width, height: Math.max(0, window.height - CONTROLS_H) }
-    : { width: Math.max(0, window.width - CONTROLS_W - LENS_STRIP - lensPad), height: window.height };
+    ? { width: window.width, height: Math.max(0, window.height - CHROME_H) }
+    : { width: Math.max(0, window.width - CONTROL_COL - LENS_COL - lensPad), height: window.height };
   const preview = useMemo(() => previewBox(area), [area.width, area.height]);
-  const overlay = useMemo(
-    () => (active ? computeOverlay(settings, active, lensMm, preview) : null),
-    [settings, active, lensMm, preview],
-  );
+  const overlay = useMemo(() => (rig ? computeOverlay(settings, rig, lensMm, preview) : null), [settings, rig, lensMm, preview]);
 
   async function getPosition(): Promise<Location.LocationObject | null> {
     if (!locPerm?.granted) {
@@ -174,8 +150,8 @@ export function Viewfinder({ settings, onSettings, active: tabActive, project, s
   }
 
   async function capture() {
-    if (!camera.current || !cameraReady || busy || !active || !overlay || !project) return;
-    setBusy("capture");
+    if (!camera.current || !cameraReady || busy || !rig || !overlay || !project) return;
+    setBusy(true);
     const seqAtStart = sequenceRef.current?.shotId ?? null;
     try {
       const [pos, pic] = await Promise.all([
@@ -184,7 +160,8 @@ export function Viewfinder({ settings, onSettings, active: tabActive, project, s
       ]);
       if (!pos) {
         log("warn", "capture without GPS fix");
-        Alert.alert("No GPS position", "Could not get a location fix. The shot was not saved.");
+        try { new File(pic.uri).delete(); } catch { /* temp file */ }
+        void notice("No GPS position", "Could not get a location fix, so the photo was not kept. Wait for the GPS chip and try again.");
         return;
       }
       const landscapePic = pic.width >= pic.height;
@@ -204,16 +181,16 @@ export function Viewfinder({ settings, onSettings, active: tabActive, project, s
         lon: pos.coords.longitude,
         gps_accuracy_m: pos.coords.accuracy ?? null,
         lens_mm: lensMm,
-        preset_id: active.synced ? active.id : null,
+        preset_id: rig.synced ? rig.id : null,
         width: small.width,
         height: small.height,
         framing: {
-          preset_name: active.name,
-          camera_id: active.cameraId,
-          format_id: active.formatId,
-          sensor_width_mm: active.sensorWidthMm,
-          sensor_height_mm: active.sensorHeightMm,
-          speedbooster_factor: active.speedboosterFactor,
+          preset_name: rig.name,
+          camera_id: rig.cameraId,
+          format_id: rig.formatId,
+          sensor_width_mm: rig.sensorWidthMm,
+          sensor_height_mm: rig.sensorHeightMm,
+          speedbooster_factor: rig.speedboosterFactor,
           lens_mm: lensMm,
           rig_orientation: settings.rigOrientation,
           effective_focal_mm: round(overlay.framing.effectiveFocalLengthMm),
@@ -235,11 +212,9 @@ export function Viewfinder({ settings, onSettings, active: tabActive, project, s
           gps_fix_age_ms: Date.now() - pos.timestamp,
         },
       };
-      log("info", "capture", { lens: lensMm, rig: active.name, gps_accuracy_m: meta.gps_accuracy_m, sequence: !!seqAtStart, direct: settings.directUpload });
-      if (!active.synced) {
-        // Preset unknown to the server: try once more now so the FK can be set on the row later.
-        try { await api.putPreset(active); setPresets((c) => c.map((x) => (x.id === active.id ? { ...x, synced: true } : x))); } catch { /* the framing snapshot on the photo still preserves it */ }
-      }
+      log("info", "capture", { lens: lensMm, rig: rig.name, gps_accuracy_m: meta.gps_accuracy_m, sequence: !!seqAtStart, direct: settings.directUpload });
+      // Rig unknown to the server: try once more now so the reference can be set on the row later.
+      if (!rig.synced) void saveRig(rig, true);
       const photo: DraftPhoto = { uri: small.uri, meta, frame };
       // Joins the sequence only if the one that was on when the shutter fired is still on.
       const seq = sequenceRef.current;
@@ -247,7 +222,6 @@ export function Viewfinder({ settings, onSettings, active: tabActive, project, s
         const next = addToSequence(seq, photo);
         sequenceRef.current = next;
         setSequence(next);
-        showToast(`Sequence · ${next.photos.length} photo${next.photos.length === 1 ? "" : "s"}`);
       } else {
         const single: CaptureDraft = { shotId: Crypto.randomUUID(), photos: [keepPhoto(photo)] };
         if (settings.directUpload) finishDraft(single);
@@ -255,49 +229,49 @@ export function Viewfinder({ settings, onSettings, active: tabActive, project, s
       }
     } catch (err) {
       log("error", "capture failed", err);
-      Alert.alert("Capture failed", err instanceof Error ? err.message : String(err));
+      void notice("Capture failed", err instanceof Error ? err.message : String(err));
     } finally {
-      setBusy(null);
+      setBusy(false);
     }
   }
 
-  /** Show a draft in the tag form; it is stored so it reopens after an app restart. */
+  /** Show a draft in Tag; it is stored so it reopens after an app restart. */
   function openDraft(d: CaptureDraft) {
     store.saveCaptureDraft(d);
     setDraft(d);
   }
 
-  /** Direct upload: queue without tags; if that fails the draft opens in the form instead of being lost. */
+  /** Direct upload: queue without tags; if that fails the draft opens in Tag instead of being lost. */
   function finishDraft(d: CaptureDraft) {
     store.saveCaptureDraft(d);
-    if (queueDraft(d, NO_TAGS, null)) store.saveCaptureDraft(null);
+    if (queueDraft(d, EMPTY_TAGS, null)) { store.saveCaptureDraft(null); toast("Queued untagged · tag it later in Review", "neutral"); }
     else setDraft(d);
   }
 
   /** Queue a capture or sequence as one shot of the active project; the upload runs in the background. */
   function queueDraft(d: CaptureDraft, tags: ShotTags, newLocation: LocationEntry | null): boolean {
     if (!project) return false;
-    if (newLocation) { const next = [...locations, newLocation]; onLocations(next); store.saveLocations(next); }
+    if (newLocation) { const next = [...locations, newLocation]; app.setLocations(next); store.saveLocations(next); }
     const metadata: ShotMetadata = { id: d.shotId, project_id: project.id, ...tags, photos: d.photos.map((p) => p.meta) };
     try {
       enqueue(metadata, Object.fromEntries(d.photos.map((p) => [p.meta.id, p.uri])));
     } catch (err) {
       log("error", "enqueue failed", err);
-      Alert.alert("Could not save the shot", err instanceof Error ? err.message : String(err));
+      void notice("Could not save the shot", `${err instanceof Error ? err.message : String(err)}. The photos are kept; try Upload again.`);
       return false; // keep the draft so nothing is lost
     }
     deleteDraftFiles(d); // the queue has its own copies now
-    showToast("Saved, uploading…");
-    void flush().then((r) => {
-      onLocations(store.loadLocations());
-      showToast(r.remaining === 0 ? "Uploaded" : `Saved on the phone (${r.remaining} pending)`);
-    });
+    void flush().then(() => app.setLocations(store.loadLocations()));
     return true;
   }
 
   function uploadDraft(tags: ShotTags, newLocation: LocationEntry | null) {
     if (!draft) return;
-    if (queueDraft(draft, tags, newLocation)) { store.saveCaptureDraft(null); setDraft(null); }
+    if (queueDraft(draft, tags, newLocation)) {
+      store.saveCaptureDraft(null);
+      setDraft(null);
+      toast(`Queued · ${tags.name ?? (draft.photos.length > 1 ? `sequence of ${draft.photos.length}` : "untitled shot")}`);
+    }
   }
 
   function discardDraft() {
@@ -312,25 +286,19 @@ export function Viewfinder({ settings, onSettings, active: tabActive, project, s
       const started = startSequence();
       sequenceRef.current = started;
       setSequence(started);
-      showToast("Sequence on: every shot joins one set");
+      toast("Sequence on: every photo joins one shot", "neutral");
       return;
     }
     sequenceRef.current = null;
     setSequence(null);
     log("info", "sequence end", { shot: d.shotId, photos: d.photos.length });
-    if (d.photos.length === 0) { store.saveSequence(null); showToast("Sequence off"); return; }
+    if (d.photos.length === 0) { store.saveSequence(null); toast("Sequence off", "neutral"); return; }
     // Store the finished sequence as the draft before forgetting it as the running sequence.
     store.saveCaptureDraft(d);
     store.saveSequence(null);
     if (settings.directUpload) finishDraft(d);
     else setDraft(d);
   }
-
-  const countAt = useCallback(
-    (locationId: string) =>
-      (shots ?? []).filter((x) => x.location_id === locationId).length + store.loadPending().filter((p) => p.metadata.location_id === locationId).length,
-    [shots],
-  );
 
   /** Cycle: off -> 35 -> 43 -> 50 -> off. Toggle: off <-> the chosen value (Setup). */
   function pressHuman() {
@@ -343,10 +311,7 @@ export function Viewfinder({ settings, onSettings, active: tabActive, project, s
     });
   }
 
-  async function retryUploads() {
-    const r = await flush({ includeStuck: true });
-    showToast(r.remaining === 0 ? "All uploaded" : `${r.remaining} still pending${r.lastError ? `: ${r.lastError}` : ""}`);
-  }
+  const countAt = useCallback((id: string) => app.countAt(id), [app.countAt]);
 
   if (!camPerm) return <View style={s.root} onLayout={onLayout} />;
   if (!camPerm.granted) {
@@ -359,45 +324,65 @@ export function Viewfinder({ settings, onSettings, active: tabActive, project, s
     );
   }
 
-  const lensStrip = (
-    <LensCarousel lensMm={lensMm} onChange={setLensMm} vertical={!portrait} length={portrait ? window.width : window.height} range={lensRange} onPressValue={() => setSheet("lens")} />
-  );
-  const shutterDisabled = !!busy || !active || !cameraReady || !project;
+  const shutterOff = busy || !rig || !cameraReady || !project;
+  const chips = settings.hudChips;
+  const gpsPoor = gpsAccuracy == null || gpsAccuracy > GPS_WARN_M;
+  const gpsText = gpsAccuracy == null ? "No GPS fix yet" : `GPS ±${Math.round(gpsAccuracy)} m`;
+  const n = sync.state === "stuck" ? sync.stuck : sync.pending;
 
-  const gpsWarn = gpsAccuracy == null || gpsAccuracy > 20;
-  const cycleTheme = () => setSettings((x) => ({ ...x, theme: themeName === "sun" ? "set" : "sun" }));
-
-  // Rig · Human · Fit · Light, then Seq · Shutter · Uploads in the thumb zone (a right-hand panel in landscape).
-  const small = (
-    <>
-      <VfButton icon="camera-control" label="Rig" onPress={() => setSheet("rig")} warn={!active} />
-      <VfButton icon="human-male" label={settings.humanViewEnabled ? `Human ${settings.humanViewFocalMm}` : "Human"} onPress={pressHuman} on={settings.humanViewEnabled} />
-      <VfButton icon="fit-to-screen-outline" label="Fit" onPress={() => setSettings((x) => ({ ...x, fitToFrame: !x.fitToFrame }))} on={settings.fitToFrame} />
-      <VfButton icon={torch ? "flashlight" : "flashlight-off"} label="Light" onPress={() => setTorch((t) => !t)} on={torch} />
-    </>
-  );
   const shutter = (
-    <Pressable onPress={capture} disabled={shutterDisabled} accessibilityRole="button" accessibilityLabel={sequence ? `Capture into sequence (${sequence.photos.length})` : "Capture"}
-      style={[s.shutter, sequence && s.shutterSeq, shutterDisabled && !busy && s.shutterOff]}>
-      {({ pressed }) => busy === "capture"
+    <Pressable onPress={capture} disabled={shutterOff} accessibilityRole="button" accessibilityLabel={sequence ? `Capture into sequence, ${sequence.photos.length} so far` : "Capture"}
+      style={[s.shutter, sequence && s.shutterSeq, shutterOff && !busy && s.shutterOff]}>
+      {({ pressed }) => busy
         ? <ActivityIndicator color={c.chromeText} size="large" />
-        : <View style={[s.disc, pressed && s.discPressed, sequence && { backgroundColor: FIXED.record }, shutterDisabled && { backgroundColor: "transparent" }]}>
-            {sequence ? <Text style={s.discText}>{sequence.photos.length}</Text> : shutterDisabled ? <Icon name="close" size={28} color={c.textDisabled} /> : null}
+        : <View style={[s.disc, pressed && s.discPressed, sequence && { backgroundColor: FIXED.record }, shutterOff && { backgroundColor: "transparent" }]}>
+            {sequence ? <Text style={s.discText}>{sequence.photos.length}</Text> : shutterOff ? <Icon name="close" size={28} color={c.textDisabled} /> : null}
           </View>}
     </Pressable>
   );
-  const big = (
-    <>
-      <VfButton icon="layers-triple-outline" label={sequence ? `Seq ${sequence.photos.length}` : "Seq"} onPress={toggleSequence} disabled={!!busy} on={!!sequence} record={!!sequence} />
-      {shutter}
-      <VfButton icon="cloud-upload-outline" label="Uploads" onPress={() => void retryUploads()} count={pendingCount} stuck={stuck} />
-    </>
+  const cell = (key: string, node: ReactNode) => <View key={key} style={s.cell}>{node}</View>;
+  // Portrait, left → right. Landscape reads top → bottom as portrait right → left (phone turned counter-clockwise).
+  const controls = [
+    cell("uploads", <Control icon="cloud-upload-outline" label={n ? `Uploads, ${n} ${sync.state === "stuck" ? "stuck" : "waiting"}. Tap to retry, hold for the list` : "Uploads. Hold for the list"} vertical={!portrait}
+      onPress={() => void retryAll()} onLongPress={() => app.push({ name: "uploads" })} badge={n > 0 && sync.state !== "ok" ? <Badge n={n} stuck={sync.state === "stuck"} /> : null} />),
+    cell("seq", <Control icon="layers-triple-outline" label={sequence ? "End sequence" : "Start sequence"} on={!!sequence} disabled={busy} vertical={!portrait} onPress={toggleSequence} />),
+    cell("light", <Control icon={torch ? "flashlight" : "flashlight-off"} label="Light" on={torch} vertical={!portrait} onPress={() => setTorch((t) => !t)} />),
+    <View key="shutter" style={s.shutterCell}>{shutter}</View>,
+    cell("fit", <Control icon="fit-to-screen-outline" label="Fit to frame" on={settings.fitToFrame} vertical={!portrait} onPress={() => setSettings((x) => ({ ...x, fitToFrame: !x.fitToFrame }))} />),
+    cell("human", <Control icon="human-male" label={settings.humanViewEnabled ? `Human view ${settings.humanViewFocalMm} mm` : "Human view"} on={settings.humanViewEnabled} vertical={!portrait} onPress={pressHuman} />),
+    cell("rig", <Control icon="camera-control" label={rig ? `Rig ${rig.name}` : "Rig, none yet"} warn={!rig} vertical={!portrait} onPress={() => setSheet("rig")} />),
+  ];
+  const lensStrip = <LensStrip lensMm={lensMm} onChange={setLensMm} vertical={!portrait} range={lensRange} onPressValue={() => setSheet("lens")} />;
+
+  const hud = (
+    <View style={[s.hud, !portrait && { justifyContent: "center" }]} pointerEvents="box-none">
+      {project && chips.project && <HudChip icon="folder-outline" onPress={app.openProjectSheet} label={`Project ${project.name}, tap to switch`}>{project.name}</HudChip>}
+      {!project && chips.warnings && <HudChip icon="folder-alert-outline" kind="danger" onPress={app.openProjectSheet} label="No project, tap to pick">No project</HudChip>}
+      {rig && chips.rig && <HudChip icon="camera-outline">{rig.name} · {lensMm} mm{rig.speedboosterFactor !== 1 ? ` ×${rig.speedboosterFactor}` : ""}</HudChip>}
+      {overlay && chips.fov && (
+        <HudChip icon="angle-acute">{round(overlay.framing.fullFrameEquivalentMm)} mm FF · {formatDeg(overlay.framing.fov.horizontal)} × {formatDeg(overlay.framing.fov.vertical)}{settings.fitToFrame && !overlay.exceedsPreview ? ` · fit ×${(overlay.camera.width / preview.width).toFixed(2)}` : ""}</HudChip>
+      )}
+      {overlay?.human && chips.fov && (
+        <HudChip icon="human-male" iconColor={HUMAN_COLOR}>{overlay.human.relation === "equal" ? "Matches the human view" : overlay.human.relation === "wider" ? "Wider than the human view" : overlay.human.fits ? "Narrower than the human view" : "Narrower; human frame off screen"}</HudChip>
+      )}
+      {chips.gps ? <HudChip icon={gpsPoor ? "crosshairs-question" : "crosshairs-gps"} kind={gpsPoor && chips.warnings ? "warn" : undefined}>{gpsText}</HudChip>
+        : chips.warnings && gpsPoor && <HudChip icon="crosshairs-question" kind="warn">{gpsAccuracy == null ? "No GPS" : gpsText}</HudChip>}
+      {chips.warnings && overlay?.exceedsPreview && <HudChip icon="arrow-expand-all" kind="warn">Rig sees more than the phone: black = outside its view</HudChip>}
+      {chips.warnings && !isConfigured && <HudChip icon="cloud-off-outline" kind="warn">No server in this build; shots stay on the phone</HudChip>}
+      {chips.warnings && isConfigured && !authEmail && <HudChip icon="account-alert-outline" kind="warn" onPress={app.signIn} label="Not signed in, tap to sign in">Not signed in · shots stay on the phone</HudChip>}
+    </View>
   );
+  // Blocking states get an opaque card with the one action that fixes them.
+  const card = !rig
+    ? <NoticeCard icon="camera-control" title="Set up a rig" body="The frame needs a camera body and format." action="New rig" onPress={() => app.push({ name: "rigEditor", rigId: null })} />
+    : !project
+      ? <NoticeCard icon="folder-alert-outline" title="No project" body="Every shot goes into a project. Pick one to shoot." action="Pick" onPress={app.openProjectSheet} />
+      : null;
 
   return (
     <View style={[s.root, { flexDirection: portrait ? "column" : "row" }]} onLayout={onLayout}>
-      <StatusBar hidden />
-      {!portrait && <View style={{ paddingLeft: lensPad, backgroundColor: c.chromeBg }}>{lensStrip}</View>}
+      <StatusBar hidden={tabActive} />
+      {!portrait && <View style={[s.lensCol, { width: LENS_COL + lensPad, paddingLeft: lensPad }]}>{lensStrip}</View>}
       <View style={[s.previewArea, { width: area.width, height: area.height }]}>
         <View style={{ width: preview.width, height: preview.height, backgroundColor: FIXED.photoBg, overflow: "hidden" }}>
           {window.width > 0 && (
@@ -413,129 +398,86 @@ export function Viewfinder({ settings, onSettings, active: tabActive, project, s
             />
           )}
           {overlay && <Overlay preview={preview} rect={overlay.rect} settings={settings} exceedsPreview={overlay.exceedsPreview} human={overlay.human} />}
-          {/* HUD: solid chips, never translucent text on the image. Can be hidden in Setup; the "no rig" hint always shows. */}
-          <View style={s.hud} pointerEvents="box-none">
-            <View style={s.hudChips} pointerEvents="none">
-              {(settings.hudEnabled || !active) && (active && overlay ? (
-                <>
-                  {project ? <Hud icon="folder-outline">{project.name}</Hud> : <Hud icon="folder-alert-outline" kind="danger">No project</Hud>}
-                  <Hud icon="camera-outline">{active.name} · {lensMm} mm{active.speedboosterFactor !== 1 ? ` ×${active.speedboosterFactor}` : ""}</Hud>
-                  <Hud icon="angle-acute">{round(overlay.framing.fullFrameEquivalentMm)} mm FF · {formatDeg(overlay.framing.fov.horizontal)} × {formatDeg(overlay.framing.fov.vertical)}</Hud>
-                  <Hud icon={gpsWarn ? "crosshairs-question" : "crosshairs-gps"} kind={gpsWarn ? "warn" : undefined}>{gpsAccuracy == null ? "GPS searching…" : `GPS ±${Math.round(gpsAccuracy)} m`}</Hud>
-                  {overlay.exceedsPreview && <Hud icon="arrow-expand-all" kind="warn">Rig sees more than the phone: live image shrunk; black = outside the phone's view</Hud>}
-                  {settings.fitToFrame && !overlay.exceedsPreview && <Hud icon="fit-to-screen-outline">Fit: digital zoom ×{(overlay.camera.width / preview.width).toFixed(2)}</Hud>}
-                  {overlay.human && (
-                    <Hud icon="human-male" iconColor={HUMAN_COLOR}>
-                      {overlay.human.relation === "equal"
-                        ? `Rig matches the human view (${overlay.human.focalMm} mm-eq)`
-                        : overlay.human.relation === "wider"
-                          ? `Rig is wider than the human view (${overlay.human.focalMm} mm-eq): cyan frame inside`
-                          : `Rig is narrower than the human view (${overlay.human.focalMm} mm-eq)${overlay.human.fits ? ": cyan frame around it" : "; the cyan frame is outside the preview"}`}
-                    </Hud>
-                  )}
-                </>
-              ) : (
-                <Hud icon="camera-control" kind="warn">No rig selected. Tap "Rig" to create one.</Hud>
-              ))}
-              {!isConfigured && <Hud icon="cloud-off-outline" kind="warn">Build has no API configuration; shots stay on device.</Hud>}
-              {isConfigured && !authEmail && <Hud icon="account-circle-outline" kind="warn">Not signed in: shots stay on the phone. Sign in via Setup.</Hud>}
-            </View>
-            <Pressable onPress={cycleTheme} style={({ pressed }) => [s.themeBtn, pressed && { backgroundColor: c.accent }]} accessibilityRole="button"
-              accessibilityLabel={`Theme: ${themeName === "sun" ? "Sun" : "Set"}${settings.theme === "auto" ? " (following the phone)" : ""}. Tap to switch.`}>
-              <Icon name={themeName === "sun" ? "white-balance-sunny" : "weather-night"} size={22} color={c.chromeText} />
-              <View>
-                <Text style={s.themeText}>{themeName === "sun" ? "Sun" : "Set"}</Text>
-                {settings.theme === "auto" && <Text style={s.themeAuto}>AUTO</Text>}
-              </View>
-            </Pressable>
-          </View>
           {sequence && <View style={s.seqBadge} pointerEvents="none"><SeqBadge count={sequence.photos.length} recording /></View>}
-          {toast && <View style={s.toast} pointerEvents="none"><Icon name="check-circle" size={20} color={c.ok} /><Text style={s.toastText}>{toast}</Text></View>}
+          {card && <View style={s.cardWrap} pointerEvents="box-none">{card}</View>}
         </View>
+        {hud}
       </View>
-
       {portrait ? (
-        <View style={s.panel}>
+        <View style={s.chrome}>
           {lensStrip}
-          <View style={s.rowSmall}>{small}</View>
-          <View style={s.rowBig}>{big}</View>
+          <View style={s.row}>{controls}</View>
         </View>
       ) : (
-        <View style={[s.panel, s.panelSide, { width: CONTROLS_W }]}>
-          <View style={s.grid}>{small}</View>
-          <View style={s.colBig}>{big}</View>
-        </View>
+        <View style={[s.chrome, s.column]}>{[...controls].reverse()}</View>
       )}
 
-      <ShotReview draft={draft} settings={settings} locations={locations} countAt={countAt} fields={draft ? store.fieldsForProject(project?.id) : []} onUpload={uploadDraft} onDiscard={discardDraft} />
-      <PresetSheet visible={sheet === "rig"} onClose={() => setSheet(null)} presets={presets} activeId={active?.id ?? null}
-        onChange={(p, id) => { setPresets(p); setActiveId(id); }} />
+      {/* Only on Shoot: a draft restored at launch waits until the gates are through. */}
+      {draft && tabActive && (
+        <Tag draft={draft} settings={settings} project={project} locations={locations} countAt={countAt}
+          fields={store.fieldsForProject(project?.id)} onUpload={uploadDraft} onDiscard={discardDraft} />
+      )}
+      <RigSheet visible={sheet === "rig"} onClose={() => setSheet(null)} onEdit={(id) => app.push({ name: "rigEditor", rigId: id })} />
       <LensSheet visible={sheet === "lens"} onClose={() => setSheet(null)} lensMm={lensMm} onChange={setLensMm} range={lensRange} />
     </View>
   );
 }
 
-/** Solid HUD chip over the camera image (chrome colours, or warn / danger fills). */
-function Hud({ icon, kind, iconColor, children }: { icon: string; kind?: "warn" | "danger"; iconColor?: string; children: ReactNode }) {
+/** An icon-only viewfinder control: the whole cell is the target, the visual is 46 × 56 (56 × 46 in landscape). On = accent fill. */
+function Control({ icon, label, onPress, onLongPress, on, disabled, warn, badge, vertical }: { icon: string; label: string; onPress: () => void; onLongPress?: () => void; on?: boolean; disabled?: boolean; warn?: boolean; badge?: ReactNode; vertical: boolean }) {
   const s = useStyles();
   const { c } = useTheme();
-  const fg = kind === "warn" ? c.onWarn : kind === "danger" ? FIXED.white : c.chromeText;
+  const fg = disabled ? c.textDisabled : on ? c.onAccent : c.chromeText;
   return (
-    <View style={[s.hudChip, kind === "warn" && s.hudWarn, kind === "danger" && s.hudDanger]}>
-      <Icon name={icon} size={17} color={iconColor ?? fg} />
-      <Text style={[s.hudText, { color: fg }]}>{children}</Text>
-    </View>
-  );
-}
-
-/** Viewfinder control: icon over label, 56 dp, opaque. On = accent fill + heavy label. */
-function VfButton({ icon, label, onPress, on, disabled, count, stuck, record, warn }: { icon: string; label: string; onPress: () => void; on?: boolean; disabled?: boolean; count?: number; stuck?: boolean; record?: boolean; warn?: boolean }) {
-  const s = useStyles();
-  const { c } = useTheme();
-  const bg = record ? FIXED.record : on ? c.accent : c.chromeBg;
-  const fg = disabled ? c.textDisabled : record ? FIXED.white : on ? c.onAccent : c.chromeText;
-  return (
-    <Pressable onPress={onPress} disabled={disabled} accessibilityRole="button" accessibilityLabel={count ? `${label}, ${count} waiting` : label} accessibilityState={{ selected: !!on, disabled }}
-      style={({ pressed }) => [s.vfBtn, { backgroundColor: bg, borderColor: record ? FIXED.white : on ? c.accent : c.chromeBorder }, warn && { borderColor: c.warn }, pressed && s.vfPressed, disabled && s.vfOff]}>
-      <Icon name={icon} size={24} color={fg} />
-      <Text style={[s.vfLabel, { color: fg }, on && s.vfLabelOn]} numberOfLines={1}>{label}</Text>
-      {!!count && <Text style={[s.vfCount, stuck && s.vfCountStuck]}>{count}</Text>}
+    <Pressable onPress={onPress} onLongPress={onLongPress} delayLongPress={500} disabled={disabled} accessibilityRole="button" accessibilityLabel={label} accessibilityState={{ selected: !!on, disabled }}
+      style={s.hit}>
+      {({ pressed }) => (
+        <View style={[s.ctl, vertical ? { width: 56, height: 46 } : { width: 46, height: 56 }, on && { backgroundColor: c.accent, borderColor: c.accent }, warn && { borderColor: c.warn }, pressed && s.ctlPressed, disabled && s.ctlOff]}>
+          <Icon name={icon} size={26} color={fg} />
+          {badge}
+        </View>
+      )}
     </Pressable>
   );
 }
 
-const round = (n: number) => Math.round(n * 10) / 10;
-const round4 = (n: number) => Math.round(n * 10000) / 10000;
+function NoticeCard({ icon, title, body, action, onPress }: { icon: string; title: string; body: string; action: string; onPress: () => void }) {
+  const s = useStyles();
+  return (
+    <View style={s.card}>
+      <Icon name={icon} size={28} />
+      <View style={{ flex: 1, gap: 2 }}>
+        <Text style={s.cardTitle}>{title}</Text>
+        <Text style={s.cardBody}>{body}</Text>
+      </View>
+      <Button label={action} onPress={onPress} />
+    </View>
+  );
+}
+
+const round = (x: number) => Math.round(x * 10) / 10;
+const round4 = (x: number) => Math.round(x * 10000) / 10000;
 
 const useStyles = makeStyles((c) => ({
   root: { flex: 1, backgroundColor: FIXED.photoBg },
   center: { alignItems: "center", justifyContent: "center", padding: 24 },
   previewArea: { alignItems: "center", justifyContent: "center" },
-  hud: { position: "absolute", top: 8, left: 8, right: 8, flexDirection: "row", alignItems: "flex-start", gap: 6 },
-  hudChips: { flex: 1, flexDirection: "row", flexWrap: "wrap", gap: 6 },
-  hudChip: { flexDirection: "row", alignItems: "center", gap: 6, maxWidth: "100%", minHeight: 32, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 6, backgroundColor: c.chromeBg, borderWidth: 1.5, borderColor: c.chromeBorder },
-  hudWarn: { backgroundColor: c.warn, borderColor: FIXED.black },
-  hudDanger: { backgroundColor: FIXED.record, borderColor: FIXED.white },
-  hudText: { ...type("hud", "bold"), ...num, flexShrink: 1 },
-  themeBtn: { flexDirection: "row", alignItems: "center", gap: 6, minHeight: 48, minWidth: 48, paddingHorizontal: 10, borderRadius: 6, backgroundColor: c.chromeBg, borderWidth: 1.5, borderColor: c.chromeBorder },
-  themeText: { ...type("label", "bold"), color: c.chromeText },
-  themeAuto: { fontFamily: type("caption", "heavy").fontFamily, fontSize: 9, lineHeight: 10, letterSpacing: 0.8, color: c.chromeText },
+  hud: { position: "absolute", top: 8, left: 8, right: 8, flexDirection: "row", flexWrap: "wrap", gap: 6 },
   seqBadge: { position: "absolute", bottom: 12, left: 12 },
-  toast: { position: "absolute", bottom: 12, alignSelf: "center", maxWidth: "80%", flexDirection: "row", alignItems: "center", gap: 8, minHeight: 44, paddingHorizontal: 12, paddingVertical: 6, borderRadius: RADIUS.md, backgroundColor: c.surfaceRaised, borderWidth: 2, borderColor: c.borderStrong, elevation: 6 },
-  toastText: { ...type("small", "semibold"), color: c.text, flexShrink: 1 },
-  panel: { backgroundColor: c.chromeBg, borderColor: c.chromeBorder },
-  panelSide: { borderLeftWidth: 2, paddingVertical: 10, paddingHorizontal: 8, justifyContent: "space-evenly", alignItems: "center", gap: 10 },
-  rowSmall: { flexDirection: "row", justifyContent: "space-around", paddingHorizontal: 10, paddingTop: 10 },
-  rowBig: { flexDirection: "row", justifyContent: "space-around", alignItems: "center", paddingHorizontal: 16, paddingTop: 8, paddingBottom: 12 },
-  grid: { flexDirection: "row", flexWrap: "wrap", justifyContent: "center", gap: 8, width: 2 * 56 + 8 },
-  colBig: { alignItems: "center", gap: 10 },
-  vfBtn: { width: 56, minHeight: 56, alignItems: "center", justifyContent: "center", gap: 2, paddingVertical: 4, borderRadius: 10, borderWidth: 2 },
-  vfPressed: { transform: [{ translateY: 1 }], borderColor: c.chromeText },
-  vfOff: { borderStyle: "dashed", borderColor: c.textDisabled },
-  vfLabel: { fontFamily: type("caption", "semibold").fontFamily, fontSize: 11, lineHeight: 13 },
-  vfLabelOn: { fontFamily: type("caption", "heavy").fontFamily },
-  vfCount: { position: "absolute", top: -8, right: -8, minWidth: 22, height: 22, paddingHorizontal: 5, borderRadius: 11, overflow: "hidden", backgroundColor: c.warn, color: c.onWarn, textAlign: "center", fontFamily: type("caption", "heavy").fontFamily, fontSize: 12, lineHeight: 22, borderWidth: 2, borderColor: c.chromeBg },
-  vfCountStuck: { backgroundColor: FIXED.record, color: FIXED.white },
+  cardWrap: { position: "absolute", left: 12, right: 12, top: 0, bottom: 0, justifyContent: "center" },
+  card: { flexDirection: "row", alignItems: "center", gap: 12, padding: 14, borderRadius: RADIUS.md, backgroundColor: c.surfaceRaised, borderWidth: 2, borderColor: c.borderStrong },
+  cardTitle: { ...type("body", "bold"), color: c.text },
+  cardBody: { ...type("small"), color: c.textDim },
+  chrome: { backgroundColor: c.chromeBg, borderColor: c.chromeBorder, borderTopWidth: 2, paddingTop: 10, paddingHorizontal: 8, paddingBottom: 12, gap: 10 },
+  column: { width: CONTROL_COL, borderTopWidth: 0, borderLeftWidth: 2, paddingHorizontal: 0, paddingVertical: 8, gap: 0 },
+  lensCol: { backgroundColor: c.chromeBg, borderRightWidth: 2, borderRightColor: c.chromeBorder },
+  row: { flexDirection: "row", alignItems: "center", height: SIZE.shutter },
+  cell: { flex: 1, alignSelf: "stretch" },
+  hit: { flex: 1, alignItems: "center", justifyContent: "center" },
+  shutterCell: { padding: 4, alignItems: "center", justifyContent: "center" },
+  ctl: { alignItems: "center", justifyContent: "center", borderRadius: 10, borderWidth: 2, borderColor: c.chromeBorder, backgroundColor: c.chromeBg },
+  ctlPressed: { transform: [{ translateY: 1 }], borderColor: c.chromeText },
+  ctlOff: { borderStyle: "dashed", borderColor: c.textDisabled },
   shutter: { width: SIZE.shutter, height: SIZE.shutter, borderRadius: SIZE.shutter / 2, borderWidth: 4, borderColor: c.chromeText, backgroundColor: c.chromeBg, alignItems: "center", justifyContent: "center" },
   shutterSeq: { borderColor: FIXED.record, borderWidth: 5 },
   shutterOff: { borderStyle: "dashed", borderColor: c.textDisabled, borderWidth: 3 },

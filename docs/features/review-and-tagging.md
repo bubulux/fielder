@@ -46,14 +46,31 @@ The shot view (`ShotView.tsx`) replaces the old dialog. It covers the main area 
 
 ## Review on the phone
 
-- **Phone Review tab** (`screens/Review.tsx`): same idea, with Prev/Next in the top bar, in-place editing and a photo strip.
+The **Review** tab (`screens/Review.tsx`) takes the same queue (unreviewed, oldest first, no skip), photo first, with the decision at the thumb:
+- The photo spans the width (up to 262 dp), with the SEQ badge and "Photo i / n" for sequences and the photo strip under it. **Swipe** on the photo = next/prev shot; the strip moves between photos. **Double-tap** opens the photo full screen (mode switch on an opaque card; swipe = photos).
+- The frame-view switch (remembered in `reviewMode.v1`).
+- The summary:
+  - the name (or the rig when untagged), the state and location
+  - the tags line and the extra fields
+  - rig · lens · capture time
+  - **Edit** (pencil) opens the edit sheet: the same tag editor as after a capture, Save pinned; a failure keeps the sheet open with the error.
+  - **⋯** opens Shot details, Show on map, Correct position and Delete (a confirm with **Archive** as the safe alternative).
+- **Pinned**: Prev · "n of m" · Next, then **Archive | Approve**. A decision shows "Approved · Undo" (4 s); the next shot takes the same position.
+- States: skeleton while loading; "Nothing to review" with the project's totals and **Browse shots**; a load error with Try again (pull to refresh too). Offline: the banner, and the decisions are disabled (they need the server); the loaded queue stays browsable.
+- Landscape: the photo fills the left with the mode switch floating on it; a 292 dp side panel holds the strip, the summary and the decisions at the bottom.
+
+**Shot details** (Shots → a shot, or ⋯ → Shot details; `screens/ShotDetails.tsx`) is a full screen:
+- the photo (swipe = the neighbours in the list it was opened from), strip and frame view
+- the summary, **Tags** with Edit, **Position** per photo (coordinates, ±accuracy or "corrected") with Show on map and Correct, **Camera** per photo, and **Raw metadata** (expands)
+- ⋯ holds Delete
+- Pinned: the two states that aren't the current one (unreviewed → Archive | Approve; approved → Back to review | Archive; archived → Back to review | Approve)
 
 ## Buttons ([design](../design.md))
 
 - Action buttons are rounded rectangles and carry an icon.
 - Tabs, segmented switches and chips are pills; the selected one is filled, bold and checked.
 - Approve is green. Archive and Back to review are neutral grey with a border. Secondary actions are outlined. Delete is a red outline (solid red only inside a confirmation).
-- Mobile `Button` kinds: `primary | approve | archive | ghost | danger`.
+- Mobile `Button` kinds: `primary | approve | archive | secondary | ghost | danger | dangerSolid` (solid red only inside a confirm sheet).
 
 ## Tag editing UI
 
@@ -62,7 +79,14 @@ The shot view (`ShotView.tsx`) replaces the old dialog. It covers the main area 
   - ↑/↓ move, Enter or Tab take the highlighted entry (Tab also moves on), Esc cancels.
   - "Create “…”" makes a new location.
   - The same combobox is used for the project box, rig and format pickers, and the filter builder's single values.
-- **Phone** (`components/TagsForm.tsx`): search-or-create location list, chips for the rest, extra fields via `ExtraEditor`.
+- **Phone** (`components/TagEditor.tsx`, one editor for Tag, the Review edit sheet and the Shot-details edit):
+  - Name, INT/EXT (segmented) and light (chips + Artificial) are edited in place.
+  - Location, weather and every extra field are 64 dp rows (`FieldRow`) showing the value, the LAST tag (kept from the last capture) and a chevron; a tap opens a focused sheet:
+    - **Location**: search auto-focused; "Create “…”" first when the name is new; with an empty query the last used first, then by shots there.
+    - **Weather**: a 2-column grid.
+    - **Extra fields**: `OptionSheet` (chips up to 12 options, a search list above, checkboxes + "Done (n)" when several are allowed); numbers and text in their own sheet; booleans as a switch row.
+  - Groups expand in place (20 dp indent per level); a filled group starts collapsed showing its summary.
+  - A dependent select that a parent change cleared shows "Pick again" until chosen.
 
 ## View modes (how the rig frame is drawn on a photo)
 
@@ -70,4 +94,4 @@ The shot view (`ShotView.tsx`) replaces the old dialog. It covers the main area 
 
 - **Fit** always shows exactly the rig frame. Where the rig saw more than the phone (fraction > 1) the rest stays black, like the live view (`frameLayout` in `apps/dashboard/src/format.ts`, `FramedImage.tsx` on the phone).
 - **Dashboard**: the Shots toolbar switch sets the global mode (`localStorage["maskMode"]`) for the grid, list, map and Plan thumbnails. The shot view and Review have their own switch (above).
-- **Phone**: each screen has its own switch.
+- **Phone**: Review, Shots (shared by grid and map) and step-through remember their own mode (`reviewMode.v1`, `shotsMode.v1`, `stepMode.v1`); Shot details starts from the Shots mode.

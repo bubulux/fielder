@@ -84,6 +84,9 @@ importers:
       expo-image-manipulator:
         specifier: ~57.0.0
         version: 57.0.14(expo@57.0.18)
+      expo-keep-awake:
+        specifier: ~57.0.1
+        version: 57.0.1(expo@57.0.18)(react@19.2.3)
       expo-location:
         specifier: ~57.0.0
         version: 57.0.14(expo@57.0.18)(typescript@6.0.3)

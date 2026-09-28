@@ -2,6 +2,7 @@ import { File } from "expo-file-system";
 import { getToken, setToken } from "./auth";
 import { API_URL, isConfigured } from "./config";
 import { log } from "./log";
+import { markOnline } from "./net";
 import type { Extra, FieldDefinition } from "@fielder/vocab";
 import type { LocationEntry, Preset, ProjectEntry, ShotMetadata, ShotTags } from "./types";
 
@@ -27,8 +28,10 @@ async function call<T>(path: string, init: RequestInit = {}): Promise<T> {
     res = await fetch(`${API_URL}${path}`, { ...init, headers: headers(init.headers as Record<string, string>) });
   } catch (err) {
     log("warn", "api network error", { method, path, ms: Date.now() - started, error: err });
+    markOnline(false);
     throw err;
   }
+  markOnline(true);
   log(res.ok ? "debug" : "warn", "api", { method, path, status: res.status, ms: Date.now() - started });
   // Without a valid session Access redirects to its login page instead of reaching the Worker.
   const html = (res.headers.get("content-type") ?? "").includes("text/html");

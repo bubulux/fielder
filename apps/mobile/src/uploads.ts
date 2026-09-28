@@ -85,6 +85,18 @@ function notify() { for (const cb of listeners) cb(); }
 
 let flushing: Promise<FlushResult> | null = null;
 
+/** The shot being uploaded right now (photos sent so far), for the Uploads screen and the sync indicator. */
+export interface FlushProgress { shotId: string; done: number; total: number }
+let progress: FlushProgress | null = null;
+const progressListeners = new Set<() => void>();
+/** Called when a flush starts, after each uploaded part, and when it ends. */
+export function onFlushProgress(cb: () => void): () => void {
+  progressListeners.add(cb);
+  return () => { progressListeners.delete(cb); };
+}
+function setProgress(p: FlushProgress | null) { progress = p; for (const cb of progressListeners) cb(); }
+export const flushState = () => ({ flushing: !!flushing, progress });
+
 /**
  * Upload everything in the queue, oldest first. Safe to call repeatedly. Shots the server
  * rejected MAX_REJECTIONS times are skipped unless `includeStuck` (the manual retry).
@@ -122,7 +134,9 @@ export function flush(opts: { includeStuck?: boolean } = {}): Promise<FlushResul
       }
       try {
         // Big sequences go in parts; the server adds missing photos to the existing shot.
-        for (let i = 0; i < entry.metadata.photos.length; i += UPLOAD_CHUNK) {
+        const total = entry.metadata.photos.length;
+        for (let i = 0; i < total; i += UPLOAD_CHUNK) {
+          setProgress({ shotId: entry.metadata.id, done: i, total });
           await api.uploadShot({ ...entry.metadata, photos: entry.metadata.photos.slice(i, i + UPLOAD_CHUNK) }, entry.files);
         }
         log("info", "upload ok", { shot: entry.metadata.id, photos: entry.metadata.photos.length });
@@ -145,6 +159,7 @@ export function flush(opts: { includeStuck?: boolean } = {}): Promise<FlushResul
       }
     }
     return { uploaded, remaining: store.loadPending().length, lastError };
-  })().finally(() => { flushing = null; notify(); });
+  })().finally(() => { flushing = null; setProgress(null); notify(); });
+  setProgress(null); // announce the start (flushing is set now)
   return flushing;
 }

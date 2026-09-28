@@ -38,3 +38,10 @@ export function ShotFrame({ photo, width, settings, mode, style }: Props) {
     />
   );
 }
+
+/** Width at which the framed photo (in this mode) fits inside maxW × maxH. */
+export function fitWidth(photo: Photo, mode: FrameMode, maxW: number, maxH: number): number {
+  const f = frameOf(photo);
+  const aspect = mode === "fit" && f ? imageAspect(photo) * (f.width / f.height) : imageAspect(photo);
+  return Math.max(40, Math.min(maxW, maxH * aspect));
+}

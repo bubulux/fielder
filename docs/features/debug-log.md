@@ -1,6 +1,6 @@
 # Debug log (phone)
 
-For bugs that only show on the phone. Setup → **Debug log** → "Record a detailed log", reproduce the bug, then **Share log**. It uses the Android share sheet: copy it, send it to yourself, or paste it into a chat with an AI agent. **Clear** empties it.
+For bugs that only show on the phone. Setup → **Debug log** → "Record a detailed log", reproduce the bug, then **Share log**. It uses the Android share sheet: copy it, send it to yourself, or paste it into a chat with an AI agent. **Clear** empties it after a confirm (which offers "Share first"). The Setup hub row shows whether it records and how many entries it holds.
 
 ## What is recorded (`apps/mobile/src/log.ts`)
 

@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import Storage from "expo-sqlite/kv-store";
 import { DEFAULT_SETTINGS } from "./defaults";
 import type { FieldDef, FieldDefinition } from "@fielder/vocab";
-import type { CaptureDraft, LocationEntry, PendingUpload, Preset, ProjectEntry, Settings } from "./types";
+import type { CaptureDraft, LocationEntry, PendingUpload, Preset, ProjectEntry, Settings, ShotTags } from "./types";
 
 export { DEFAULT_SETTINGS };
 
@@ -19,7 +19,11 @@ const KEYS = {
   sequence: "sequence.v1",
   captureDraft: "captureDraft.v1",
   fields: "fields.v1",
+  lastTags: "lastTags.v1",
 } as const;
+
+/** Tags of the last upload, offered on the next Tag screen (the name never is). Extra fields only within the same project. */
+export interface LastTags { projectId: string; tags: Omit<ShotTags, "name"> }
 
 
 function read<T>(key: string, fallback: T): T {
@@ -51,7 +55,13 @@ export function onPendingChange(cb: (count: number) => void): () => void {
 }
 
 export const store = {
-  loadSettings: (): Settings => read(KEYS.settings, DEFAULT_SETTINGS),
+  loadSettings: (): Settings => {
+    const s = read<Settings & { hudEnabled?: boolean }>(KEYS.settings, DEFAULT_SETTINGS);
+    // Before the per-chip switches there was one HUD switch; off meant warnings only.
+    if (s.hudEnabled === false && s.hudChips === DEFAULT_SETTINGS.hudChips) s.hudChips = { project: false, rig: false, fov: false, gps: false, warnings: true };
+    delete s.hudEnabled;
+    return { ...s, hudChips: { ...DEFAULT_SETTINGS.hudChips, ...s.hudChips } };
+  },
   saveSettings: (s: Settings) => write(KEYS.settings, s),
 
   loadPresets: (): Preset[] =>
@@ -90,10 +100,23 @@ export const store = {
     return ids.map((id) => all.find((f) => f.id === id)?.definition).filter((d): d is FieldDef => !!d);
   },
 
+  loadLastTags: (): LastTags | null => { try { const raw = Storage.getItemSync(KEYS.lastTags); return raw ? (JSON.parse(raw) as LastTags) : null; } catch { return null; } },
+  saveLastTags: (v: LastTags) => write(KEYS.lastTags, v),
+
+  /** Small per-screen choices (frame view, filters, grid/map); `key` names the screen, e.g. "reviewMode.v1". */
+  loadPref: <T extends string>(key: string, fallback: T, allowed: readonly T[]): T => { try { const v = Storage.getItemSync(key); return v && (allowed as readonly string[]).includes(v) ? (v as T) : fallback; } catch { return fallback; } },
+  savePref: (key: string, value: string) => { try { Storage.setItemSync(key, value); } catch { /* a preference, not data */ } },
+
   loadActiveProjectId: (): string | null => Storage.getItemSync(KEYS.activeProjectId),
   saveActiveProjectId: (id: string | null) =>
     id ? Storage.setItemSync(KEYS.activeProjectId, id) : Storage.removeItemSync(KEYS.activeProjectId),
 };
+
+/** A remembered per-screen choice as state (see store.loadPref). */
+export function usePref<T extends string>(key: string, fallback: T, allowed: readonly T[]): [T, (v: T) => void] {
+  const [v, setV] = useState<T>(() => store.loadPref(key, fallback, allowed));
+  return [v, (next: T) => { setV(next); store.savePref(key, next); }];
+}
 
 /** Queue length that re-renders when uploads are added or finish. */
 export function usePendingCount(): number {

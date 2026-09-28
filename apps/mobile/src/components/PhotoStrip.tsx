@@ -21,7 +21,7 @@ export function PhotoStrip({ shot, index, onPick }: { shot: Shot; index: number;
 }
 
 const useStyles = makeStyles((c) => ({
-  thumb: { width: 76, height: 57, borderRadius: RADIUS.sm, overflow: "hidden", borderWidth: 1, borderColor: c.border, backgroundColor: FIXED.photoBg },
+  thumb: { width: 75, height: 56, borderRadius: RADIUS.sm, overflow: "hidden", borderWidth: 1, borderColor: c.border, backgroundColor: FIXED.photoBg },
   thumbOn: { borderWidth: 3, borderColor: c.accent },
   n: { position: "absolute", left: 3, bottom: 3, backgroundColor: FIXED.black, color: FIXED.white, ...type("caption", "bold"), fontSize: 11, lineHeight: 13, paddingHorizontal: 5, paddingVertical: 2, borderRadius: RADIUS.xs, overflow: "hidden" },
 }));

@@ -2,7 +2,7 @@ import * as SecureStore from "expo-secure-store";
 
 /**
  * Session for the API: the Cloudflare Access JWT obtained through the in-app
- * one-time-PIN login (see Login.tsx). Kept in the device keystore. The token is
+ * one-time-PIN login (see screens/Gates.tsx). Kept in the device keystore. The token is
  * sent as `cf-access-token`; Access validates it at the edge on every request.
  */
 const KEY = "fielder.accessToken";
@@ -51,4 +51,11 @@ export function signedInEmail(): string | null {
 export function onAuthChange(fn: () => void): () => void {
   listeners.add(fn);
   return () => { listeners.delete(fn); };
+}
+
+/** When the Access session ends (from the token), or null when unknown. */
+export function sessionExpiry(): Date | null {
+  const t = getToken();
+  const exp = t ? claims(t)?.exp : undefined;
+  return typeof exp === "number" ? new Date(exp * 1000) : null;
 }

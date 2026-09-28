@@ -12,10 +12,10 @@ Every shot belongs to exactly one project (a film, a commercial). Locations, rig
   - Library › Projects: a list (shots, fields, "can be deleted") and a detail with name and notes (saved when leaving the field), the project's [extra fields](extra-fields.md) in order (add, reorder, remove), "Show n shots" and "Make active". Only empty projects can be deleted.
   - A shot moves to another project via the Project box in the shot view's inspector. When it is planned on shooting days, a warning says how many it leaves, and Move confirms.
 - **Phone:**
-  - After sign-in, `ProjectSheet` asks for a project if none is active. You switch under Setup → Project.
+  - After sign-in (or skipping it), a full-screen gate asks for a project if none is active (`screens/Gates.tsx`). You switch with the **project pill** in every header, the HUD project chip on Shoot or Setup → Project; all open the Project sheet (`components/ProjectSheet.tsx`, a search above 8 projects, "New project" by name, works offline). A switch says "Now shooting for …".
   - Projects can be created offline; they sync before any queued shot uploads.
   - The camera HUD shows the active project name. The shutter is disabled without a project.
-  - Gallery, Review, Map and Day show only the active project (`useShots(projectId)` → `GET /api/shots?project_id=`).
+  - Review, Shots and Day show only the active project (`useShots(projectId)` → `GET /api/shots?project_id=`).
 
 ## Sync details (phone)
 
@@ -28,4 +28,4 @@ Every shot belongs to exactly one project (a film, a commercial). Locations, rig
 
 - Worker: `apps/worker/src/projects.ts`
 - Dashboard: `App.tsx` (active project, filtering), `Projects.tsx`
-- Phone: `App.tsx`, `components/ProjectSheet.tsx`, `namedSync.ts`, `storage.ts`
+- Phone: `App.tsx`, `screens/Gates.tsx`, `components/ProjectSheet.tsx`, `namedSync.ts`, `storage.ts`

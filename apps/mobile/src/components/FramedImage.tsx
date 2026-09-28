@@ -59,6 +59,6 @@ export function FramedImage({ source, aspect, frame: f, width, settings, mode, s
 }
 
 /** Mask / Frame / Fit / Raw switch shown under photos. */
-export function FrameModeSeg({ value, onChange }: { value: FrameMode; onChange: (m: FrameMode) => void }) {
-  return <Seg accessibilityLabel="How to show the rig frame" value={value} onChange={onChange} options={FRAME_MODES.map((m) => ({ id: m, label: frameModeLabel(m) }))} />;
+export function FrameModeSeg({ value, onChange, block }: { value: FrameMode; onChange: (m: FrameMode) => void; block?: boolean }) {
+  return <Seg size="lg" block={block} accessibilityLabel="How to show the rig frame" value={value} onChange={onChange} options={FRAME_MODES.map((m) => ({ id: m, label: frameModeLabel(m) }))} />;
 }
