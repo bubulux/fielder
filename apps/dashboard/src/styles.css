@@ -115,15 +115,12 @@ button.f-check.is-indeterminate .f-check__box { background: var(--accent); borde
 .toolbar-pos { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
 .review-progress { display: flex; flex-direction: column; gap: 4px; width: 180px; }
 .keys-inline { display: flex; gap: 4px; align-items: center; white-space: nowrap; }
-.stage-photo { position: relative; display: flex; align-items: center; justify-content: center; max-width: 100%; max-height: 100%; }
-.stage-photo .f-framed__tag { left: 8px; bottom: 8px; }
 .f-stage__foot .f-strip { flex: 0 1 auto; }
 .compare { flex: 1; min-width: 0; height: 100%; display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .compare__pane { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
 .compare__head { display: flex; gap: 6px; align-items: center; background: var(--surface); padding: 6px; border-radius: var(--radius-sm); }
 .compare__head .f-pick { flex: 1; }
 .compare__photo { flex: 1; display: flex; align-items: center; justify-content: center; min-height: 0; }
-.compare__photo .stage-photo { width: 100%; }
 .compare__facts { color: #fff; font-size: var(--text-small); }
 .inspector { --panel-w: 380px; }
 .inspector__title { display: flex; align-items: flex-start; gap: 8px; }

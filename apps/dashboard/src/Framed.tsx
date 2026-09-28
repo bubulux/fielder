@@ -1,3 +1,4 @@
+import type { ComponentChildren } from "preact";
 import type { Photo } from "./api";
 import { frameLayout, frameOf, imageAspect, type FrameGeometry, type FrameMode, type PctRect } from "./format";
 
@@ -17,14 +18,16 @@ const pct = (r: PctRect) => ({ left: `${r.left}%`, top: `${r.top}%`, width: `${r
  * The box always has the photo's aspect ratio (or the frame's in fit mode) so the percentage
  * geometry of frame and tints lines up with the image.
  */
-export function Framed({ photo, mode, className, maxHeight, frame }: { photo: Photo; mode: MaskMode; className?: string; maxHeight?: string; /** Draw this frame instead of the stored one (rig explorer). */ frame?: FrameGeometry | null }) {
+export function Framed({ photo, mode, className, maxHeight, frame, children }: { photo: Photo; mode: MaskMode; className?: string; maxHeight?: string; /** Draw this frame instead of the stored one (rig explorer). */ frame?: FrameGeometry | null; /** Tags drawn on the photo (positioned inside the box). */ children?: ComponentChildren }) {
   const f = frame ?? frameOf(photo);
   const img = photo.image_url;
   const photoAspect = imageAspect(photo);
   const l = f && mode !== "off" ? frameLayout(f, mode, photoAspect) : null;
   const aspect = l?.aspect ?? photoAspect;
-  const style = { aspectRatio: String(aspect), height: "auto", width: maxHeight ? `min(100%, calc(${maxHeight} * ${aspect}))` : undefined };
-  if (!l) return <div class={`framed ${className ?? ""}`} style={style}><img src={img} alt="" loading="lazy" /></div>;
+  // No inline height: thumbnails fix theirs in CSS; elsewhere the aspect ratio gives it. The width is
+  // explicit with maxHeight, so the box never depends on a shrink-to-fit parent (its children are absolute).
+  const style = { aspectRatio: String(aspect), width: maxHeight ? `min(100%, calc(${maxHeight} * ${aspect}))` : undefined };
+  if (!l) return <div class={`framed ${className ?? ""}`} style={style}><img src={img} alt="" loading="lazy" />{children}</div>;
 
   const fullImg = l.img.left === 0 && l.img.width === 100 && l.img.height === 100;
   return (
@@ -39,6 +42,7 @@ export function Framed({ photo, mode, className, maxHeight, frame }: { photo: Ph
         </>
       )}
       {l.frame && <div class={`frame ${l.shrunk ? "dashed" : ""}`} style={pct(l.frame)} />}
+      {children}
     </div>
   );
 }

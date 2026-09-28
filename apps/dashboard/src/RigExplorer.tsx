@@ -109,11 +109,10 @@ function factsText(rig: RigLens): string {
 function Reframed({ photo, mode, frame, tag }: { photo: Photo; mode: MaskMode; frame: FrameGeometry; tag?: string }) {
   const wider = frame.width_fraction > 1 || frame.height_fraction > 1;
   return (
-    <div class="stage-photo">
-      <Framed photo={photo} mode={mode === "fit" ? "frame" : mode} frame={frame} maxHeight="calc(100vh - 290px)" />
+    <Framed photo={photo} mode={mode === "fit" ? "frame" : mode} frame={frame} maxHeight="calc(100vh - 290px)">
       {wider && <span class="f-framed__more" style={{ left: "8px", top: "8px" }}><Icon name="arrow-expand-all" />Sees more than this photo</span>}
       {tag && <span class="f-framed__tag"><Icon name="camera-control" />{tag}</span>}
-    </div>
+    </Framed>
   );
 }
 
