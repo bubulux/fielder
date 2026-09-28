@@ -55,6 +55,13 @@ button.f-row { width: 100%; }
 .combo .f-input { width: 100%; }
 .combo .f-input input { padding: 0 10px; }
 .combo .f-combo__opt .meta { margin-left: auto; }
+/* The list takes the width of its options, not of a narrow input (filter value column). */
+.combo .f-combo__list { right: auto; min-width: 100%; width: max-content; max-width: min(320px, 90vw); overflow-x: hidden; }
+.combo .f-combo__opt { overflow-wrap: anywhere; }
+.combo .f-combo__hint { flex-wrap: wrap; row-gap: 4px; }
+.combo .f-combo__hint span { white-space: nowrap; }
+/* The value column is at the panel's right side: open towards the left. */
+.rule-value .combo .f-combo__list { left: auto; right: 0; }
 
 /* Overlays: dialogs, command palette, shortcut sheet */
 .overlay { position: fixed; inset: 0; z-index: 2000; display: flex; align-items: center; justify-content: center; padding: 24px; }
