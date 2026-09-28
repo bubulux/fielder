@@ -80,6 +80,26 @@ export function Sheet({ visible, title, sub, onClose, children, doneLabel = "Don
   );
 }
 
+/** Rectangles of the Fielder mark on a 72-unit grid (same geometry as the app icon). */
+const MARK_CORNERS = [
+  [0, 0, 20, 12], [0, 12, 12, 8], [52, 0, 20, 12], [60, 12, 12, 8],
+  [52, 60, 20, 12], [60, 52, 12, 8], [0, 60, 20, 12], [0, 52, 12, 8],
+];
+
+/** The Fielder mark: viewfinder corners in the text colour around the cinema frame in the accent. */
+export function Mark({ size = 28 }: { size?: number }) {
+  const { c } = useTheme();
+  const k = size / 72;
+  const box = (x: number, y: number, w: number, h: number, color: string, key: number) =>
+    <View key={key} style={{ position: "absolute", left: x * k, top: y * k, width: w * k, height: h * k, backgroundColor: color }} />;
+  return (
+    <View style={{ width: size, height: size }} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+      {MARK_CORNERS.map(([x, y, w, h], i) => box(x, y, w, h, c.text, i))}
+      {box(18, 26, 36, 20, c.accent, 99)}
+    </View>
+  );
+}
+
 /** Uppercase section label (13 dp caps). */
 export function SectionLabel({ children, color }: { children: ReactNode; color?: string }) {
   const s = useStyles();

@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from "preact/hooks";
 import type { Project, SavedView } from "./api";
 import type { LibrarySection, Route } from "./router";
 import type { ThemeChoice } from "./theme";
-import { cx, Icon, Kbd } from "./ui";
+import { cx, Icon, Kbd, Mark } from "./ui";
 
 export const ALL_PROJECTS = "all";
 /** The project the dashboard works on, or every project at once. */
@@ -52,7 +52,7 @@ export function Sidebar({ route, rail, scope, projects, views, editedViewId, cou
   );
   return (
     <nav class="f-side" aria-label="Sections">
-      <div class="f-side__brand" style={rail ? { padding: 0, justifyContent: "center" } : undefined}><Icon name="camera-iris" />{!rail && "Fielder"}</div>
+      <div class="f-side__brand" style={rail ? { padding: 0, justifyContent: "center" } : undefined}><Mark />{!rail && "Fielder"}</div>
       <ScopeSwitch rail={rail} scope={scope} name={scopeName} projects={projects} onScope={onScope} onManage={() => onNavigate({ page: "library", section: "projects", id: null })} />
       <div style={{ height: "10px" }} />
       {nav("shots", "view-grid-outline", "Shots", { page: "shots", viewId: null }, counts.shots)}

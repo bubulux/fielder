@@ -1,7 +1,7 @@
 import { useEffect, useState } from "preact/hooks";
 import { deleteProject, existingIdOf, putProject, putProjectFields, type FieldDefinition, type Project } from "./api";
 import { Combobox } from "./Combobox";
-import { confirmDialog, cx, Empty, ErrorLine, Icon, promptDialog, SaveStatus, toast, type SaveState } from "./ui";
+import { confirmDialog, cx, Empty, ErrorLine, Icon, Mark, promptDialog, SaveStatus, toast, type SaveState } from "./ui";
 
 const sortByName = (list: Project[]) => [...list].sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" }));
 
@@ -24,7 +24,7 @@ export function ProjectGate({ projects, onChange, onActivate }: { projects: Proj
   return (
     <div class="gate">
       <div class="gate__card">
-        <span class="gate__brand"><Icon name="camera-iris" />Fielder</span>
+        <span class="gate__brand"><Mark size={26} />Fielder</span>
         <h1>Which project are you working on?</h1>
         <p class="meta">Everything you see and every shot you edit belongs to the active project. Switch any time from the sidebar; the choice is remembered.</p>
         <div class="f-menu gate__list">

@@ -5,7 +5,7 @@ import { setToken } from "../auth";
 import { API_URL } from "../config";
 import { ActionBar } from "../components/chrome";
 import { NewProjectSheet, projectMeta, type PickProject } from "../components/ProjectSheet";
-import { Banner, Button, Empty, Hint, IconButton, ListRow } from "../components/ui";
+import { Banner, Button, Empty, Hint, IconButton, ListRow, Mark } from "../components/ui";
 import { makeStyles, type, useTheme } from "../theme";
 import type { ProjectEntry } from "../types";
 
@@ -18,7 +18,7 @@ export function SignInGate({ onSignIn, onSkip }: { onSignIn: () => void; onSkip:
   return (
     <View style={s.root}>
       <ScrollView contentContainerStyle={s.gateBody}>
-        <Text style={s.brand}>Fielder</Text>
+        <View style={s.brandRow}><Mark size={32} /><Text style={s.brand}>Fielder</Text></View>
         <Text style={s.gateTitle}>Sign in</Text>
         <Text style={s.gateText}>Same login as the dashboard: a one-time PIN by email. The session lasts up to 30 days.</Text>
       </ScrollView>
@@ -89,7 +89,7 @@ export function ProjectGate({ projects, onPick }: { projects: ProjectEntry[]; on
     <View style={s.root}>
       <ScrollView contentContainerStyle={{ paddingBottom: 24 }}>
         <View style={s.gateBody}>
-          <Text style={s.brand}>Fielder</Text>
+          <View style={s.brandRow}><Mark size={32} /><Text style={s.brand}>Fielder</Text></View>
           <Text style={s.gateTitle}>Pick a project</Text>
           <Text style={s.gateText}>Every shot goes into the active project. You can switch at any time from the header.</Text>
         </View>
@@ -107,7 +107,8 @@ export function ProjectGate({ projects, onPick }: { projects: ProjectEntry[]; on
 const useStyles = makeStyles((c) => ({
   root: { flex: 1, backgroundColor: c.bg },
   gateBody: { paddingHorizontal: 16, paddingTop: 32, paddingBottom: 16, gap: 10 },
-  brand: { ...type("label", "heavy"), color: c.accent, letterSpacing: 1, textTransform: "uppercase" },
+  brandRow: { flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 8 },
+  brand: { ...type("title", "heavy"), color: c.text },
   gateTitle: { ...type("display", "heavy"), color: c.text },
   gateText: { ...type("body"), color: c.textDim },
   webHead: { height: 64, flexDirection: "row", alignItems: "center", gap: 8, paddingHorizontal: 12, backgroundColor: c.surface, borderBottomWidth: 2, borderBottomColor: c.borderSubtle },
