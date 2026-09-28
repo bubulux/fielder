@@ -87,7 +87,7 @@ export function CommandPalette(p: Props) {
 }
 
 const SHORTCUTS: [string, [string, string][]][] = [
-  ["Everywhere", [["⌘K / Ctrl K", "Go to…"], ["?", "This sheet"], ["G then S · R · P · L · M", "Shots · Review · Plan · Library · Map"], ["/", "Focus search"], ["M", "Cycle the frame mode"], ["[", "Collapse or expand the sidebar"], ["Esc", "Close or back out one level"]]],
+  ["Everywhere", [["⌘K / Ctrl K", "Go to…"], ["?", "This sheet"], ["G then S · R · P · L · M", "Shots · Review · Plan · Library · Map"], ["/", "Focus search"], ["M", "Cycle the frame mode"], ["Ctrl B / ⌘B", "Collapse or expand the sidebar"], ["Esc", "Close or back out one level"]]],
   ["Shots", [["F", "Filter panel"], ["← ↑ → ↓", "Move in the grid"], ["J / K", "Move in the list"], ["X · ⇧X", "Select · select range"], ["↵", "Open"], ["Del", "Delete selected"]]],
   ["Shot view · Review", [["← / →", "Previous / next shot"], [", / .", "Previous / next photo"], ["A", "Approve"], ["E", "Archive / back to review"], ["R", "Rigs stage"]]],
   ["Plan", [["↑ / ↓", "Move between planned shots"], ["Alt ↑ / ↓", "Reorder"], ["T", "Planned time"], ["Del", "Remove from the day"], ["N", "Add shots"], ["⇧N", "New day"]]],

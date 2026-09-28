@@ -12,7 +12,7 @@ export type Scope = string;
 interface Props {
   route: Route;
   rail: boolean;
-  /** Collapse to the rail or expand ([). */
+  /** Collapse to the rail or expand (Ctrl/⌘ B). */
   onToggle: () => void;
   scope: Scope;
   projects: Project[];
@@ -56,7 +56,7 @@ export function Sidebar({ route, rail, onToggle, scope, projects, views, editedV
     <nav class="f-side" aria-label="Sections">
       <div class="f-side__brand" style={rail ? { padding: 0, justifyContent: "center" } : undefined}>
         <Mark />{!rail && <span style={{ flex: 1 }}>Fielder</span>}
-        {!rail && <button type="button" class="f-btn f-btn--ghost f-btn--sm f-btn--icon" aria-label="Collapse the sidebar ([)" title="Collapse the sidebar ([)" onClick={onToggle}><Icon name="chevron-double-left" /></button>}
+        {!rail && <button type="button" class="f-btn f-btn--ghost f-btn--sm f-btn--icon" aria-label="Collapse the sidebar (Ctrl B)" title="Collapse the sidebar (Ctrl B)" onClick={onToggle}><Icon name="chevron-double-left" /></button>}
       </div>
       <ScopeSwitch rail={rail} scope={scope} name={scopeName} projects={projects} onScope={onScope} onManage={() => onNavigate({ page: "library", section: "projects", id: null })} />
       <div style={{ height: "10px" }} />
@@ -93,7 +93,7 @@ export function Sidebar({ route, rail, onToggle, scope, projects, views, editedV
           <button type="button" class="f-nav" aria-label="Go to… (⌘K)" title="Go to… (⌘K)" onClick={onPalette}><Icon name="magnify" /></button>
           <button type="button" class="f-nav" aria-label={THEME_LABEL[theme]} title={THEME_LABEL[theme]} onClick={() => onTheme(THEME_NEXT[theme])}><Icon name={THEME_ICON[theme]} /></button>
           <button type="button" class="f-nav" aria-label="Reload data" title="Reload data" onClick={onReload}><Icon name="refresh" /></button>
-          <button type="button" class="f-nav" aria-label="Expand the sidebar ([)" title="Expand the sidebar ([)" onClick={onToggle}><Icon name="chevron-double-right" /></button>
+          <button type="button" class="f-nav" aria-label="Expand the sidebar (Ctrl B)" title="Expand the sidebar (Ctrl B)" onClick={onToggle}><Icon name="chevron-double-right" /></button>
         </>
       ) : (
         <div class="f-side__foot">

@@ -39,7 +39,7 @@ export function App() {
   const [route, navigateRaw, replace] = useRoute();
   const [theme, setTheme] = useTheme();
   const narrow = useNarrow();
-  // The user's own collapse/expand (the sidebar button or [), remembered; null = follow the window width.
+  // The user's own collapse/expand (the sidebar button or Ctrl/⌘ B), remembered; null = follow the window width.
   const [sideChoice, setSideChoice] = useState<"rail" | "full" | null>(() => { const v = readStorage("sidebar"); return v === "rail" || v === "full" ? v : null; });
   const [shots, setShots] = useState<Shot[] | null>(null);
   const [projects, setProjects] = useState<Project[] | null>(null);
@@ -180,7 +180,7 @@ export function App() {
   useKeys({
     "Mod+k": openPalette,
     "?": () => setSheet(true),
-    "[": () => toggleSidebar(),
+    "Mod+b": () => toggleSidebar(),
     s: () => { if (!afterG()) return false; void navigate({ page: "shots", viewId: null }); },
     r: () => { if (!afterG()) return false; void navigate({ page: "review" }); },
     p: () => { if (!afterG()) return false; void navigate({ page: "plan", dayId: null }); },
@@ -268,7 +268,7 @@ export function App() {
     { id: "a-rig", group: "Actions", icon: "camera-plus-outline", title: "New rig", sub: "Library › Rigs", run: () => navigateRaw({ page: "library", section: "rigs", id: null }) },
     { id: "a-theme", group: "Actions", icon: "theme-light-dark", title: "Toggle theme", sub: `Now ${theme === "auto" ? "Auto" : theme === "sun" ? "Sun" : "Set"}`, run: () => setTheme(theme === "set" ? "sun" : "set") },
     { id: "a-reload", group: "Actions", icon: "refresh", title: "Reload data", run: reload },
-    { id: "a-side", group: "Actions", icon: rail ? "chevron-double-right" : "chevron-double-left", title: rail ? "Expand the sidebar" : "Collapse the sidebar", keys: "[", run: toggleSidebar },
+    { id: "a-side", group: "Actions", icon: rail ? "chevron-double-right" : "chevron-double-left", title: rail ? "Expand the sidebar" : "Collapse the sidebar", keys: "Ctrl B", run: toggleSidebar },
     { id: "a-keys", group: "Actions", icon: "keyboard-outline", title: "Keyboard shortcuts", keys: "?", run: () => setSheet(true) },
   ];
 
