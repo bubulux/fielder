@@ -19,7 +19,7 @@ The owner talks to you in English.
 | --- | --- |
 | `apps/worker/src` | API routes (`shots.ts`, `projects.ts`, `fields.ts`, `days.ts`, …), `http.ts` router + `assert*` helpers |
 | `apps/worker/migrations` | D1 schema, numbered, additive |
-| `apps/dashboard/src` | `App.tsx` (state, tabs), one file per tab/component, `ui.tsx` (design-system components), `design/` (tokens + component CSS), `styles.css` (layouts) |
+| `apps/dashboard/src` | `App.tsx` (state, routes), `Sidebar.tsx`, one file per page (`ShotsPage`, `ShotView` + `Inspector`, `Review`, `Plan`, library pages), `keys.ts` (shortcuts), `ui.tsx` (design-system components), `design/` (tokens + component CSS), `styles.css` (layouts) |
 | `apps/mobile/src` | `screens/` (Viewfinder, Review, Gallery, Map, ShootDay, Setup), `uploads.ts` (queue), `storage.ts` (kv), `api.ts` |
 | `packages/vocab` | Shared vocabularies, filters, extra-field definitions, daylight math: anything both the Worker and a client must agree on |
 | `packages/fov-math` | Camera/lens/FOV/overlay/reframe math |

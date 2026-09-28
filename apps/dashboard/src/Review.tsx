@@ -1,73 +1,55 @@
 import { useEffect, useMemo, useState } from "preact/hooks";
 import type { FieldDef } from "@fielder/vocab";
-import { deleteShot, type Location, type Project, type Shot } from "./api";
-import { Framed, type MaskMode } from "./Framed";
-import { Filmstrip, isTyping, ShotInfo, usePhotoKeys } from "./ShotInfo";
+import type { Location, Preset, Project, Shot } from "./api";
+import type { MaskMode } from "./Framed";
+import type { Stage } from "./router";
+import { ShotView } from "./ShotView";
 import { Empty, Icon } from "./ui";
 
 interface Props {
   shots: Shot[];
-  /** The global view mode (header switch). */
-  mask: MaskMode;
+  scopeName: string;
+  stage: Stage;
+  onStage: (s: Stage) => void;
+  mode: MaskMode;
+  onMode: (m: MaskMode) => void;
   projects: Project[];
+  presets: Preset[];
   fieldsOf: (projectId: string) => FieldDef[];
   locations: Location[];
   onLocations: (l: Location[]) => void;
   onUpdated: (s: Shot) => void;
   onDeleted: (id: string) => void;
+  onShowOnMap: (s: Shot) => void;
+  onOpenDay: (projectId: string, dayId: string) => void;
+  onBrowseApproved: () => void;
+  onPlan: () => void;
 }
 
-/** Unreviewed shots one at a time, oldest first. ←/→ step through the queue; details are edited in place. */
-export function Review({ shots, mask, projects, fieldsOf, locations, onLocations, onUpdated, onDeleted }: Props) {
-  const queue = useMemo(() => shots.filter((s) => s.state === "unreviewed").sort((a, b) => a.captured_at.localeCompare(b.captured_at)), [shots]);
-  /** Follow the shot, not the position, so edits don't jump; fall back to the same position when it leaves the queue. */
+/** Unreviewed shots one at a time, oldest first, on the shot-view layout. No skip; ←/→ move through the queue. */
+export function ReviewPage(p: Props) {
+  const queue = useMemo(() => p.shots.filter((s) => s.state === "unreviewed").sort((a, b) => a.captured_at.localeCompare(b.captured_at)), [p.shots]);
+  // Follow the shot, not the position, so edits don't jump; when it leaves the queue the next one takes its place.
   const [currentId, setCurrentId] = useState<string | null>(null);
   const [lastIndex, setLastIndex] = useState(0);
-  const [photoIndex, setPhotoIndex] = useState(0);
   const found = queue.findIndex((s) => s.id === currentId);
   const index = found >= 0 ? found : Math.min(lastIndex, queue.length - 1);
   const current = index >= 0 ? queue[index] : undefined;
   useEffect(() => { if (current && current.id !== currentId) setCurrentId(current.id); setLastIndex(Math.max(0, index)); }, [current?.id, index]);
-  useEffect(() => { setPhotoIndex(0); }, [current?.id]);
 
-  const go = (delta: number) => { const n = queue[index + delta]; if (n) setCurrentId(n.id); };
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (isTyping(e) || document.querySelector(".detail-backdrop")) return;
-      if (e.key === "ArrowLeft") { e.preventDefault(); go(-1); }
-      else if (e.key === "ArrowRight") { e.preventDefault(); go(1); }
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  });
-  usePhotoKeys(current?.photos.length ?? 0, photoIndex, setPhotoIndex);
-
-  async function remove(shot: Shot) {
-    if (!confirm("Delete this shot permanently? Archiving keeps it.")) return;
-    try { await deleteShot(shot.id); onDeleted(shot.id); } catch (e) { alert(`Delete failed: ${(e as Error).message}`); }
+  if (!current) {
+    return (
+      <>
+        <div class="f-toolbar"><div class="f-toolbar__title"><span>Review</span></div><div class="review-progress"><span class="num" style={{ fontSize: "var(--text-caption)" }}><strong>0 left</strong></span><div class="f-progress" style={{ height: "6px" }}><div class="f-progress__bar" style={{ width: "100%" }} /></div></div></div>
+        <Empty icon="check-all" tone="ok" title="Nothing to review" actions={<><button type="button" class="f-btn f-btn--secondary" onClick={p.onBrowseApproved}><Icon name="check-circle" />Browse approved shots</button><button type="button" class="f-btn f-btn--ghost" onClick={p.onPlan}>Plan a day</button></>}>
+          All {p.shots.length} shots in {p.scopeName} are reviewed. New uploads land here, oldest first.
+        </Empty>
+      </>
+    );
   }
-
-  if (!current) return <Empty icon="check-all" title="Nothing to review">New shots from the phone show up here.</Empty>;
-  const photo = current.photos[Math.min(photoIndex, current.photos.length - 1)];
   return (
-    <div class="review">
-      <div class="review-head">
-        <button class="f-btn f-btn--secondary" disabled={index === 0} onClick={() => go(-1)} title="Previous (←)"><Icon name="chevron-left" />Prev</button>
-        <strong>{index + 1} / {queue.length} to review</strong>
-        <button class="f-btn f-btn--secondary" disabled={index === queue.length - 1} onClick={() => go(1)} title="Next (→)">Next<Icon name="chevron-right" /></button>
-        <span class="grow" />
-        <div class="keys"><span><kbd>←</kbd><kbd>→</kbd> shots</span>{current.photos.length > 1 && <span><kbd>,</kbd><kbd>.</kbd> photos</span>}</div>
-      </div>
-      <div class="review-body">
-        <div class="review-stage">
-          <Framed photo={photo} mode={mask} maxHeight="72vh" />
-          <Filmstrip shot={current} index={photoIndex} onPick={setPhotoIndex} />
-        </div>
-        <div class="side">
-          <ShotInfo shot={current} photo={photo} projects={projects} fields={fieldsOf(current.project_id)} locations={locations} onLocations={onLocations} onUpdated={onUpdated} />
-          <div class="btn-row"><button class="f-btn f-btn--danger" onClick={() => void remove(current)}><Icon name="delete-outline" />Delete</button></div>
-        </div>
-      </div>
-    </div>
+    <ShotView shot={current} list={queue} onNavigate={(s) => setCurrentId(s.id)} context={{ kind: "review", total: queue.length }} stage={p.stage} onStage={p.onStage}
+      mode={p.mode} onMode={p.onMode} projects={p.projects} presets={p.presets} fieldsOf={p.fieldsOf} locations={p.locations} onLocations={p.onLocations}
+      onUpdated={p.onUpdated} onDeleted={p.onDeleted} onShowOnMap={p.onShowOnMap} onOpenDay={p.onOpenDay} />
   );
 }

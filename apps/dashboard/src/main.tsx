@@ -10,6 +10,7 @@ import "./design/overlays.css";
 import "./design/data.css";
 import "./design/feedback.css";
 import "./design/fielder.css";
+import "./design/dashboard.css";
 import "./styles.css";
 import { App } from "./App";
 

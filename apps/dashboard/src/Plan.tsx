@@ -1,0 +1,369 @@
+import { useEffect, useMemo, useRef, useState } from "preact/hooks";
+import { dayLight, lightLabel, localDay, PHASE_ICONS, shootableWindows, type DayLight, type Interval } from "@fielder/vocab";
+import { deleteDay, fetchDays, putDay, type DayShot, type Project, type Shot, type ShootingDay } from "./api";
+import { cover, shotTitle } from "./format";
+import { Framed, type MaskMode } from "./Framed";
+import { invalidateDays } from "./Inspector";
+import { useKeys } from "./keys";
+import { Popover } from "./ShotsPage";
+import { confirmDialog, cx, Empty, Icon, Kbd, SaveStatus, toast, type SaveState } from "./ui";
+import { fetchForecast, weatherText, type HourForecast } from "./weather";
+
+interface Props {
+  /** null when browsing all projects: planning needs one project. */
+  project: Project | null;
+  projects: Project[];
+  onPickProject: (id: string) => void;
+  /** The project's shots. */
+  shots: Shot[];
+  mask: MaskMode;
+  dayId: string | null;
+  onDay: (id: string | null) => void;
+  onOpen: (s: Shot, list: Shot[]) => void;
+}
+
+const BERLIN = { lat: 52.52, lon: 13.405 };
+const hhmm = (d: Date) => d.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
+const windowsText = (w: Interval[]) => (w.length ? w.map((x) => `${hhmm(x.start)}–${hhmm(x.end)}`).join(", ") : "not on this day");
+const dateLabel = (date: string) => new Date(`${date}T12:00:00`).toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" });
+/** YYYY-MM-DD in the viewer's time zone (toISOString would give the UTC date). */
+const isoDate = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+function nextSaturday(): string {
+  const d = new Date();
+  d.setDate(d.getDate() + ((6 - d.getDay() + 7) % 7 || 7));
+  return isoDate(d);
+}
+/** Centre of the shots' cover photos (for sun and weather), Berlin when there are none. */
+function centroid(shots: Shot[]): { lat: number; lon: number } {
+  if (shots.length === 0) return BERLIN;
+  const ps = shots.map(cover);
+  return { lat: ps.reduce((a, p) => a + p.lat, 0) / ps.length, lon: ps.reduce((a, p) => a + p.lon, 0) / ps.length };
+}
+function mergeIntervals(list: Interval[]): Interval[] {
+  const sorted = [...list].sort((a, b) => a.start.getTime() - b.start.getTime());
+  const out: Interval[] = [];
+  for (const x of sorted) {
+    const last = out.at(-1);
+    if (last && x.start.getTime() <= last.end.getTime()) { if (x.end > last.end) last.end = x.end; }
+    else out.push({ start: x.start, end: x.end });
+  }
+  return out;
+}
+const atTime = (start: Date, hm: string) => { const [h, m] = hm.split(":").map(Number); const d = new Date(start); d.setHours(h, m, 0, 0); return d; };
+const plannedFits = (planned: string | null, start: Date, w: Interval[]) => !planned || w.some((x) => atTime(start, planned) >= x.start && atTime(start, planned) < x.end);
+
+/** Plan: shooting days of the project against the light and the forecast. Changes autosave per day. */
+export function PlanPage({ project, projects, onPickProject, shots, mask, dayId, onDay, onOpen }: Props) {
+  const [days, setDays] = useState<ShootingDay[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const projectId = project?.id ?? null;
+  useEffect(() => {
+    if (!projectId) return;
+    setDays(null);
+    fetchDays(projectId).then((d) => {
+      setDays(d);
+      if (!dayId || !d.some((x) => x.id === dayId)) onDay(d.find((x) => x.date >= isoDate(new Date()))?.id ?? d.at(-1)?.id ?? null);
+    }).catch((e: Error) => setError(e.message));
+  }, [projectId]);
+
+  // Edits save shortly after the last change, per day; leaving the page saves at once.
+  const pending = useRef(new Map<string, { timer: ReturnType<typeof setTimeout>; day: ShootingDay }>());
+  const [save, setSave] = useState<SaveState>("idle");
+  const [savedAt, setSavedAt] = useState<Date | null>(null);
+  const flushDay = (d: ShootingDay) => {
+    pending.current.delete(d.id);
+    setSave("saving");
+    putDay(d).then(() => { invalidateDays(d.project_id); if (pending.current.size === 0) { setSave("saved"); setSavedAt(new Date()); } }).catch((e: Error) => { setSave("error"); setError(e.message); pending.current.set(d.id, { day: d, timer: setTimeout(() => {}, 0) }); });
+  };
+  useEffect(() => () => { for (const { timer, day } of pending.current.values()) { clearTimeout(timer); void putDay(day).catch(() => {}); } pending.current.clear(); }, []);
+  const retry = () => { for (const { day } of [...pending.current.values()]) flushDay(day); };
+  function change(d: ShootingDay) {
+    setDays((cur) => (cur ?? []).map((x) => (x.id === d.id ? d : x)).sort((a, b) => a.date.localeCompare(b.date)));
+    setSave("dirty");
+    const prev = pending.current.get(d.id);
+    if (prev) clearTimeout(prev.timer);
+    pending.current.set(d.id, { day: d, timer: setTimeout(() => flushDay(d), 600) });
+  }
+  async function create() {
+    if (!projectId) return;
+    const d: ShootingDay = { id: crypto.randomUUID(), project_id: projectId, date: nextSaturday(), title: null, notes: null, shots: [], created_at: "", updated_at: null };
+    try { const saved = await putDay(d); invalidateDays(projectId); setDays((cur) => [...(cur ?? []), saved].sort((a, b) => a.date.localeCompare(b.date))); onDay(saved.id); } catch (e) { toast(`Could not create the day: ${(e as Error).message}`, "danger"); }
+  }
+  async function remove(d: ShootingDay) {
+    const ok = await confirmDialog({ title: `Delete ${dateLabel(d.date)}${d.title ? ` · ${d.title}` : ""}?`, body: "The plan for this day is deleted. The shots themselves stay.", confirmLabel: "Delete day", danger: true });
+    if (!ok) return;
+    try { await deleteDay(d.id); invalidateDays(d.project_id); setDays((cur) => (cur ?? []).filter((x) => x.id !== d.id)); onDay(null); } catch (e) { toast(`Delete failed: ${(e as Error).message}`, "danger"); }
+  }
+
+  useKeys({ "Shift+N": () => void create() }, !!projectId);
+
+  if (!project) {
+    return (
+      <>
+        <div class="f-toolbar"><div class="f-toolbar__title"><span>Plan</span></div></div>
+        <Empty icon="folder-outline" title="Pick a project to plan">
+          Shooting days belong to one project. “All projects” can browse, but not plan.
+          <div class="f-menu" style={{ marginTop: "12px", width: "300px", textAlign: "left" }}>
+            {projects.map((p) => <button key={p.id} type="button" class="f-menu__item" onClick={() => onPickProject(p.id)}><Icon name="folder-outline" /><span style={{ overflow: "hidden", textOverflow: "ellipsis", flex: 1 }}>{p.name}</span><span class="f-nav__count">{p.shot_count} shots</span></button>)}
+          </div>
+        </Empty>
+      </>
+    );
+  }
+
+  const day = days?.find((d) => d.id === dayId) ?? null;
+  const today = isoDate(new Date());
+  return (
+    <div class="f-app__body">
+      <aside class="f-panel f-panel--left" style={{ "--panel-w": "280px" }} aria-label="Shooting days">
+        <div class="f-panel__head"><span class="f-panel__title">Shooting days</span><button type="button" class="f-btn f-btn--sm" title="New day (⇧N)" onClick={() => void create()}><Icon name="plus" />New day</button></div>
+        <div class="f-panel__body f-panel__body--flush" role="listbox" aria-label="Days">
+          {!days ? <div class="status"><span class="f-spinner" /></div> : days.length === 0 ? (
+            <div class="f-empty"><div class="f-empty__title" style={{ fontSize: "var(--text-body-lg)" }}>No days yet</div><div class="meta">“New day” starts on the next Saturday.</div></div>
+          ) : days.map((d) => (
+            <div key={d.id} role="option" aria-selected={d.id === dayId} tabIndex={0} class={cx("f-dayitem", d.id === dayId && "is-selected", d.date < today && "is-past")} onClick={() => onDay(d.id)} onKeyDown={(e) => { if (e.key === "Enter") onDay(d.id); }}>
+              <span class="f-dayitem__date">{dateLabel(d.date)}{d.date === today ? " · today" : ""}</span>
+              <span class="f-dayitem__meta">{d.title || "Untitled"} · {d.shots.length} shot{d.shots.length === 1 ? "" : "s"}</span>
+            </div>
+          ))}
+        </div>
+      </aside>
+      {days && days.length === 0 ? (
+        <Empty icon="calendar-blank-outline" title={`No shooting days in ${project.name}`} actions={<button type="button" class="f-btn" onClick={() => void create()}><Icon name="plus" />New day</button>}>
+          Plan which approved shots to shoot on which day, against the light and the forecast.
+        </Empty>
+      ) : day ? (
+        <DayEditor key={day.id} day={day} shots={shots} mask={mask} onChange={change} onDelete={() => void remove(day)} onOpen={onOpen}
+          save={save} savedAt={savedAt} onRetry={retry} error={save === "error" ? error : null} />
+      ) : (
+        <Empty icon="calendar-blank-outline" title="Pick a day" />
+      )}
+    </div>
+  );
+}
+
+interface EditorProps {
+  day: ShootingDay; shots: Shot[]; mask: MaskMode; onChange: (d: ShootingDay) => void; onDelete: () => void; onOpen: (s: Shot, list: Shot[]) => void;
+  save: SaveState; savedAt: Date | null; onRetry: () => void; error: string | null;
+}
+
+function DayEditor({ day, shots, mask, onChange, onDelete, onOpen, save, savedAt, onRetry, error }: EditorProps) {
+  const [adding, setAdding] = useState(day.shots.length === 0);
+  const [menu, setMenu] = useState(false);
+  const [focus, setFocus] = useState(0);
+  const rowsRef = useRef<HTMLDivElement>(null);
+  const byId = useMemo(() => new Map(shots.map((s) => [s.id, s])), [shots]);
+  const planned = day.shots.map((ds) => ({ ds, shot: byId.get(ds.shot_id) })).filter((x): x is { ds: DayShot; shot: Shot } => !!x.shot);
+  const where = centroid(planned.length ? planned.map((x) => x.shot) : shots);
+  const { start, hours } = localDay(day.date);
+  const light = useMemo(() => dayLight(start, where.lat, where.lon, hours), [day.date, where.lat, where.lon]);
+  const [forecast, setForecast] = useState<HourForecast[] | null | "loading">("loading");
+  useEffect(() => {
+    setForecast("loading");
+    void fetchForecast(where.lat, where.lon, start, new Date(start.getTime() + hours * 3_600_000)).then(setForecast);
+  }, [day.date, where.lat.toFixed(2), where.lon.toFixed(2)]);
+
+  const setShots = (list: DayShot[]) => onChange({ ...day, shots: list });
+  const move = (i: number, delta: number) => { if (i + delta < 0 || i + delta >= day.shots.length) return; const l = [...day.shots]; const [x] = l.splice(i, 1); l.splice(i + delta, 0, x); setShots(l); setFocus(i + delta); };
+  const plannedList = planned.map((x) => x.shot);
+  const focused = planned[focus];
+  const idxOf = (ds: DayShot) => day.shots.indexOf(ds);
+
+  useKeys({
+    ArrowDown: () => setFocus((f) => Math.min(planned.length - 1, f + 1)),
+    ArrowUp: () => setFocus((f) => Math.max(0, f - 1)),
+    "Alt+ArrowUp": () => focused && move(idxOf(focused.ds), -1),
+    "Alt+ArrowDown": () => focused && move(idxOf(focused.ds), 1),
+    t: () => { rowsRef.current?.querySelectorAll<HTMLInputElement>(".f-time input")[focus]?.focus(); },
+    Delete: () => { if (focused) setShots(day.shots.filter((x) => x !== focused.ds)); },
+    n: () => setAdding((a) => !a),
+    Enter: () => { if (focused) onOpen(focused.shot, plannedList); },
+  });
+
+  // Consecutive shots of the same location form a group, keeping the day's order.
+  const groups: { name: string; items: { ds: DayShot; shot: Shot; flat: number }[] }[] = [];
+  planned.forEach(({ ds, shot }, flat) => {
+    const name = shot.location_name ?? "No location";
+    const last = groups.at(-1);
+    if (last && last.name === name) last.items.push({ ds, shot, flat });
+    else groups.push({ name, items: [{ ds, shot, flat }] });
+  });
+  const pct = (d: Date) => Math.max(0, Math.min(100, ((d.getTime() - start.getTime()) / (hours * 3_600_000)) * 100));
+  const lane = (w: Interval[]) => w.map((x) => ({ l: pct(x.start), w: pct(x.end) - pct(x.start), key: x.start.toISOString() }));
+
+  return (
+    <>
+      <div class="f-scroll">
+        <div class="plan-day" ref={rowsRef}>
+          {error && (
+            <div class="f-banner f-banner--danger" role="alert"><Icon name="cloud-alert" /><div class="f-banner__text"><span class="f-banner__title">Not saved</span><span class="f-banner__meta">{error}. Your changes are kept here; they save on retry or on the next edit.</span></div><button type="button" class="f-btn f-btn--secondary f-btn--sm" onClick={onRetry}>Retry</button></div>
+          )}
+          <div class="plan-head">
+            <label class="f-field" style={{ width: "170px" }}><span class="f-field__label">Date</span><span class="f-input"><input type="date" class="num" style={{ fontWeight: 700 }} value={day.date} onInput={(e) => { const v = (e.target as HTMLInputElement).value; if (v) onChange({ ...day, date: v }); }} /></span></label>
+            <label class="f-field" style={{ flex: 1, minWidth: "220px" }}><span class="f-field__label">Title</span><span class="f-input"><input value={day.title ?? ""} placeholder="e.g. Moabit and the river" onInput={(e) => onChange({ ...day, title: (e.target as HTMLInputElement).value || null })} /></span></label>
+            <div class="plan-head__status">
+              <SaveStatus state={save} onRetry={onRetry} savedLabel={savedAt ? `Saved ${hhmm(savedAt)}` : "Saved"} />
+              <div class="menu-anchor">
+                <button type="button" class="f-btn f-btn--ghost f-btn--sm f-btn--icon" aria-label="Day menu" aria-expanded={menu} onClick={() => setMenu(!menu)}><Icon name="dots-horizontal" /></button>
+                {menu && <Popover right onClose={() => setMenu(false)}><button type="button" class="f-menu__item f-menu__item--danger" onClick={() => { setMenu(false); onDelete(); }}><Icon name="delete-outline" />Delete day…</button></Popover>}
+              </div>
+            </div>
+          </div>
+          <label class="f-field"><span class="f-field__label">Notes</span><textarea class="f-textarea" rows={2} placeholder="Call time, permits, crew…" value={day.notes ?? ""} onInput={(e) => onChange({ ...day, notes: (e.target as HTMLTextAreaElement).value || null })} /></label>
+
+          <div class="light-box">
+            <div class="f-dayrow">
+              <div class="lead"><strong>Light</strong><span class="meta">at the centre of the day’s shots</span></div>
+              <LightTrack light={light} start={start} hours={hours} pct={pct} />
+              <div class="f-tl__keys num" style={{ gridColumn: "3 / 5" }}>
+                {light.sunrise && <span title="Sunrise"><Icon name="weather-sunset-up" /><b>{hhmm(light.sunrise)}</b></span>}
+                {light.sunset && <span title="Sunset"><Icon name="weather-sunset-down" /><b>{hhmm(light.sunset)}</b></span>}
+                <span>max <b>{light.maxElevation.toFixed(1)}°</b></span>
+              </div>
+            </div>
+            <div class="f-dayrow">
+              <div class="lead"><strong>Forecast</strong><span class="meta">Open-Meteo</span></div>
+              <Forecast forecast={forecast} date={day.date} pct={pct} hours={hours} />
+              <div class="f-tl__keys" style={{ gridColumn: "3 / 5" }}><span><Icon name="cloud-outline" />cloud</span><span><Icon name="weather-rainy" />rain ≥ 30 %</span></div>
+            </div>
+            <div class="f-dayrow">
+              <span />
+              <div class="f-tl__keys meta num">{light.phases.filter((ph) => ph.phase === "dawn" || ph.phase === "dusk").map((ph) => <span key={ph.start.toISOString()}>{ph.phase === "dawn" ? "Dawn" : "Dusk"} <b>{hhmm(ph.start)}–{hhmm(ph.end)}</b></span>)}</div>
+            </div>
+          </div>
+
+          <div class="plan-shots-head">
+            <h2>Planned shots <span class="meta num">{planned.length}</span></h2>
+            {planned.some((x) => x.ds.planned_time) && <button type="button" class="f-btn f-btn--secondary f-btn--sm" onClick={() => setShots([...day.shots].sort((a, b) => (a.planned_time ?? "99").localeCompare(b.planned_time ?? "99")))}><Icon name="sort-clock-ascending-outline" />Sort by planned time</button>}
+            <button type="button" class={cx("f-btn f-btn--sm", adding && "f-btn--secondary")} aria-pressed={adding} onClick={() => setAdding(!adding)}><Icon name="plus" />Add shots<span class="f-btn__kbd">N</span></button>
+          </div>
+          {groups.length === 0 && <div class="f-empty dashed"><div class="f-empty__title" style={{ fontSize: "var(--text-body-lg)" }}>No shots on this day</div><div class="meta">Add approved shots from the panel. Each one shows its window for this date.</div></div>}
+          {groups.map((g, gi) => {
+            const union = mergeIntervals(g.items.flatMap(({ shot }) => shootableWindows(light, shot.light)));
+            return (
+              <div class="f-daygroup" key={`${g.name}-${gi}`}>
+                <div class="f-daygroup__head f-dayrow">
+                  <div class="lead-row"><Icon name="map-marker-outline" size={18} /><strong class="ellipsis">{g.name}</strong><span class="meta">{g.items.length} shot{g.items.length === 1 ? "" : "s"}</span></div>
+                  <div class="f-tl__lane"><div class="f-tl__lanebg" />{lane(union).map((w) => <div key={w.key} class="f-tl__win" style={{ left: `${w.l}%`, width: `${w.w}%`, opacity: 0.45 }} />)}</div>
+                  <span class="win-text num" style={{ gridColumn: "3 / 5" }}>{windowsText(union)}</span>
+                </div>
+                {g.items.map(({ ds, shot, flat }) => {
+                  const w = shootableWindows(light, shot.light);
+                  const fits = plannedFits(ds.planned_time, start, w);
+                  const i = idxOf(ds);
+                  return (
+                    <div key={shot.id} class={cx("f-daygroup__row f-dayrow", flat === focus && "is-focus")} onClick={() => setFocus(flat)}>
+                      <div class="lead-row">
+                        <button type="button" class="f-table__thumb" style={{ border: 0, padding: 0, cursor: "pointer", flex: "none" }} aria-label={`Open ${shotTitle(shot)}`} onClick={() => onOpen(shot, plannedList)}><Framed photo={cover(shot)} mode={mask} /></button>
+                        <div class="lead-text"><strong class="ellipsis">{shotTitle(shot)}</strong><span class="meta ellipsis">{lightLabel(shot.light, shot.artificial) || "Any time"} · <b style={{ color: w.length ? "var(--ok)" : "var(--warn-ink)" }}>{w.length ? windowsText(w) : "not on this day"}</b></span></div>
+                      </div>
+                      <div class="f-tl__lane" style={{ height: "22px" }}>
+                        <div class="f-tl__lanebg" />
+                        {lane(w).map((x) => <div key={x.key} class="f-tl__win" style={{ left: `${x.l}%`, width: `${x.w}%` }} />)}
+                        {ds.planned_time && <div class={cx("f-tl__mark", fits ? "f-tl__mark--plan" : "f-tl__mark--bad")} style={{ left: `${pct(atTime(start, ds.planned_time))}%` }} title={fits ? "Planned time" : "Planned outside the shot’s light"} />}
+                      </div>
+                      <div class="f-field" style={{ gap: "2px" }}>
+                        <span class={cx("f-input f-input--sm f-time", !fits && "is-bad")}><input type="time" aria-label="Planned time" value={ds.planned_time ?? ""} onInput={(e) => setShots(day.shots.map((x) => (x === ds ? { ...x, planned_time: (e.target as HTMLInputElement).value || null } : x)))} /></span>
+                        {!fits && <span class="f-field__error" style={{ fontSize: "11px" }}><Icon name="alert-circle" />Outside window</span>}
+                      </div>
+                      <div class="btn-row" style={{ gap: "2px", justifyContent: "flex-end" }}>
+                        <button type="button" class="f-btn f-btn--ghost f-btn--sm f-btn--icon" aria-label="Move up (Alt+↑)" title="Move up (Alt+↑)" disabled={i === 0} onClick={() => move(i, -1)}><Icon name="arrow-up" /></button>
+                        <button type="button" class="f-btn f-btn--ghost f-btn--sm f-btn--icon" aria-label="Move down (Alt+↓)" title="Move down (Alt+↓)" disabled={i === day.shots.length - 1} onClick={() => move(i, 1)}><Icon name="arrow-down" /></button>
+                        <button type="button" class="f-btn f-btn--ghost f-btn--sm f-btn--icon" aria-label="Remove from day" title="Remove from day (Del)" onClick={() => setShots(day.shots.filter((x) => x !== ds))}><Icon name="close" /></button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+      {adding && <AddShotsPanel shots={shots} light={light} taken={new Set(day.shots.map((x) => x.shot_id))} mask={mask} onClose={() => setAdding(false)}
+        onAdd={(ids) => setShots([...day.shots, ...ids.map((shot_id) => ({ shot_id, planned_time: null, notes: null }))])} />}
+    </>
+  );
+}
+
+function LightTrack({ light, start, hours, pct }: { light: DayLight; start: Date; hours: number; pct: (d: Date) => number }) {
+  const ticks = Array.from({ length: Math.floor(hours / 2) + 1 }, (_, i) => new Date(start.getTime() + i * 2 * 3_600_000));
+  const now = new Date();
+  const showNow = now >= start && now.getTime() < start.getTime() + hours * 3_600_000;
+  return (
+    <div class="f-tl">
+      <div class="f-tl__track" style={{ position: "relative" }}>
+        {light.phases.map((p) => {
+          const w = pct(p.end) - pct(p.start);
+          return (
+            <div key={p.start.toISOString()} class={`f-tl__seg f-tl__seg--${p.phase}`} title={`${p.phase} ${hhmm(p.start)}–${hhmm(p.end)}`} style={{ left: `${pct(p.start)}%`, width: `${w}%` }}>
+              {w > 4 && <Icon name={PHASE_ICONS[p.phase]} />}{w > 9 && p.phase}
+            </div>
+          );
+        })}
+        <div class="f-tl__overlay">
+          {light.sunrise && <div class="f-tl__mark f-tl__mark--sun" style={{ left: `${pct(light.sunrise)}%` }} />}
+          {light.sunset && <div class="f-tl__mark f-tl__mark--sun" style={{ left: `${pct(light.sunset)}%` }} />}
+          {showNow && <div class="f-tl__mark f-tl__mark--now" style={{ left: `${pct(now)}%` }} title={`Now ${hhmm(now)}`} />}
+        </div>
+      </div>
+      <div class="f-tl__ticks">{ticks.map((t, i) => <span key={i} style={{ left: `${pct(t)}%`, transform: i === 0 ? "none" : pct(t) >= 99 ? "translateX(-100%)" : undefined }}>{String(t.getHours()).padStart(2, "0")}</span>)}</div>
+    </div>
+  );
+}
+
+function Forecast({ forecast, date, pct, hours }: { forecast: HourForecast[] | null | "loading"; date: string; pct: (d: Date) => number; hours: number }) {
+  if (forecast === "loading") return <span class="f-loading meta"><span class="f-spinner" />Loading forecast…</span>;
+  if (forecast === null) return <div class="f-wx__none"><Icon name="weather-cloudy-clock" />{dateLabel(date)} is outside the forecast (about 16 days ahead).</div>;
+  const w = `${100 / hours}%`;
+  const tip = (h: HourForecast) => `${hhmm(h.time)} · ${weatherText(h.code)} · cloud ${h.cloudPct} % · rain ${h.precipProb ?? 0} % · ${Math.round(h.tempC)} °C`;
+  return (
+    <div class="wx">
+      <div class="wx-track wx-cloud">{forecast.map((h) => <div key={h.time.toISOString()} class="f-wx__cloud" style={{ left: `${pct(h.time)}%`, width: w }} title={tip(h)}><i style={{ top: "auto", right: 0, height: `${h.cloudPct}%` }} /></div>)}</div>
+      <div class="wx-track wx-rain">{forecast.map((h) => <div key={h.time.toISOString()} class="f-wx__rain" style={{ left: `${pct(h.time)}%`, width: w }} title={tip(h)}><i class={(h.precipProb ?? 0) < 30 ? "is-low" : ""} style={{ height: `${Math.max(h.precipProb ?? 0, 8)}%` }} /></div>)}</div>
+      <div class="wx-track wx-temp">{forecast.filter((h) => h.time.getHours() % 3 === 0).map((h) => <span key={h.time.toISOString()} class="f-wx__temp" style={{ left: `${pct(h.time)}%` }} title={tip(h)}>{Math.round(h.tempC)}°</span>)}</div>
+    </div>
+  );
+}
+
+function AddShotsPanel({ shots, light, taken, mask, onAdd, onClose }: { shots: Shot[]; light: DayLight; taken: Set<string>; mask: MaskMode; onAdd: (ids: string[]) => void; onClose: () => void }) {
+  const [location, setLocation] = useState<string>("");
+  const [onlyApproved, setOnlyApproved] = useState(true);
+  const notOnDay = shots.filter((s) => !taken.has(s.id) && (!onlyApproved || s.state === "approved"));
+  const candidates = notOnDay.filter((s) => !location || (s.location_id ?? "none") === location);
+  const locations = [...new Map(shots.map((s) => [s.location_id ?? "none", s.location_name ?? "No location"])).entries()].sort((a, b) => a[1].localeCompare(b[1]));
+  const byLocation = new Map<string, Shot[]>();
+  for (const s of candidates) { const k = s.location_name ?? "No location"; byLocation.set(k, [...(byLocation.get(k) ?? []), s]); }
+  useKeys({ Escape: onClose });
+  return (
+    <aside class="f-panel" aria-label="Add shots" style={{ "--panel-w": "340px" }}>
+      <div class="f-panel__head"><span class="f-panel__title">Add shots</span><Kbd>N</Kbd><button type="button" class="f-btn f-btn--ghost f-btn--sm f-btn--icon" aria-label="Close" onClick={onClose}><Icon name="close" /></button></div>
+      <div class="panel-filters">
+        <label class="f-pick"><Icon name="map-marker-outline" /><select aria-label="Location" value={location} onChange={(e) => setLocation((e.target as HTMLSelectElement).value)}>
+          <option value="">All locations</option>
+          {locations.map(([id, name]) => <option key={id} value={id}>{name}</option>)}
+        </select><Icon name="chevron-down" /></label>
+        <button type="button" class={cx("f-check", onlyApproved && "is-checked")} role="checkbox" aria-checked={onlyApproved} onClick={() => setOnlyApproved(!onlyApproved)}>
+          <span class="f-check__box">{onlyApproved && <Icon name="check" />}</span>Approved only <span class="meta">· {notOnDay.length} not on this day</span>
+        </button>
+      </div>
+      <div class="f-panel__body" style={{ gap: "14px" }}>
+        {candidates.length === 0 && <span class="meta">No more shots to add{onlyApproved ? ". Approve shots in Review first, or untick “Approved only”." : "."}</span>}
+        {[...byLocation.entries()].map(([name, list]) => (
+          <div key={name} class="add-group">
+            <div class="add-group__head"><strong class="ellipsis">{name}</strong><span class="meta">{list.length}</span><button type="button" class="f-btn f-btn--ghost f-btn--sm" onClick={() => onAdd(list.map((s) => s.id))}>Add all</button></div>
+            {list.map((s) => {
+              const w = shootableWindows(light, s.light);
+              return (
+                <button key={s.id} type="button" class="f-row f-row--dense add-row" onClick={() => onAdd([s.id])} title="Add to the day">
+                  <div class="f-row__thumb" style={{ width: "56px" }}><Framed photo={cover(s)} mode={mask} /></div>
+                  <div class="f-row__main"><span class="f-row__title">{shotTitle(s)}</span><span class="f-row__meta">{lightLabel(s.light, s.artificial) || "Any time"} · <b style={{ color: w.length ? "var(--ok)" : "var(--warn-ink)" }}>{w.length ? windowsText(w) : "no fitting light"}</b></span></div>
+                  <Icon name="plus" size={20} />
+                </button>
+              );
+            })}
+          </div>
+        ))}
+      </div>
+    </aside>
+  );
+}

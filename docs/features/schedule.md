@@ -1,22 +1,25 @@
 # Schedule (shooting days)
 
-Dashboard **Schedule** tab (`apps/dashboard/src/Schedule.tsx`), per project. It plans which scouted shots are shot on which day, against the available light.
+Dashboard **Plan** (`apps/dashboard/src/Plan.tsx`, route `#/plan/<dayId>`), per project. It plans which scouted shots are shot on which day, against the available light.
 
 ## Using it
 
-- Left: the project's shooting days (past ones dimmed), "New day" (defaults to next Saturday). Changes **autosave** 600 ms after the last edit, per day, and are saved immediately when leaving the tab.
-- A day: date, title, notes, then:
-  - **Light timeline** for the day at the centre of its shots (Berlin when empty): coloured phases, sunrise/sunset, dawn/dusk times, max sun elevation.
-  - **Forecast row** from Open-Meteo (`weather.ts`, about 16 days ahead, hourly): grey bar = cloud cover, blue = chance of rain ≥ 30 %, temperature every 3 h, hover for details. Outside the horizon it says so.
-  - **Planned shots**, grouped by location in day order. Each shot has:
-    - a thumbnail (opens the dialog)
-    - its light requirement and **shootable window(s)**
-    - a bar with the window in green
-    - an optional planned time, flagged red when it falls outside the window
-    - ↑/↓/✕ to reorder or remove
-    Each location header shows the combined window. "Sort by planned time".
-  - **Add shots**: approved shots (untick to see all) not yet on the day, grouped by location, filterable by location, each with its window for that date. Click a card to add it, or "add all" for a location.
-- "All projects" cannot plan: pick a project.
+- **Left**: the project's shooting days (past ones dimmed, "today" marked), "New day" (⇧N, defaults to next Saturday). Changes **autosave** 600 ms after the last edit, per day, and are saved immediately when leaving the page. The day header shows Saving… · Saved hh:mm · Not saved (with a banner and Retry; edits are kept).
+- **A day**: date, title, the day menu (Delete day… with confirmation), notes, then one block where **everything shares the same time axis**:
+  - **Light**: the day at the centre of its shots (Berlin when empty) as coloured phases with icons, sunrise/sunset marks, a now marker on today, and dawn/dusk times and the maximum sun elevation.
+  - **Forecast** from Open-Meteo (`weather.ts`, about 16 days ahead, hourly): cloud cover bars, rain bars (solid from 30 %), temperature every 3 h, details on hover. Outside the horizon it says so.
+- **Planned shots**, grouped by location in day order, aligned under the same axis:
+  - Each location header shows the combined window.
+  - Each shot row has:
+    - a thumbnail (opens the shot view with the day's shots as its list)
+    - the name, light requirement and **shootable window(s)**
+    - a lane with the window in green and the planned time as a mark
+    - the planned time (red with "Outside window" when it falls outside)
+    - ↑/↓/✕
+  - Keys: ↑/↓ move between rows, Alt+↑/↓ reorder, `T` focuses the time, Del removes, Enter opens.
+  - "Sort by planned time".
+- **Add shots** (`N`): a side panel, so the day stays visible. It lists approved shots (untick to see all) not yet on the day, grouped by location, filterable by location, each with its window for that date. Click a row to add it, or "Add all" for a location.
+- "All projects" cannot plan: the page offers the projects to pick from.
 
 ## Light math (`packages/vocab/src/daylight.ts`, tested)
 

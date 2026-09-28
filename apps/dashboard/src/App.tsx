@@ -1,52 +1,44 @@
 import { useEffect, useMemo, useState } from "preact/hooks";
-import { SHOT_STATES, type FieldDef } from "@fielder/vocab";
-import { deleteShot, fetchAllShots, fetchFields, fetchLocations, fetchPresets, fetchProjects, fetchViews, type FieldDefinition, type Location, type Preset, type Project, type SavedView, type Shot, type ShotState } from "./api";
-import { cover, isFrameMode, photoCountLabel, placeLabel, rigLabel, shotTitle, tagsLabel, when } from "./format";
-import { Fields } from "./Fields";
-import { Framed, type MaskMode } from "./Framed";
-import { Locations } from "./Locations";
-import { MapView } from "./MapView";
-import { ModeSwitch } from "./ModeSwitch";
-import { ALL_PROJECTS, Projects, type ActiveProject } from "./Projects";
-import { Review } from "./Review";
-import { Rigs } from "./Rigs";
-import { Schedule } from "./Schedule";
-import { ShotCard } from "./ShotCard";
-import { ShotDetail } from "./ShotDetail";
-import { useTheme, type ThemeChoice } from "./theme";
-import { Chip, Empty, Icon, Loading, Seg, StateMarker } from "./ui";
-import { Views } from "./Views";
-
-type Tab = "gallery" | "review" | "map" | "schedule" | "views" | "projects" | "fields" | "rigs" | "locations";
-/** Work tabs first, then the library/settings pages, split by a divider in the header. */
-const WORK_TABS: { id: Tab; label: string; icon: string }[] = [
-  { id: "gallery", label: "Gallery", icon: "view-grid-outline" },
-  { id: "review", label: "Review", icon: "checkbox-marked-outline" },
-  { id: "map", label: "Map", icon: "map-outline" },
-  { id: "schedule", label: "Schedule", icon: "calendar-clock" },
-  { id: "views", label: "Views", icon: "filter-variant" },
-];
-const LIBRARY_TABS: { id: Tab; label: string }[] = [
-  { id: "projects", label: "Projects" }, { id: "fields", label: "Fields" }, { id: "rigs", label: "Rigs" }, { id: "locations", label: "Locations" },
-];
-const TABS: Tab[] = [...WORK_TABS, ...LIBRARY_TABS].map((t) => t.id);
-const THEMES: { id: ThemeChoice; icon: string; title: string }[] = [
-  { id: "auto", icon: "theme-light-dark", title: "Follow the system" },
-  { id: "sun", icon: "white-balance-sunny", title: "Sun: light, for daylight" },
-  { id: "set", icon: "weather-night", title: "Set: dark" },
-];
-type Filter = ShotState | "all";
-type Layout = "grid" | "list";
+import { extraFilterFields, type FieldDef } from "@fielder/vocab";
+import { deleteView, fetchAllShots, fetchFields, fetchLocations, fetchPresets, fetchProjects, fetchViews, putView, type FieldDefinition, type Location, type Preset, type Project, type SavedView, type Shot, type ShootingDay } from "./api";
+import { CommandPalette, ShortcutSheet, type Command } from "./CommandPalette";
+import { FieldsPage } from "./Fields";
+import { FRAME_MODES, isFrameMode } from "./format";
+import type { MaskMode } from "./Framed";
+import { projectDays } from "./Inspector";
+import { afterG, useKeys } from "./keys";
+import { LocationsPage } from "./Locations";
+import { PlanPage } from "./Plan";
+import { ProjectGate, ProjectsPage } from "./Projects";
+import { ReviewPage } from "./Review";
+import { RigsPage } from "./Rigs";
+import { DEFAULT_ROUTE, useRoute, type Route, type Stage } from "./router";
+import { ShotsPage } from "./ShotsPage";
+import { decodeView, emptyQuery, encodeView, runQuery, type Layout, type ShotsQuery } from "./shotsQuery";
+import { shotHints, ShotView } from "./ShotView";
+import { ALL_PROJECTS, Sidebar, type Scope } from "./Sidebar";
+import { useTheme } from "./theme";
+import { ConfirmHost, confirmDialog, cx, Empty, Kbd, Loading, promptDialog, toast, ToastHost } from "./ui";
 
 function readStorage(key: string): string | null { try { return localStorage.getItem(key); } catch { return null; } }
 function writeStorage(key: string, value: string) { try { localStorage.setItem(key, value); } catch { /* ignore */ } }
-const loadLayout = (): Layout => (readStorage("layout") === "list" ? "list" : "grid");
+const loadLayout = (): Layout => { const v = readStorage("layout"); return v === "list" || v === "map" ? v : "grid"; };
 function loadMask(): MaskMode { const v = readStorage("maskMode"); return isFrameMode(v) ? v : "mask"; }
-const tabFromHash = (): Tab => (TABS as string[]).includes(location.hash.slice(1)) ? (location.hash.slice(1) as Tab) : "gallery";
+const nextMode = (m: MaskMode) => FRAME_MODES[(FRAME_MODES.indexOf(m) + 1) % FRAME_MODES.length];
+const sameFilter = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
+
+/** The sidebar collapses to a rail on narrow windows (and always in the shot view). */
+function useNarrow(): boolean {
+  const mq = () => window.matchMedia?.("(max-width: 1100px)");
+  const [narrow, setNarrow] = useState(() => !!mq()?.matches);
+  useEffect(() => { const m = mq(); const on = () => setNarrow(!!m?.matches); m?.addEventListener("change", on); return () => m?.removeEventListener("change", on); }, []);
+  return narrow;
+}
 
 export function App() {
-  const [tab, setTab] = useState<Tab>(tabFromHash);
+  const [route, navigateRaw, replace] = useRoute();
   const [theme, setTheme] = useTheme();
+  const narrow = useNarrow();
   const [shots, setShots] = useState<Shot[] | null>(null);
   const [projects, setProjects] = useState<Project[] | null>(null);
   const [presets, setPresets] = useState<Preset[] | null>(null);
@@ -54,181 +46,241 @@ export function App() {
   const [views, setViews] = useState<SavedView[] | null>(null);
   const [fields, setFields] = useState<FieldDefinition[] | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [open, setOpen] = useState<Shot | null>(null);
-  const [focus, setFocus] = useState<Shot | null>(null);
-  const [filter, setFilter] = useState<Filter>("all");
+  const [loadedAt, setLoadedAt] = useState<Date | null>(null);
+  const [storedScope, setStoredScope] = useState<Scope | null>(() => readStorage("project"));
   const [mask, setMaskState] = useState<MaskMode>(loadMask);
-  /** The dialog starts from the global mode; a change there sticks for prev/next until it closes. */
-  const [dialogMode, setDialogMode] = useState<MaskMode>(mask);
+  /** The shot view starts from the global mode; a change there sticks for ←/→ until it closes. */
+  const [viewMode, setViewMode] = useState<MaskMode>(mask);
+  const [reviewMode, setReviewMode] = useState<MaskMode>(mask);
+  const [reviewStage, setReviewStage] = useState<Stage>("photo");
   const [layout, setLayoutState] = useState<Layout>(loadLayout);
-  /** Remembered across reloads until changed; null until one is chosen (the project page is shown instead). */
-  const [storedProject, setStoredProject] = useState<ActiveProject | null>(() => readStorage("project"));
+  const [query, setQuery] = useState<ShotsQuery>(emptyQuery);
+  const [loadedView, setLoadedView] = useState<SavedView | null>(null);
+  const [panel, setPanel] = useState(false);
+  const [mapSelected, setMapSelected] = useState<string | null>(null);
+  /** The list the open shot came from (ids), for ←/→, and where Esc returns to. */
+  const [openList, setOpenList] = useState<string[]>([]);
+  const [returnTo, setReturnTo] = useState<Route>(DEFAULT_ROUTE);
+  const [palette, setPalette] = useState(false);
+  const [sheet, setSheet] = useState(false);
+  const [paletteDays, setPaletteDays] = useState<ShootingDay[]>([]);
+
   const setLayout = (l: Layout) => { setLayoutState(l); writeStorage("layout", l); };
   const setMask = (m: MaskMode) => { setMaskState(m); writeStorage("maskMode", m); };
-  const activate = (p: ActiveProject) => { setStoredProject(p); writeStorage("project", p); setSelected(new Set()); };
-  /** The list the open shot belongs to, for prev/next in the dialog. */
-  const [openList, setOpenList] = useState<Shot[]>([]);
-  /** Row selection in the list layout (shot ids). */
-  const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [bulkBusy, setBulkBusy] = useState(false);
-  const toggleSelected = (id: string) => setSelected((cur) => { const n = new Set(cur); if (n.has(id)) n.delete(id); else n.add(id); return n; });
+  const setScope = (s: Scope) => { setStoredScope(s); writeStorage("project", s); };
 
+  const load = () => Promise.all([fetchAllShots().then(setShots), fetchProjects().then(setProjects), fetchPresets().then(setPresets), fetchLocations().then(setLocations), fetchViews().then(setViews), fetchFields().then(setFields)])
+    .then(() => { setError(null); setLoadedAt(new Date()); })
+    .catch((e: Error) => setError(e.message));
+  const reload = () => { void load().then(() => toast("Reloaded", "info")); };
   const refreshCounts = () => { void fetchLocations().then(setLocations).catch(() => {}); void fetchProjects().then(setProjects).catch(() => {}); };
-  const load = () => Promise.all([fetchAllShots().then(setShots), fetchProjects().then(setProjects), fetchPresets().then(setPresets), fetchLocations().then(setLocations), fetchViews().then(setViews), fetchFields().then(setFields)]).catch((e: Error) => setError(e.message));
   useEffect(() => { void load(); }, []);
-  useEffect(() => { location.hash = tab === "gallery" ? "" : tab; }, [tab]);
 
   // A remembered project that no longer exists counts as "not chosen".
-  const active: ActiveProject | null = storedProject === ALL_PROJECTS || (storedProject && projects?.some((p) => p.id === storedProject)) ? storedProject : null;
-  const activeName = active === ALL_PROJECTS ? "All projects" : projects?.find((p) => p.id === active)?.name ?? "";
-  const projectShots = useMemo(() => (shots ?? []).filter((s) => active === ALL_PROJECTS || s.project_id === active), [shots, active]);
-  const visible = useMemo(() => projectShots.filter((s) => filter === "all" || s.state === filter), [projectShots, filter]);
-  const counts = useMemo(() => Object.fromEntries((["all", ...SHOT_STATES] as Filter[]).map((f) => [f, projectShots.filter((s) => f === "all" || s.state === f).length])), [projectShots]);
-  const unreviewed = counts.unreviewed ?? 0;
-  const showProjectColumn = active === ALL_PROJECTS;
-  /** Extra-field definitions a project uses, in its order. */
+  const scope: Scope | null = storedScope === ALL_PROJECTS || (storedScope && projects?.some((p) => p.id === storedScope)) ? storedScope : null;
+  const isAll = scope === ALL_PROJECTS;
+  const scopeProject = projects?.find((p) => p.id === scope) ?? null;
+  const scopeName = isAll ? "All projects" : scopeProject?.name ?? "";
+  const scoped = useMemo(() => (shots ?? []).filter((s) => isAll || s.project_id === scope), [shots, scope]);
   const fieldsOf = (projectId: string): FieldDef[] => {
     const ids = projects?.find((p) => p.id === projectId)?.field_ids ?? [];
     return ids.map((id) => fields?.find((f) => f.id === id)?.definition).filter((d): d is FieldDef => !!d);
   };
-  /** For filters: the active project's fields, or every definition when browsing all projects. */
-  const filterDefs = useMemo(() => (active === ALL_PROJECTS ? (fields ?? []).map((f) => f.definition) : active ? fieldsOf(active) : []), [active, fields, projects]);
+  const extra = useMemo(() => extraFilterFields(isAll ? (fields ?? []).map((f) => f.definition) : scope ? fieldsOf(scope) : []), [scope, fields, projects]);
+  const ctx = { projects: projects ?? [], locations: locations ?? [], presets: presets ?? [], extra };
 
-  const updated = (s: Shot) => { setShots((cur) => (cur ?? []).map((x) => (x.id === s.id ? s : x))); setOpen((cur) => (cur?.id === s.id ? s : cur)); refreshCounts(); };
-  const deleted = (id: string) => { setShots((cur) => (cur ?? []).filter((x) => x.id !== id)); setSelected((cur) => { const n = new Set(cur); n.delete(id); return n; }); refreshCounts(); };
+  // Saved views: the route's view loads into the query; edits mark it "Edited" until saved or reverted.
+  const viewId = route.page === "shots" ? route.viewId : null;
+  useEffect(() => {
+    if (route.page !== "shots") return;
+    if (!viewId) { if (loadedView) { setLoadedView(null); setQuery(emptyQuery()); } return; }
+    if (loadedView?.id === viewId) return;
+    const v = views?.find((x) => x.id === viewId);
+    if (!v) return;
+    setLoadedView(v);
+    setQuery({ ...emptyQuery(), ...decodeView(v.filter), sort: query.sort });
+  }, [viewId, views]);
+  const edited = !!loadedView && !sameFilter(encodeView(query), loadedView.filter);
 
-  async function deleteSelected() {
-    const ids = visible.filter((s) => selected.has(s.id)).map((s) => s.id);
-    if (ids.length === 0) return;
-    if (!confirm(`Delete ${ids.length} shot${ids.length === 1 ? "" : "s"} permanently? This removes the images and their metadata. Archiving keeps them.`)) return;
-    setBulkBusy(true);
-    const failed: string[] = [];
-    for (const id of ids) {
-      try { await deleteShot(id); setShots((cur) => (cur ?? []).filter((x) => x.id !== id)); } catch (e) { failed.push(`${id}: ${(e as Error).message}`); }
+  /** Navigation that asks before dropping unsaved view edits. */
+  const navigate = async (r: Route) => {
+    const leavingView = loadedView && edited && route.page === "shots" && r.page !== "shot" && !(r.page === "shots" && r.viewId === loadedView.id);
+    if (leavingView) {
+      const ok = await confirmDialog({ title: `Discard changes to “${loadedView.name}”?`, body: "The view keeps its saved filter.", confirmLabel: "Discard", cancelLabel: "Keep editing" });
+      if (!ok) return;
+      setLoadedView(null);
     }
-    setSelected(new Set());
-    setBulkBusy(false);
-    refreshCounts();
-    if (failed.length) alert(`${failed.length} deletion(s) failed:\n${failed.join("\n")}`);
+    navigateRaw(r);
+  };
+
+  const updated = (s: Shot) => { setShots((cur) => (cur ?? []).map((x) => (x.id === s.id ? s : x))); refreshCounts(); };
+  const deleted = (ids: string[]) => { const gone = new Set(ids); setShots((cur) => (cur ?? []).filter((x) => !gone.has(x.id))); refreshCounts(); };
+
+  const result = useMemo(() => runQuery(scoped, query, extra), [scoped, query, extra]);
+  function openShot(s: Shot, list?: Shot[]) {
+    setOpenList((list ?? result.shots).map((x) => x.id));
+    setViewMode(mask);
+    setReturnTo(route.page === "shot" ? returnTo : route);
+    navigateRaw({ page: "shot", shotId: s.id, stage: "photo" });
   }
-  const openShot = (s: Shot, list?: Shot[]) => { setOpenList(list ?? visible); setDialogMode(mask); setOpen(s); };
-  const loaded = !!shots && !!projects;
+  function showOnMap(s: Shot) {
+    const visible = result.shots.some((x) => x.id === s.id);
+    if (!visible) { setLoadedView(null); setQuery({ ...emptyQuery(), sort: query.sort }); }
+    setLayout("map");
+    setMapSelected(s.id);
+    navigateRaw({ page: "shots", viewId: visible ? loadedView?.id ?? null : null });
+  }
+  const openDay = (projectId: string, dayId: string) => { if (scope !== projectId && !isAll) setScope(projectId); navigateRaw({ page: "plan", dayId }); };
+
+  async function saveView() {
+    if (!loadedView) return;
+    try { const v = await putView({ id: loadedView.id, name: loadedView.name, filter: encodeView(query) }); setViews((cur) => (cur ?? []).map((x) => (x.id === v.id ? v : x))); setLoadedView(v); toast("View saved"); } catch (e) { toast(`Saving failed: ${(e as Error).message}`, "danger"); }
+  }
+  async function saveAsNew() {
+    const name = await promptDialog({ title: loadedView ? "Save as a new view" : "Save view", input: { label: "Name", value: loadedView ? `${loadedView.name} (copy)` : "", placeholder: "e.g. Dusk exteriors" }, confirmLabel: "Save view" });
+    if (!name) return;
+    try {
+      const v = await putView({ id: crypto.randomUUID(), name, filter: encodeView(query) });
+      setViews((cur) => [...(cur ?? []), v].sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" })));
+      setLoadedView(v);
+      navigateRaw({ page: "shots", viewId: v.id });
+      toast("View saved");
+    } catch (e) { toast(`Saving failed: ${(e as Error).message}`, "danger"); }
+  }
+  async function viewMenu(action: "rename" | "delete") {
+    const v = loadedView;
+    if (!v) return;
+    if (action === "rename") {
+      const name = await promptDialog({ title: "Rename view", input: { label: "Name", value: v.name }, confirmLabel: "Rename" });
+      if (!name || name === v.name) return;
+      try { const saved = await putView({ id: v.id, name, filter: v.filter }); setViews((cur) => (cur ?? []).map((x) => (x.id === saved.id ? saved : x))); setLoadedView({ ...saved, filter: v.filter }); } catch (e) { toast(`Rename failed: ${(e as Error).message}`, "danger"); }
+      return;
+    }
+    const ok = await confirmDialog({ title: `Delete the view “${v.name}”?`, body: "Only the saved filter is deleted; no shots.", confirmLabel: "Delete view", danger: true });
+    if (!ok) return;
+    try { await deleteView(v.id); setViews((cur) => (cur ?? []).filter((x) => x.id !== v.id)); setLoadedView(null); setQuery(emptyQuery()); navigateRaw({ page: "shots", viewId: null }); toast("View deleted"); } catch (e) { toast(`Delete failed: ${(e as Error).message}`, "danger"); }
+  }
+  const newView = async () => { await navigate({ page: "shots", viewId: null }); setLoadedView(null); setQuery(emptyQuery()); setPanel(true); };
+  const showLocationShots = (locationId: string, l: Layout) => {
+    setLoadedView(null);
+    setQuery({ ...emptyQuery(), filter: { match: "all", rules: [{ field: "location_id", op: "is", value: locationId }] } });
+    setLayout(l);
+    navigateRaw({ page: "shots", viewId: null });
+  };
+  const openPalette = () => { setPalette(true); if (scope && !isAll) void projectDays(scope).then(setPaletteDays); };
+
+  // Global keys: palette, shortcut sheet, G-then-section, frame mode on Shots.
+  useKeys({
+    "Mod+k": openPalette,
+    "?": () => setSheet(true),
+    s: () => { if (!afterG()) return false; void navigate({ page: "shots", viewId: null }); },
+    r: () => { if (!afterG()) return false; void navigate({ page: "review" }); },
+    p: () => { if (!afterG()) return false; void navigate({ page: "plan", dayId: null }); },
+    l: () => { if (!afterG()) return false; void navigate({ page: "library", section: "projects", id: null }); },
+    m: () => {
+      if (afterG()) { setLayout("map"); void navigate({ page: "shots", viewId }); return; }
+      if (route.page === "shots") setMask(nextMode(mask)); else return false;
+    },
+  }, !palette && !sheet);
+
+  const loaded = !!shots && !!projects && !!presets && !!locations && !!views && !!fields;
+  if (loaded && !scope) {
+    return <><ProjectGate projects={projects!} onChange={setProjects} onActivate={setScope} /><ConfirmHost /><ToastHost /></>;
+  }
+
+  const rail = narrow || route.page === "shot";
+  const unreviewed = scoped.filter((s) => s.state === "unreviewed").length;
+  const openShotObj = route.page === "shot" ? (shots ?? []).find((s) => s.id === route.shotId) ?? null : null;
+  const byId = new Map((shots ?? []).map((s) => [s.id, s]));
+  const fromList = openList.map((id) => byId.get(id)).filter((s): s is Shot => !!s);
+  const listForShot = openShotObj && fromList.some((s) => s.id === openShotObj.id) ? fromList : result.shots;
+  const backLabel = returnTo.page === "plan" ? "Plan" : "Shots";
+  const shotLine = returnTo.page === "plan" ? "Planned shots of the day"
+    : [query.state === "all" ? "All states" : query.state[0].toUpperCase() + query.state.slice(1), loadedView?.name ?? scopeName, { newest: "newest first", oldest: "oldest first", name: "by name" }[query.sort]].join(" · ");
+
+  let main;
+  let hints: { k: string; t: string }[] = [];
+  if (!loaded) {
+    main = error ? <Empty icon="cloud-alert" title="Could not load" actions={<button type="button" class="f-btn" onClick={() => void load()}>Try again</button>}>{error}</Empty> : <Loading />;
+  } else if (route.page === "shot") {
+    main = openShotObj
+      ? <ShotView shot={openShotObj} list={listForShot} onNavigate={(s) => replace({ page: "shot", shotId: s.id, stage: route.stage })}
+          context={{ kind: "shot", line: shotLine, onBack: () => navigateRaw(returnTo), backLabel }} stage={route.stage} onStage={(st) => replace({ ...route, stage: st })}
+          mode={viewMode} onMode={setViewMode} projects={projects!} presets={presets!} fieldsOf={fieldsOf} locations={locations!} onLocations={setLocations}
+          onUpdated={updated}
+          onDeleted={(id) => { const i = listForShot.findIndex((s) => s.id === id); const n = listForShot[i + 1] ?? listForShot[i - 1]; deleted([id]); if (n) replace({ page: "shot", shotId: n.id, stage: "photo" }); else navigateRaw(returnTo); }}
+          onShowOnMap={showOnMap} onOpenDay={openDay} />
+      : <Empty icon="image-off-outline" title="Shot not found" actions={<button type="button" class="f-btn f-btn--secondary" onClick={() => navigateRaw(returnTo)}>Back to {backLabel}</button>}>It may have been deleted.</Empty>;
+    hints = shotHints(route.stage, false);
+  } else if (route.page === "review") {
+    main = <ReviewPage shots={scoped} scopeName={scopeName} stage={reviewStage} onStage={setReviewStage} mode={reviewMode} onMode={setReviewMode} projects={projects!} presets={presets!} fieldsOf={fieldsOf}
+      locations={locations!} onLocations={setLocations} onUpdated={updated} onDeleted={(id) => deleted([id])} onShowOnMap={showOnMap} onOpenDay={openDay}
+      onBrowseApproved={() => { setLoadedView(null); setQuery({ ...emptyQuery(), state: "approved" }); navigateRaw({ page: "shots", viewId: null }); }} onPlan={() => navigateRaw({ page: "plan", dayId: null })} />;
+    hints = shotHints(reviewStage, true);
+  } else if (route.page === "plan") {
+    main = <PlanPage project={scopeProject} projects={projects!} onPickProject={setScope} shots={scoped} mask={mask} dayId={route.dayId} onDay={(id) => replace({ page: "plan", dayId: id })} onOpen={openShot} />;
+    hints = [{ k: "↑/↓", t: "Shots" }, { k: "Alt ↑/↓", t: "Reorder" }, { k: "T", t: "Planned time" }, { k: "Del", t: "Remove" }, { k: "N", t: "Add shots" }, { k: "⇧N", t: "New day" }, { k: "↵", t: "Open shot" }];
+  } else if (route.page === "library") {
+    const sel = route.id;
+    const setSel = (id: string | null) => replace({ page: "library", section: route.section, id });
+    if (route.section === "projects") {
+      main = <ProjectsPage projects={projects!} onChange={setProjects} fields={fields!} scope={scope!} selectedId={sel} onSelect={setSel}
+        onActivate={(id) => { setScope(id); toast(`Now working on ${projects!.find((p) => p.id === id)?.name ?? "the project"}`); }}
+        onShowShots={(id) => { setScope(id); navigateRaw({ page: "shots", viewId: null }); }} onEditFields={() => navigateRaw({ page: "library", section: "fields", id: null })} />;
+      hints = [{ k: "↵", t: "Save the field" }, { k: "Esc", t: "Leave the field" }];
+    } else if (route.section === "fields") {
+      main = <FieldsPage fields={fields!} onChange={setFields} projects={projects!} selectedId={sel} onSelect={setSel} />;
+      hints = [{ k: "⌘S", t: "Save field" }, { k: "Tab", t: "Indent" }, { k: "Esc", t: "Leave editor" }];
+    } else if (route.section === "rigs") {
+      main = <RigsPage presets={presets!} shots={shots!} onChange={setPresets} selectedId={sel} onSelect={setSel} />;
+      hints = [{ k: "J/K", t: "Move" }, { k: "↵", t: "Edit" }, { k: "⌘S", t: "Save rig" }, { k: "Esc", t: "Close editor" }];
+    } else {
+      main = <LocationsPage locations={locations!} onChange={setLocations} onShotsChanged={() => void fetchAllShots().then(setShots).catch(() => {})} onShowShots={showLocationShots} />;
+      hints = [{ k: "J/K", t: "Move" }, { k: "F2", t: "Rename" }, { k: "↵", t: "Show shots" }, { k: "Del", t: "Delete" }, { k: "/", t: "Filter" }];
+    }
+  } else {
+    main = <ShotsPage shots={scoped} error={error} scopeName={scopeName} isAll={isAll} query={query} onQuery={setQuery} view={loadedView} edited={edited}
+      onSaveView={() => void saveView()} onSaveAsNew={() => void saveAsNew()} onRevert={() => loadedView && setQuery({ ...query, ...decodeView(loadedView.filter) })} onViewMenu={(a) => void viewMenu(a)}
+      panel={panel} onPanel={setPanel} layout={layout} onLayout={setLayout} mask={mask} onMask={setMask} ctx={ctx} onOpen={openShot}
+      mapSelected={mapSelected} onMapSelected={setMapSelected} onDeleted={deleted} onReload={() => void load()} onSwitchScope={openPalette} />;
+    hints = layout === "list" ? [{ k: "J/K", t: "Move" }, { k: "X", t: "Select" }, { k: "⇧X", t: "Select range" }, { k: "↵", t: "Open" }, { k: "Del", t: "Delete selected" }, { k: "F", t: "Filter" }]
+      : layout === "map" ? [{ k: "↑/↓", t: "Move in list" }, { k: "↵", t: "Open" }, { k: "F", t: "Filter" }, { k: "M", t: "Frame mode" }]
+      : [{ k: "←↑→↓", t: "Move" }, { k: "↵", t: "Open" }, { k: "F", t: "Filter" }, { k: "M", t: "Frame mode" }, { k: "/", t: "Search" }, { k: "⌘K", t: "Go to" }];
+  }
+
+  const actions: Command[] = [
+    { id: "a-shots", group: "Go to", icon: "view-grid-outline", title: "Shots", keys: "G S", run: () => void navigate({ page: "shots", viewId: null }) },
+    { id: "a-review", group: "Go to", icon: "checkbox-marked-outline", title: "Review", sub: `${unreviewed} to review`, keys: "G R", run: () => void navigate({ page: "review" }) },
+    { id: "a-plan", group: "Go to", icon: "calendar-clock", title: "Plan", keys: "G P", run: () => void navigate({ page: "plan", dayId: null }) },
+    { id: "a-map", group: "Go to", icon: "map-outline", title: "Map", keys: "G M", run: () => { setLayout("map"); void navigate({ page: "shots", viewId }); } },
+    { id: "a-lib", group: "Go to", icon: "bookshelf", title: "Library: projects, fields, rigs, locations", keys: "G L", run: () => void navigate({ page: "library", section: "projects", id: null }) },
+    { id: "a-all", group: "Actions", icon: "folder-multiple-outline", title: "Switch to all projects", run: () => setScope(ALL_PROJECTS) },
+    { id: "a-mode", group: "Actions", icon: "vector-rectangle", title: "Change frame mode", sub: `Now ${mask === "off" ? "raw" : mask}`, keys: "M", run: () => setMask(nextMode(mask)) },
+    { id: "a-day", group: "Actions", icon: "calendar-plus", title: "New shooting day", sub: "In Plan", keys: "⇧N", run: () => void navigate({ page: "plan", dayId: null }) },
+    { id: "a-rig", group: "Actions", icon: "camera-plus-outline", title: "New rig", sub: "Library › Rigs", run: () => navigateRaw({ page: "library", section: "rigs", id: null }) },
+    { id: "a-theme", group: "Actions", icon: "theme-light-dark", title: "Toggle theme", sub: `Now ${theme === "auto" ? "Auto" : theme === "sun" ? "Sun" : "Set"}`, run: () => setTheme(theme === "set" ? "sun" : "set") },
+    { id: "a-reload", group: "Actions", icon: "refresh", title: "Reload data", run: reload },
+    { id: "a-keys", group: "Actions", icon: "keyboard-outline", title: "Keyboard shortcuts", keys: "?", run: () => setSheet(true) },
+  ];
 
   return (
-    <div class="app">
-      <header class="app-header">
-        <span class="brand"><Icon name="camera-iris" />Fielder</span>
-        {loaded && active && (
-          <select class="project-switch" value={active} title="Active project" onChange={(e) => { const v = (e.target as HTMLSelectElement).value; if (v === "__manage__") setTab("projects"); else activate(v); }}>
-            {projects!.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-            <option value={ALL_PROJECTS}>All projects</option>
-            <option value="__manage__">Manage projects…</option>
-          </select>
-        )}
-        {active && (
-          <>
-            <nav class="f-tabs" role="tablist" aria-label="Work">
-              {WORK_TABS.map((t) => (
-                <button key={t.id} type="button" role="tab" class="f-tab" aria-selected={tab === t.id} onClick={() => setTab(t.id)}>
-                  <Icon name={t.icon} />{t.label}{t.id === "review" && unreviewed > 0 && <span class="f-tab__count" title={`${unreviewed} to review`}>{unreviewed}</span>}
-                </button>
-              ))}
-            </nav>
-            <span class="tab-divider" />
-            <nav class="f-tabs" role="tablist" aria-label="Library">
-              {LIBRARY_TABS.map((t) => <button key={t.id} type="button" role="tab" class="f-tab" aria-selected={tab === t.id} onClick={() => setTab(t.id)}>{t.label}</button>)}
-            </nav>
-          </>
-        )}
-        <span class="grow" />
-        <Seg label="Theme" options={THEMES} value={theme} onChange={setTheme} />
-        <button type="button" class="f-btn f-btn--ghost f-btn--icon" title="Reload" aria-label="Reload" onClick={() => { setShots(null); setProjects(null); setPresets(null); setLocations(null); void load(); }}><Icon name="refresh" /></button>
-      </header>
-      <div class="toolbar">
-        {active && (tab === "gallery" || tab === "map") && (
-          <div class="f-chips" role="group" aria-label="Review state">
-            {(["all", ...SHOT_STATES] as Filter[]).map((f) => <Chip key={f} selected={filter === f} onClick={() => setFilter(f)}>{f === "all" ? "All" : f[0].toUpperCase() + f.slice(1)} <span class="num">{counts[f] ?? 0}</span></Chip>)}
-          </div>
-        )}
-        {active && (tab === "gallery" || tab === "review" || tab === "map" || tab === "views") && <ModeSwitch value={mask} onChange={setMask} />}
-        {active && tab === "gallery" && <Seg label="Layout" value={layout} onChange={setLayout} options={[{ id: "grid", icon: "view-grid-outline", label: "Grid" }, { id: "list", icon: "view-list-outline", label: "List" }]} />}
-        {active && (tab === "gallery" || tab === "map") && <><span class="grow" /><span class="meta num">{loaded ? `${projectShots.length} shots · ${presets?.length ?? 0} rigs · ${locations?.length ?? 0} locations` : ""}</span></>}
+    <div class={cx("f-app", rail && "f-app--rail")}>
+      <Sidebar route={route} rail={rail} scope={scope ?? ALL_PROJECTS} projects={projects ?? []} views={views ?? []} editedViewId={edited ? loadedView?.id ?? null : null}
+        counts={{ shots: scoped.length, unreviewed, projects: projects?.length ?? 0, fields: fields?.length ?? 0, rigs: presets?.length ?? 0, locations: locations?.length ?? 0 }}
+        theme={theme} onTheme={setTheme} onScope={setScope} onNavigate={(r) => void navigate(r)} onNewView={() => void newView()} onPalette={openPalette} onReload={reload} loadedAt={loadedAt} />
+      <main class="f-app__main">{main}</main>
+      <div class="f-hints">
+        {hints.map((h) => <span key={h.k + h.t} class="f-hint"><Kbd>{h.k}</Kbd>{h.t}</span>)}
+        <span class="f-hints__sp" />
+        {error && loaded && <span class="f-hint" style={{ color: "var(--danger)" }}>Last reload failed</span>}
+        <span class="f-hint"><Kbd>?</Kbd>All shortcuts</span>
       </div>
-      <main>
-        {error && <Empty icon="cloud-alert" title="Could not load">{error}</Empty>}
-        {!error && !loaded && <Loading />}
-        {loaded && !active && <Projects gate projects={projects} onChange={setProjects} fields={fields ?? []} active={null} onActivate={activate} />}
-        {loaded && active && tab === "gallery" && (
-          visible.length === 0 ? <Empty icon="camera-iris" title={filter === "all" ? `No shots in ${activeName} yet` : `No ${filter} shots`}>{filter === "all" ? "Capture one with the phone app." : null}</Empty>
-          : layout === "list" ? (
-            <div class="list">
-              {(() => {
-                const selectedVisible = visible.filter((s) => selected.has(s.id)).length;
-                const allSelected = selectedVisible === visible.length;
-                return (
-                  <div class="bulk-bar">
-                    <label class="check"><input type="checkbox" checked={allSelected} onChange={() => setSelected(allSelected ? new Set() : new Set(visible.map((s) => s.id)))} /> {allSelected ? "Deselect all" : "Select all"}</label>
-                    <span class="meta num">{selectedVisible} selected</span>
-                    <button class="f-btn f-btn--danger f-btn--sm" disabled={selectedVisible === 0 || bulkBusy} onClick={() => void deleteSelected()}><Icon name="delete-outline" />{bulkBusy ? "Deleting…" : `Delete selected (${selectedVisible})`}</button>
-                    {selectedVisible > 0 && <button class="f-btn f-btn--ghost f-btn--sm" onClick={() => setSelected(new Set())}>Clear</button>}
-                  </div>
-                );
-              })()}
-              <table class="table">
-                <thead><tr><th></th><th></th><th>Name</th>{showProjectColumn && <th>Project</th>}<th>Location</th><th>Tags</th><th>Rig · lens</th><th>Date</th><th>State</th></tr></thead>
-                <tbody>
-                  {visible.map((s) => (
-                    <tr key={s.id} onClick={() => openShot(s)} class={selected.has(s.id) ? "selected" : ""}>
-                      <td class="sel" onClick={(e) => { e.stopPropagation(); toggleSelected(s.id); }}><input type="checkbox" checked={selected.has(s.id)} onClick={(e) => e.stopPropagation()} onChange={() => toggleSelected(s.id)} /></td>
-                      <td class="thumb"><Framed photo={cover(s)} mode={mask} /></td>
-                      <td class="name">{shotTitle(s)}{photoCountLabel(s) && <div class="meta">{photoCountLabel(s)}</div>}</td>
-                      {showProjectColumn && <td>{s.project_name}</td>}
-                      <td>{placeLabel(s) || "—"}</td>
-                      <td class="meta">{tagsLabel(s) || "—"}</td>
-                      <td class="meta">{rigLabel(cover(s))}</td>
-                      <td class="meta num">{when(s.captured_at)}</td>
-                      <td><StateMarker state={s.state} /></td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          ) : (
-            <div class="gallery">
-              {visible.map((s) => <ShotCard key={s.id} shot={s} mask={mask} project={showProjectColumn ? s.project_name : null} onClick={() => openShot(s)} />)}
-            </div>
-          )
-        )}
-        {loaded && active && tab === "review" && <Review shots={projectShots} mask={mask} projects={projects} fieldsOf={fieldsOf} locations={locations ?? []} onLocations={setLocations} onUpdated={updated} onDeleted={deleted} />}
-        {loaded && active && tab === "map" && <MapView shots={visible} onOpen={(s) => openShot(s, visible)} focus={focus} mask={mask} />}
-        {loaded && active && tab === "schedule" && (active === ALL_PROJECTS
-          ? <Empty icon="calendar-clock" title="Pick a project">Shooting days belong to a project: pick one in the header to plan its days.</Empty>
-          : <Schedule projectId={active} shots={projectShots} mask={mask} onOpen={openShot} />)}
-        {loaded && active && tab === "views" && <Views shots={projectShots} projects={projects} fieldDefs={filterDefs} locations={locations ?? []} presets={presets ?? []} views={views} onViews={setViews} mask={mask} onOpen={openShot} />}
-        {loaded && active && tab === "projects" && <Projects projects={projects} onChange={setProjects} fields={fields ?? []} active={active} onActivate={(p) => { activate(p); setTab("gallery"); }} />}
-        {loaded && active && tab === "fields" && <Fields fields={fields} onChange={setFields} projects={projects ?? []} />}
-        {loaded && active && tab === "rigs" && <Rigs presets={presets} shots={shots ?? []} onChange={setPresets} />}
-        {loaded && active && tab === "locations" && <Locations locations={locations} onChange={setLocations} onShotsChanged={() => void fetchAllShots().then(setShots).catch(() => {})} />}
-      </main>
-      {open && (
-        <ShotDetail
-          key={open.id}
-          shot={open}
-          mode={dialogMode}
-          onMode={setDialogMode}
-          projects={projects ?? []}
-          presets={presets ?? []}
-          fields={fieldsOf(open.project_id)}
-          locations={locations ?? []}
-          onLocations={setLocations}
-          onUpdated={updated}
-          onDeleted={deleted}
-          onShowOnMap={(s) => { setTab("map"); setFocus(s); setOpen(null); }}
-          onClose={() => setOpen(null)}
-          list={openList.map((x) => (shots ?? []).find((y) => y.id === x.id) ?? x)}
-          onNavigate={setOpen}
-        />
-      )}
+      {palette && <CommandPalette shots={scoped} locations={locations ?? []} views={views ?? []} projects={projects ?? []} days={paletteDays} actions={actions} onClose={() => setPalette(false)}
+        onOpenShot={(s) => openShot(s, [s])} onLocation={(l) => showLocationShots(l.id, "grid")} onView={(v) => void navigate({ page: "shots", viewId: v.id })}
+        onProject={(p) => setScope(p.id)} onDay={(d) => navigateRaw({ page: "plan", dayId: d.id })} />}
+      {sheet && <ShortcutSheet onClose={() => setSheet(false)} />}
+      <ConfirmHost />
+      <ToastHost />
     </div>
   );
 }

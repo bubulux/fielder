@@ -1,41 +1,54 @@
 # Dashboard overview
 
-`apps/dashboard/src/App.tsx` holds the global state:
-- data: shots of all projects, projects, rigs, locations, views, field definitions
-- the active project
-- the global view mode and the gallery layout
+Designed in Claude Design (2026-09-28): four sections plus a shot view, a sidebar instead of header tabs, keyboard first. The design exports are in the gitignored `references/dashboard/`.
 
-Tabs are in the URL hash.
+## Shell (`apps/dashboard/src/App.tsx`, `Sidebar.tsx`, `router.ts`)
 
-| Tab | File | What |
+- **Sidebar**, 232 px; a 56 px rail below 1100 px and always in the shot view:
+  - the **scope switcher** (a project, "All projects", "Manage projects…"); the choice is remembered in `localStorage["project"]`
+  - the sections: Shots (count), Review (unreviewed count), Plan, Library (with Projects · Fields · Rigs · Locations under it)
+  - **saved views**, with a dot while a view has unsaved edits, and "+" for a new view
+  - footer: "Go to…" (⌘K), the theme button (Auto → Sun → Set) and reload
+- **Hash routes**, so deep links survive a reload: `#/shots`, `#/shots?view=<id>`, `#/shots/<shotId>?stage=rigs|position`, `#/review`, `#/plan/<dayId>`, `#/library/projects|fields|rigs|locations/<id>`.
+- **Key hint bar** at the bottom: the shortcuts of the current screen; `?` opens all of them.
+- **First run** (no project chosen, or it was deleted): a full-window project picker with "New project" (`ProjectGate` in `Projects.tsx`).
+- **Dialogs** only for confirmations, name prompts, the command palette and the shortcut sheet (`confirmDialog`, `promptDialog`, `toast` in `ui.tsx`). There are no `window.confirm`/`alert` calls any more.
+
+## Sections
+
+| Section | Files | What |
 | --- | --- | --- |
-| Gallery | `App.tsx`, `ShotCard.tsx` | Grid or list (switch in the toolbar, remembered). State filter chips (all/unreviewed/approved/archived with counts). Cards show the review state as an icon marker, and sequences a "SEQ · n" badge. The list layout has row selection with select-all and bulk delete. |
-| Review | `Review.tsx` | See [review and tagging](review-and-tagging.md) |
-| Map | `MapView.tsx` | Leaflet + OSM, one pin per shot at its cover photo, coloured by state and showing the state icon. The popup has a framed thumbnail and "Open details". "Show on map" from the dialog focuses a shot. |
-| Schedule | `Schedule.tsx` | [Shooting days](schedule.md) |
-| Views | `Views.tsx`, `FilterBuilder.tsx`, `ViewsResults.tsx` | Filter builder: nested all/any groups of rules over state, project, name, location, INT/EXT, light (set), artificial, weather, rig, lens, FF-equivalent, photos in shot, date, and extra fields. Results as grid or map. Save as named views (shared by all projects). The model is `packages/vocab/src/filter.ts` (`evaluateFilter`, `validateFilter`). |
-| Projects | `Projects.tsx` | [Projects](projects.md) |
-| Fields | `Fields.tsx` | [Extra fields](extra-fields.md) |
-| Rigs | `Rigs.tsx` | Rig table and editor (camera body/format or custom sensor, speedbooster, lens range), with how many shots used each rig |
-| Locations | `Locations.tsx` | Rename or delete locations; shot and approved counts |
+| Shots | `ShotsPage.tsx`, `shotsQuery.ts`, `FilterBuilder.tsx`, `MapView.tsx`, `ShotCard.tsx` | Gallery, Views and Map merged: one filter model, three layouts (Grid · List · Map, remembered). See below. |
+| Shot view | `ShotView.tsx`, `Inspector.tsx`, `RigExplorer.tsx`, `PositionEditor.tsx` | Replaces the dialog. See [review and tagging](review-and-tagging.md). |
+| Review | `Review.tsx` | The unreviewed queue on the shot-view layout. See [review and tagging](review-and-tagging.md). |
+| Plan | `Plan.tsx` | [Shooting days](schedule.md) |
+| Library › Projects | `Projects.tsx` | [Projects](projects.md): list with counts, detail with name, notes and ordered extra fields |
+| Library › Fields | `Fields.tsx` | [Extra fields](extra-fields.md): list, JSON editor, live preview |
+| Library › Rigs | `Rigs.tsx` | Rig table (body, format, sensor, speedbooster, lens range, shots) and an editor panel |
+| Library › Locations | `Locations.tsx` | Filterable table, inline rename (F2), counts that open Shots filtered to the location, show on map, delete |
 
-The header has:
-- the project switcher
-- the tabs in two groups:
-  - work: Gallery, Review (with the unreviewed count), Map, Schedule, Views
-  - library: Projects, Fields, Rigs, Locations
-- the theme switch (Auto / Sun / Set, see [design](../design.md))
-- reload
+## Shots
 
-Below it, a toolbar shows what applies to the current tab: state filter chips (Gallery, Map), the global view-mode switch (mask/frame/fit/raw) and the grid/list switch.
+- **Toolbar**:
+  - title: "Shots", "All shots · all projects", or the saved view's name with an **Edited** marker and Save · Save as new… · Revert; the view menu has Rename… and Delete view…
+  - search (`/`) over name, location, rig and project
+  - **Filter** (`F`) opens the rule-builder side panel (nested all/any groups over state, project, name, location, INT/EXT, light, artificial, weather, rig, lens, FF-equivalent, photos in shot, date and the extra fields; the model is `packages/vocab/src/filter.ts`)
+  - the layout switch and the frame-mode switch (mask/frame/fit/raw, `M` cycles; global, `localStorage["maskMode"]`)
+- **Sub-toolbar**: the state switch (All · Unreviewed · Approved · Archived) with counts **inside the current filter**, the active top-level rules as removable pills, the result count and the sort (newest, oldest, name).
+- **Saved views** store the rule filter plus the state switch (as a leading "state is …" rule, `encodeView`/`decodeView` in `shotsQuery.ts`). Leaving a view with unsaved edits asks first. "Save view…" appears as soon as a filter has rules.
+- **Grid**: cards with the framed cover, SEQ badge (top left), state marker (top right), title, "place · INT/EXT · light", and the project tag in "All projects". Arrow keys move, Enter opens.
+- **List**: a table with checkboxes (click, Shift-click for a range, `X`/`⇧X`), `J`/`K` to move, Enter to open; a selection bar offers "Select all", Clear (Esc) and "Delete n shots…" (with confirmation).
+- **Map**: the result list on the left and one state pin per shot; selecting a row focuses its pin and opens the popup (framed thumbnail, state, "Open details"). "Fit all" fits the pins. "Show on map" from a shot switches to this layout with the pin focused and the filter kept (cleared when the shot is outside it).
+- States: skeleton cards while loading, "No shots in <project> yet" (switch scope), "No shots match" (edit or clear the filter), a load-error banner with Retry.
+
+## Keyboard (all shortcuts in `?`)
+
+- Everywhere: ⌘K / Ctrl K palette (shots, locations, views, days, projects, actions), `?`, `G` then `S`/`R`/`P`/`L`/`M` for Shots, Review, Plan, Library, Map, `/` search, `M` frame mode, Esc backs out one level.
+- Kept from before: ←/→ shots, `,`/`.` photos, the combobox keys. Single keys never fire while typing in a field (`keys.ts`).
 
 ## Shared pieces
 
-- `ShotInfo.tsx`: title, facts, state buttons, in-place tag editing, position correction. Used by the dialog and Review.
-- `Framed.tsx`: a photo with its frame (optional frame override).
-- `Combobox.tsx`: the type-to-search select.
-- `format.ts`: `cover`, labels, frame geometry, `filterable(shot)` for filters.
-- `api.ts`: types and calls. A `401` reloads the page (Access login).
-- `ShotCard.tsx`: the gallery card.
-- `ui.tsx`: small design-system components (`Icon`, `Seg`, `Chip`, `LightChips`, `StateMarker`, `SeqBadge`, `Empty`, `Loading`, `ErrorLine`).
-- Styles: design-system tokens and component classes in `design/*.css`, page layouts in `styles.css`. See [design](../design.md).
+- `ui.tsx`: `Icon`, `Kbd`, `Seg`, `Chip`, `LightChips`, `StateMarker`, `SeqBadge`, `Empty`, `Loading`, `ErrorLine`, `SaveStatus`, `confirmDialog`/`promptDialog`/`toast` (+ their hosts).
+- `Framed.tsx`: a photo with its frame (optional frame override). `Combobox.tsx`: the type-to-search select (sizes `small`, optional icon).
+- `format.ts`: `cover`, labels, frame geometry, `filterable(shot)`. `api.ts`: types and calls; a `401` reloads the page (Access login).
+- Styles: design-system tokens and component classes in `design/*.css` (the rework's additions, such as sidebar, toolbar, panels, tables, stage, plan grid, palette and JSON editor, are in `design/dashboard.css`), page layouts in `styles.css`. See [design](../design.md).

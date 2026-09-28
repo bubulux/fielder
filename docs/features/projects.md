@@ -6,11 +6,11 @@ Every shot belongs to exactly one project (a film, a commercial). Locations, rig
 
 - **Active project, chosen once.** Both clients ask which project to work on and remember it until you change it: dashboard in `localStorage["project"]`, phone in the kv-store (`activeProjectId.v1`).
 - **Dashboard:**
-  - A first visit (or a remembered project that no longer exists) shows the project picker (`Projects.tsx` with `gate`).
-  - The header has a project switcher with "All projects" and "Manage projects…".
-  - "All projects" is the global explorer: every shot, with a Project column in the list and in card subtitles. The Schedule needs a single project.
-  - The Projects tab can create, rename, edit notes and pick the project's [extra fields](extra-fields.md). Only empty projects can be deleted.
-  - A shot moves to another project via the Project box in its info panel. It then leaves the old project's shooting days.
+  - A first visit (or a remembered project that no longer exists) shows the full-window project picker (`ProjectGate` in `Projects.tsx`).
+  - The sidebar's scope switcher lists the projects, "All projects" and "Manage projects…"; ⌘K → a project name switches too.
+  - "All projects" is the global explorer: every shot, with a Project column in the list and a project tag on cards and map popups. Plan needs a single project.
+  - Library › Projects: a list (shots, fields, "can be deleted") and a detail with name and notes (saved when leaving the field), the project's [extra fields](extra-fields.md) in order (add, reorder, remove), "Show n shots" and "Make active". Only empty projects can be deleted.
+  - A shot moves to another project via the Project box in the shot view's inspector. When it is planned on shooting days, a warning says how many it leaves, and Move confirms.
 - **Phone:**
   - After sign-in, `ProjectSheet` asks for a project if none is active. You switch under Setup → Project.
   - Projects can be created offline; they sync before any queued shot uploads.

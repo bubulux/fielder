@@ -1,17 +1,20 @@
-import { useMemo, useState } from "preact/hooks";
+import { useMemo } from "preact/hooks";
 import { computeFraming, LENS_PRESETS_MM, reframe, type RigLens } from "@fielder/fov-math";
 import type { Photo, Preset } from "./api";
-import { Combobox } from "./Combobox";
 import { sourceRigOf, type FrameGeometry } from "./format";
 import { Framed, type MaskMode } from "./Framed";
-import { ModeSwitch } from "./ModeSwitch";
-import { Chip, Empty, Icon, Seg } from "./ui";
-
-interface Props { photo: Photo; presets: Preset[]; mode: MaskMode; onMode: (m: MaskMode) => void; onClose: () => void }
+import { useKeys } from "./keys";
+import { cx, Empty, Icon, Seg } from "./ui";
 
 /** "as shot" = the rig the photo was framed with; otherwise a preset id. */
-interface Choice { rig: string; lensMm: number }
-const AS_SHOT = "__as_shot__";
+export interface RigChoice { rig: string; lensMm: number }
+export const AS_SHOT = "__as_shot__";
+export interface RigsState { view: "one" | "compare"; a: RigChoice; b: RigChoice }
+export const initialRigs = (photo: Photo, presets: Preset[]): RigsState => ({
+  view: "one",
+  a: { rig: AS_SHOT, lensMm: photo.lens_mm },
+  b: { rig: presets.find((p) => p.id !== photo.preset_id)?.id ?? AS_SHOT, lensMm: photo.lens_mm },
+});
 
 const lensRange = (p: Preset | undefined) => (p?.lens_min_mm != null && p.lens_max_mm != null ? { min: p.lens_min_mm, max: p.lens_max_mm } : null);
 function lensesFor(p: Preset | undefined, extra: number[]): number[] {
@@ -21,109 +24,112 @@ function lensesFor(p: Preset | undefined, extra: number[]): number[] {
   return [...new Set(list)].sort((a, b) => a - b);
 }
 
-/**
- * Re-frame one photo for other rigs and lenses. The photo only holds what the phone saw, so a
- * combination wider than that shows its frame beyond the photo (dashed), like in the app.
- */
-export function RigExplorer({ photo, presets, mode, onMode, onClose }: Props) {
-  const source = sourceRigOf(photo);
-  const [view, setView] = useState<"single" | "compare">("single");
-  const [a, setA] = useState<Choice>({ rig: AS_SHOT, lensMm: photo.lens_mm });
-  const [b, setB] = useState<Choice>({ rig: presets.find((p) => p.id !== photo.preset_id)?.id ?? AS_SHOT, lensMm: photo.lens_mm });
+interface Props { photo: Photo; presets: Preset[]; mode: MaskMode; state: RigsState; onState: (s: RigsState) => void; onBack: () => void }
 
-  if (!source) return <Empty icon="crop-free" title="No framing data">This photo cannot be re-framed.</Empty>;
-  const rigOf = (c: Choice): RigLens => {
+/**
+ * Stage mode "Rigs": re-frame the photo for other rigs and lenses. The photo only holds what the
+ * phone saw, so a combination wider than that shows its frame beyond the photo (dashed).
+ */
+export function RigsStage({ photo, presets, mode, state, onState, onBack }: Props) {
+  const source = sourceRigOf(photo);
+  const preset = presets.find((p) => p.id === state.a.rig);
+  const lenses = useMemo(() => lensesFor(preset, [photo.lens_mm]), [preset, photo.lens_mm]);
+  const stepLens = (d: number) => {
+    const i = lenses.indexOf(state.a.lensMm);
+    const n = lenses[Math.max(0, Math.min(lenses.length - 1, (i < 0 ? lenses.findIndex((x) => x > state.a.lensMm) : i) + d))];
+    if (n) onState({ ...state, a: { ...state.a, lensMm: n } });
+  };
+  useKeys({ ArrowLeft: () => stepLens(-1), ArrowRight: () => stepLens(1), Escape: onBack }, state.view === "one");
+  useKeys({ Escape: onBack }, state.view === "compare");
+
+  if (!source) return <><div class="f-stage__bar"><span class="grow" /><button type="button" class="f-btn f-btn--ghost f-btn--sm" onClick={onBack}>Back to photo<span class="f-btn__kbd">Esc</span></button></div><div class="f-stage__view" style={{ color: "#fff" }}><Empty icon="crop-free" title="No framing data">This photo cannot be re-framed.</Empty></div></>;
+
+  const rigOf = (c: RigChoice): RigLens => {
     const p = presets.find((x) => x.id === c.rig);
     if (!p) return { ...source.rigLens, lensMm: c.lensMm };
     return { rig: { sensor: { widthMm: p.sensor_width_mm, heightMm: p.sensor_height_mm }, speedboosterFactor: p.speedbooster_factor }, lensMm: c.lensMm, portrait: source.rigLens.portrait };
   };
-  const frameFor = (c: Choice): FrameGeometry => {
+  const frameFor = (c: RigChoice): FrameGeometry => {
     const r = reframe(source.rigLens, source.frame, rigOf(c));
     return { width_fraction: r.widthFraction, height_fraction: r.heightFraction };
   };
-  const rigName = (c: Choice) => presets.find((p) => p.id === c.rig)?.name ?? `As shot (${photo.preset_name ?? (photo.framing?.preset_name as string | undefined) ?? "rig"})`;
+  const asShotName = photo.preset_name ?? (photo.framing?.preset_name as string | undefined) ?? "rig";
+  const rigName = (c: RigChoice) => presets.find((p) => p.id === c.rig)?.name ?? `As shot · ${asShotName}`;
+  const setA = (a: RigChoice) => onState({ ...state, a });
+  const setB = (b: RigChoice) => onState({ ...state, b });
 
   return (
-    <div class="explorer">
-      <div class="explorer-head">
-        <strong>Rig explorer</strong>
-        <Seg label="Explorer view" value={view} onChange={setView} options={[{ id: "single", icon: "camera-control", label: "One rig" }, { id: "compare", icon: "compare-horizontal", label: "Compare" }]} />
-        <ModeSwitch value={mode} onChange={onMode} />
-        <span class="grow" />
-        <button class="f-btn f-btn--secondary" onClick={onClose}><Icon name="arrow-left" />Back to details</button>
+    <>
+      <div class="f-stage__bar">
+        <Seg label="Explorer" value={state.view} onChange={(view) => onState({ ...state, view })} options={[{ id: "one", label: "One rig" }, { id: "compare", label: "Compare A / B" }]} />
+        {state.view === "one" && <><Pickers photo={photo} presets={presets} choice={state.a} onChoice={setA} /><span class="meta num">{factsText(rigOf(state.a))}</span></>}
+        <span class="f-toolbar__sp" />
+        {state.view === "one" && <span class="meta">←/→ step the lens · shots paused</span>}
+        <button type="button" class="f-btn f-btn--ghost f-btn--sm" onClick={onBack}>Back to photo<span class="f-btn__kbd">Esc</span></button>
       </div>
-      {view === "single" ? (
-        <Single photo={photo} presets={presets} choice={a} onChoice={setA} frameFor={frameFor} rigOf={rigOf} rigName={rigName} mode={mode} />
-      ) : (
-        <div class="compare">
-          <Pane photo={photo} presets={presets} choice={a} onChoice={setA} frame={frameFor(a)} rig={rigOf(a)} name={rigName(a)} mode={mode} tag="A" />
-          <Pane photo={photo} presets={presets} choice={b} onChoice={setB} frame={frameFor(b)} rig={rigOf(b)} name={rigName(b)} mode={mode} tag="B" />
+      <div class="f-stage__view">
+        {state.view === "one" ? (
+          <Reframed photo={photo} mode={mode} frame={frameFor(state.a)} tag={rigName(state.a) + ` · ${state.a.lensMm} mm`} />
+        ) : (
+          <div class="compare">
+            {([["A", state.a, setA], ["B", state.b, setB]] as const).map(([tag, c, set]) => (
+              <div key={tag} class="compare__pane">
+                <div class="compare__head"><span class="f-board-lbl">{tag}</span><Pickers photo={photo} presets={presets} choice={c} onChoice={set} /></div>
+                <div class="compare__photo"><Reframed photo={photo} mode={mode === "off" ? "mask" : mode} frame={frameFor(c)} /></div>
+                <span class="compare__facts num">{factsText(rigOf(c))}</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+      {state.view === "one" && (
+        <div class="f-stage__foot">
+          <div class="f-strip" role="listbox" aria-label={`Lenses of ${rigName(state.a)}`}>
+            {lenses.map((mm) => {
+              const fr = frameFor({ ...state.a, lensMm: mm });
+              return (
+                <button key={mm} type="button" role="option" aria-selected={mm === state.a.lensMm} class={cx("f-strip__it", mm === state.a.lensMm && "is-sel")} title={`${mm} mm`} onClick={() => setA({ ...state.a, lensMm: mm })}>
+                  <Framed photo={photo} mode="mask" frame={fr} />
+                  <span class="f-strip__lbl">{mm} mm</span>
+                </button>
+              );
+            })}
+          </div>
         </div>
       )}
-    </div>
+    </>
   );
 }
 
-interface PaneProps { photo: Photo; presets: Preset[]; choice: Choice; onChoice: (c: Choice) => void; mode: MaskMode }
-
-function Pickers({ photo, presets, choice, onChoice }: Omit<PaneProps, "mode">) {
-  const preset = presets.find((p) => p.id === choice.rig);
-  const lenses = lensesFor(preset, [photo.lens_mm]);
-  const options = [{ value: AS_SHOT, label: "As shot" }, ...presets.map((p) => ({ value: p.id, label: p.name }))];
-  return (
-    <div class="pickers">
-      <label class="labelled">Rig<Combobox options={options} value={choice.rig} clearable={false} onChange={(v) => { if (!v) return; const p = presets.find((x) => x.id === v); const r = lensRange(p); onChoice({ rig: v, lensMm: r ? Math.min(r.max, Math.max(r.min, choice.lensMm)) : choice.lensMm }); }} /></label>
-      <label class="labelled">Lens
-        <div class="f-chips">
-          {lenses.map((mm) => <Chip key={mm} selected={mm === choice.lensMm} onClick={() => onChoice({ ...choice, lensMm: mm })}><span class="num">{mm}</span></Chip>)}
-        </div>
-      </label>
-    </div>
-  );
-}
-
-function Facts({ rig, frame }: { rig: RigLens; frame: FrameGeometry }) {
+function factsText(rig: RigLens): string {
   const f = computeFraming(rig.rig, rig.lensMm);
+  return `FF ${f.fullFrameEquivalentMm.toFixed(1)} mm · HFOV ${f.fov.horizontal.toFixed(1)}° · VFOV ${f.fov.vertical.toFixed(1)}°`;
+}
+
+function Reframed({ photo, mode, frame, tag }: { photo: Photo; mode: MaskMode; frame: FrameGeometry; tag?: string }) {
   const wider = frame.width_fraction > 1 || frame.height_fraction > 1;
   return (
-    <div class="facts-line">
-      {rig.lensMm} mm{rig.rig.speedboosterFactor !== 1 ? ` ×${rig.rig.speedboosterFactor}` : ""} · {f.fullFrameEquivalentMm.toFixed(1)} mm FF-eq · {f.fov.horizontal.toFixed(1)}° × {f.fov.vertical.toFixed(1)}°
-      {wider && <span class="warn"> · <Icon name="arrow-expand-all" /> sees more than this photo (dashed)</span>}
+    <div class="stage-photo">
+      <Framed photo={photo} mode={mode === "fit" ? "frame" : mode} frame={frame} maxHeight="calc(100vh - 290px)" />
+      {wider && <span class="f-framed__more" style={{ left: "8px", top: "8px" }}><Icon name="arrow-expand-all" />Sees more than this photo</span>}
+      {tag && <span class="f-framed__tag"><Icon name="camera-control" />{tag}</span>}
     </div>
   );
 }
 
-function Pane({ photo, presets, choice, onChoice, frame, rig, name, mode, tag }: PaneProps & { frame: FrameGeometry; rig: RigLens; name: string; tag: string }) {
-  return (
-    <div class="pane">
-      <div class="pane-title"><span class="pane-tag">{tag}</span>{name}</div>
-      <Framed photo={photo} mode={mode} frame={frame} maxHeight="52vh" />
-      <Facts rig={rig} frame={frame} />
-      <Pickers photo={photo} presets={presets} choice={choice} onChoice={onChoice} />
-    </div>
-  );
-}
-
-function Single({ photo, presets, choice, onChoice, frameFor, rigOf, rigName, mode }: PaneProps & { frameFor: (c: Choice) => FrameGeometry; rigOf: (c: Choice) => RigLens; rigName: (c: Choice) => string }) {
+function Pickers({ photo, presets, choice, onChoice }: { photo: Photo; presets: Preset[]; choice: RigChoice; onChoice: (c: RigChoice) => void }) {
   const preset = presets.find((p) => p.id === choice.rig);
-  const lenses = useMemo(() => lensesFor(preset, [photo.lens_mm]), [preset, photo.lens_mm]);
-  const frame = frameFor(choice);
+  const lenses = lensesFor(preset, [photo.lens_mm, choice.lensMm]);
+  const pickRig = (v: string) => { const p = presets.find((x) => x.id === v); const r = lensRange(p); onChoice({ rig: v, lensMm: r ? Math.min(r.max, Math.max(r.min, choice.lensMm)) : choice.lensMm }); };
   return (
-    <div class="single">
-      <div class="pane">
-        <div class="pane-title">{rigName(choice)}</div>
-        <Framed photo={photo} mode={mode} frame={frame} maxHeight="56vh" />
-        <Facts rig={rigOf(choice)} frame={frame} />
-        <Pickers photo={photo} presets={presets} choice={choice} onChoice={onChoice} />
-      </div>
-      <div class="lens-strip" title="Every lens on this rig; click one to look at it">
-        {lenses.map((mm) => (
-          <button key={mm} class={mm === choice.lensMm ? "active" : ""} onClick={() => onChoice({ ...choice, lensMm: mm })}>
-            <Framed photo={photo} mode="mask" frame={frameFor({ ...choice, lensMm: mm })} />
-            <span>{mm} mm</span>
-          </button>
-        ))}
-      </div>
-    </div>
+    <>
+      <label class="f-pick" style={{ width: "200px" }}><b>Rig</b><select aria-label="Rig" value={choice.rig} onChange={(e) => pickRig((e.target as HTMLSelectElement).value)}>
+        <option value={AS_SHOT}>As shot</option>
+        {presets.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+      </select><Icon name="chevron-down" /></label>
+      <label class="f-pick" style={{ width: "110px" }}><b>Lens</b><select aria-label="Lens" value={String(choice.lensMm)} onChange={(e) => onChoice({ ...choice, lensMm: Number((e.target as HTMLSelectElement).value) })}>
+        {lenses.map((mm) => <option key={mm} value={mm}>{mm} mm</option>)}
+      </select><Icon name="chevron-down" /></label>
+    </>
   );
 }

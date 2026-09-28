@@ -1,14 +1,17 @@
-import { useState } from "preact/hooks";
-import { CAMERAS, CUSTOM_CAMERA_ID, findFormat, SPEEDBOOSTER_PRESETS } from "@fielder/fov-math";
+import { useEffect, useState } from "preact/hooks";
+import { CAMERAS, CUSTOM_CAMERA_ID, findFormat } from "@fielder/fov-math";
 import { deletePreset, putPreset, type Preset, type Shot } from "./api";
-import { Chip, ErrorLine, Icon, Loading } from "./ui";
+import { Combobox } from "./Combobox";
+import { useKeys } from "./keys";
+import { confirmDialog, cx, ErrorLine, Icon, toast } from "./ui";
 
-interface Props { presets: Preset[] | null; shots: Shot[]; onChange: (p: Preset[]) => void }
+interface Props { presets: Preset[]; shots: Shot[]; onChange: (p: Preset[]) => void; selectedId: string | null; onSelect: (id: string | null) => void }
 
 interface Draft { id: string; name: string; cameraId: string; formatId: string | null; w: string; h: string; sb: string; lmin: string; lmax: string; isNew: boolean }
 /** Shots with at least one photo taken on the rig. */
 const usedBy = (shots: Shot[], presetId: string) => shots.filter((s) => s.photos.some((p) => p.preset_id === presetId)).length;
 const num = (s: string) => { const v = Number(String(s).replace(",", ".")); return Number.isFinite(v) && v > 0 ? v : null; };
+const bodyName = (p: Preset) => (p.camera_id ? CAMERAS.find((c) => c.id === p.camera_id)?.name ?? p.camera_id : "Custom");
 
 function autoName(d: Draft): string {
   const cam = CAMERAS.find((c) => c.id === d.cameraId);
@@ -17,108 +20,127 @@ function autoName(d: Draft): string {
   const sb = num(d.sb);
   return sb && sb !== 1 ? `${base} + ×${sb}` : base;
 }
+const toDraft = (p: Preset): Draft => ({
+  id: p.id, name: p.name, isNew: false,
+  cameraId: p.camera_id && findFormat(p.camera_id, p.format_id) ? p.camera_id : CUSTOM_CAMERA_ID,
+  formatId: p.format_id, w: String(p.sensor_width_mm), h: String(p.sensor_height_mm), sb: p.speedbooster_factor.toFixed(2),
+  lmin: p.lens_min_mm == null ? "" : String(p.lens_min_mm), lmax: p.lens_max_mm == null ? "" : String(p.lens_max_mm),
+});
+const newDraft = (): Draft => { const f = CAMERAS[0].formats[0]; return { id: crypto.randomUUID(), name: "", cameraId: CAMERAS[0].id, formatId: f.id, w: String(f.widthMm), h: String(f.heightMm), sb: "1.00", lmin: "", lmax: "", isNew: true }; };
 
-/** Rigs table plus a create/edit form mirroring the phone's rig editor. */
-export function Rigs({ presets, shots, onChange }: Props) {
+/** Library › Rigs: table with usage counts | editor panel mirroring the phone's rig editor. */
+export function RigsPage({ presets, shots, onChange, selectedId, onSelect }: Props) {
   const [d, setD] = useState<Draft | null>(null);
+  const [focus, setFocus] = useState(0);
+  useEffect(() => { const p = presets.find((x) => x.id === selectedId); if (p) setD(toDraft(p)); else if (!d?.isNew) setD(null); }, [selectedId]);
+  const open = (i: number) => { const p = presets[i]; if (p) onSelect(p.id); };
+  useKeys({
+    j: () => setFocus((f) => Math.min(presets.length - 1, f + 1)), k: () => setFocus((f) => Math.max(0, f - 1)),
+    ArrowDown: () => setFocus((f) => Math.min(presets.length - 1, f + 1)), ArrowUp: () => setFocus((f) => Math.max(0, f - 1)),
+    Enter: () => open(focus),
+  }, !d);
+  return (
+    <>
+      <div class="f-toolbar"><div class="f-toolbar__title"><span>Rigs</span><span class="meta num" style={{ fontSize: "var(--text-body)" }}>{presets.length}</span></div><span class="f-toolbar__sp" /><button type="button" class="f-btn f-btn--sm" onClick={() => { onSelect(null); setD(newDraft()); }}><Icon name="plus" />New rig</button></div>
+      <div class="f-app__body">
+        <div class="f-scroll">
+          <table class="f-table">
+            <thead><tr><th>Name</th><th>Body</th><th>Format / sensor</th><th class="is-num">Speedbooster</th><th>Lens range</th><th class="is-num">Shots</th></tr></thead>
+            <tbody>
+              {presets.map((p, i) => (
+                <tr key={p.id} class={cx(p.id === selectedId && "is-selected", i === focus && "is-focus")} onClick={() => { setFocus(i); onSelect(p.id); }}>
+                  <td class="is-strong">{p.name}</td>
+                  <td>{bodyName(p)}</td>
+                  <td>{[findFormat(p.camera_id ?? "", p.format_id)?.name, `${p.sensor_width_mm} × ${p.sensor_height_mm}`].filter(Boolean).join(" · ")}</td>
+                  <td class="is-num">{p.speedbooster_factor.toFixed(2)}</td>
+                  <td>{p.lens_min_mm != null && p.lens_max_mm != null ? `${p.lens_min_mm}–${p.lens_max_mm} mm` : <span class="is-dim">any</span>}</td>
+                  <td class="is-num">{usedBy(shots, p.id)}</td>
+                </tr>
+              ))}
+              {presets.length === 0 && <tr><td colSpan={6} class="is-dim">No rigs yet. The phone and this page share them.</td></tr>}
+            </tbody>
+          </table>
+          <p class="meta" style={{ padding: "12px 16px" }}>The server copy is the source of truth; the phone pulls it on every launch.</p>
+        </div>
+        {d && <RigEditor key={d.id} draft={d} setDraft={setD} presets={presets} used={usedBy(shots, d.id)} onChange={onChange} onClose={() => { setD(null); onSelect(null); }} onSaved={(id) => onSelect(id)} />}
+      </div>
+    </>
+  );
+}
+
+function RigEditor({ draft: d, setDraft, presets, used, onChange, onClose, onSaved }: { draft: Draft; setDraft: (d: Draft) => void; presets: Preset[]; used: number; onChange: (p: Preset[]) => void; onClose: () => void; onSaved: (id: string) => void }) {
   const [error, setError] = useState<string | null>(null);
-  const patch = (x: Partial<Draft>) => setD((cur) => (cur ? { ...cur, ...x } : cur));
-
-  const startNew = () => { const f = CAMERAS[0].formats[0]; setD({ id: crypto.randomUUID(), name: "", cameraId: CAMERAS[0].id, formatId: f.id, w: String(f.widthMm), h: String(f.heightMm), sb: "1", lmin: "", lmax: "", isNew: true }); };
-  const startEdit = (p: Preset) => setD({
-    id: p.id, name: p.name, isNew: false,
-    cameraId: p.camera_id && findFormat(p.camera_id, p.format_id) ? p.camera_id : CUSTOM_CAMERA_ID,
-    formatId: p.format_id, w: String(p.sensor_width_mm), h: String(p.sensor_height_mm), sb: String(p.speedbooster_factor),
-    lmin: p.lens_min_mm == null ? "" : String(p.lens_min_mm), lmax: p.lens_max_mm == null ? "" : String(p.lens_max_mm),
-  });
-  const pickCamera = (cameraId: string) => {
-    if (cameraId === CUSTOM_CAMERA_ID) { patch({ cameraId, formatId: null }); return; }
+  const [busy, setBusy] = useState(false);
+  const patch = (x: Partial<Draft>) => { setDraft({ ...d, ...x }); setError(null); };
+  const custom = d.cameraId === CUSTOM_CAMERA_ID;
+  const cam = CAMERAS.find((c) => c.id === d.cameraId);
+  const pickCamera = (cameraId: string | null) => {
+    if (!cameraId) return;
     const f = CAMERAS.find((c) => c.id === cameraId)?.formats[0];
-    patch({ cameraId, formatId: f?.id ?? null, w: f ? String(f.widthMm) : "", h: f ? String(f.heightMm) : "" });
+    patch({ cameraId, formatId: f?.id ?? null, w: f ? String(f.widthMm) : d.w, h: f ? String(f.heightMm) : d.h });
   };
-  const pickFormat = (formatId: string) => { if (!d) return; const f = findFormat(d.cameraId, formatId); if (f) patch({ formatId, w: String(f.widthMm), h: String(f.heightMm) }); };
+  const pickFormat = (formatId: string | null) => { const f = formatId ? findFormat(d.cameraId, formatId) : null; if (f && formatId) patch({ formatId, w: String(f.widthMm), h: String(f.heightMm) }); };
+  const lmin = d.lmin.trim() ? num(d.lmin) : null, lmax = d.lmax.trim() ? num(d.lmax) : null;
+  const rangeError = (lmin === null) !== (lmax === null) ? "Enter both ends of the lens range, or neither" : lmin !== null && lmax !== null && lmin >= lmax ? "Min must be below max" : null;
+  const w = num(d.w), h = num(d.h), sb = num(d.sb);
+  const invalid = !w || !h || !sb || !!rangeError;
+  const crop = w && h ? Math.hypot(36, 24) / Math.hypot(w, h) : null;
 
-  async function save(e: Event) {
-    e.preventDefault();
-    if (!d) return;
-    const w = num(d.w), h = num(d.h), sb = num(d.sb);
-    if (!w || !h || !sb) { setError("Sensor width/height and speedbooster factor are required."); return; }
-    const lmin = d.lmin.trim() ? num(d.lmin) : null, lmax = d.lmax.trim() ? num(d.lmax) : null;
-    if ((lmin === null) !== (lmax === null)) { setError("Enter both ends of the lens range, or neither."); return; }
-    if (lmin !== null && lmax !== null && lmin >= lmax) { setError("Lens range: min must be smaller than max."); return; }
-    const custom = d.cameraId === CUSTOM_CAMERA_ID;
+  async function save() {
+    if (invalid || busy) { if (!w || !h || !sb) setError("Sensor width, height and speedbooster factor are required."); return; }
+    setBusy(true);
     try {
       const saved = await putPreset({ id: d.id, name: d.name.trim() || autoName(d), camera_id: custom ? null : d.cameraId, format_id: custom ? null : d.formatId, sensor_width_mm: w, sensor_height_mm: h, speedbooster_factor: sb, lens_min_mm: lmin, lens_max_mm: lmax });
-      const rest = (presets ?? []).filter((p) => p.id !== saved.id);
-      onChange([...rest, saved].sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" })));
-      setD(null); setError(null);
-    } catch (err) { setError((err as Error).message); }
+      onChange([...presets.filter((p) => p.id !== saved.id), saved].sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" })));
+      toast("Rig saved");
+      onSaved(saved.id);
+    } catch (err) { setError((err as Error).message); } finally { setBusy(false); }
   }
-  async function remove(p: Preset) {
-    const used = usedBy(shots, p.id);
-    if (!confirm(`Delete rig "${p.name}"?${used ? ` ${used} shot(s) reference it; they keep their framing snapshot.` : ""} The phone drops it on next launch.`)) return;
-    try { await deletePreset(p.id); onChange((presets ?? []).filter((x) => x.id !== p.id)); } catch (e) { alert(`Delete failed: ${(e as Error).message}`); }
+  async function remove() {
+    const ok = await confirmDialog({ title: `Delete “${d.name}”?`, body: `${used ? `${used} shot(s) reference it; they keep their framing snapshot. ` : ""}The phone drops it on its next launch.`, confirmLabel: "Delete rig", danger: true });
+    if (!ok) return;
+    try { await deletePreset(d.id); onChange(presets.filter((x) => x.id !== d.id)); onClose(); toast("Rig deleted"); } catch (e) { toast(`Delete failed: ${(e as Error).message}`, "danger"); }
   }
+  useKeys({ "Mod+s": () => void save(), Escape: onClose });
 
-  const cam = d ? CAMERAS.find((c) => c.id === d.cameraId) : undefined;
   return (
-    <div class="page">
-      {!presets ? <Loading /> : (
-        <table class="table">
-          <thead><tr><th>Name</th><th>Camera / format</th><th>Sensor area</th><th>Speedbooster</th><th>Lens range</th><th>Shots</th><th></th></tr></thead>
-          <tbody>
-            {presets.map((p) => (
-              <tr key={p.id}>
-                <td class="name">{p.name}</td>
-                <td class="meta">{p.camera_id && p.format_id ? `${p.camera_id} / ${p.format_id}` : "custom"}</td>
-                <td>{p.sensor_width_mm} × {p.sensor_height_mm} mm</td>
-                <td>{p.speedbooster_factor === 1 ? "none" : `×${p.speedbooster_factor}`}</td>
-                <td>{p.lens_min_mm != null && p.lens_max_mm != null ? `${p.lens_min_mm}–${p.lens_max_mm} mm` : "any"}</td>
-                <td>{usedBy(shots, p.id)}</td>
-                <td class="actions"><button class="f-btn f-btn--secondary f-btn--sm" onClick={() => startEdit(p)}>Edit</button><button class="f-btn f-btn--danger f-btn--sm" onClick={() => void remove(p)}>Delete</button></td>
-              </tr>
-            ))}
-            {presets.length === 0 && <tr><td colSpan={7} class="meta">No rigs yet.</td></tr>}
-          </tbody>
-        </table>
-      )}
-      {!d ? <p><button class="f-btn" onClick={startNew}><Icon name="plus" />New rig</button></p> : (
-        <form class="rig-form" onSubmit={save}>
-          <h3>{d.isNew ? "New rig" : "Edit rig"}</h3>
-          <label>Camera body
-            <div class="f-chips">
-              {CAMERAS.map((c) => <Chip key={c.id} selected={d.cameraId === c.id} onClick={() => pickCamera(c.id)}>{c.name}</Chip>)}
-              <Chip selected={d.cameraId === CUSTOM_CAMERA_ID} onClick={() => pickCamera(CUSTOM_CAMERA_ID)}>Custom sensor</Chip>
-            </div>
-          </label>
-          {cam ? (
-            <label>Recording format (active sensor area)
-              <div class="f-chips">{cam.formats.map((f) => <Chip key={f.id} selected={d.formatId === f.id} onClick={() => pickFormat(f.id)}>{f.name}</Chip>)}</div>
-              <span class="meta">{d.w} × {d.h} mm{findFormat(d.cameraId, d.formatId)?.windowed ? " · windowed crop of the sensor" : ""}</span>
-            </label>
-          ) : (
-            <div class="row2">
-              <label>Sensor width (mm)<input value={d.w} onInput={(e) => patch({ w: (e.target as HTMLInputElement).value })} /></label>
-              <label>Sensor height (mm)<input value={d.h} onInput={(e) => patch({ h: (e.target as HTMLInputElement).value })} /></label>
-            </div>
-          )}
-          <label>Speedbooster / focal reducer
-            <div class="f-chips">{SPEEDBOOSTER_PRESETS.map((f) => <Chip key={f} selected={num(d.sb) === f} onClick={() => patch({ sb: String(f) })}>{f === 1 ? "none" : `×${f}`}</Chip>)}</div>
-            <input value={d.sb} onInput={(e) => patch({ sb: (e.target as HTMLInputElement).value })} placeholder="custom factor, e.g. 0.71" />
-          </label>
-          <div class="row2">
-            <label>Lens range min (mm, optional)<input value={d.lmin} onInput={(e) => patch({ lmin: (e.target as HTMLInputElement).value })} placeholder="e.g. 18" /></label>
-            <label>Lens range max (mm)<input value={d.lmax} onInput={(e) => patch({ lmax: (e.target as HTMLInputElement).value })} placeholder="e.g. 35" /></label>
+    <aside class="f-panel" aria-label={d.isNew ? "New rig" : "Edit rig"}>
+      <div class="f-panel__head"><span class="f-panel__title">{d.isNew ? "New rig" : d.name}</span><button type="button" class="f-btn f-btn--ghost f-btn--sm f-btn--icon" aria-label="Close (Esc)" onClick={onClose}><Icon name="close" /></button></div>
+      <div class="f-panel__body">
+        <label class="f-field"><span class="f-field__label">Name</span><span class="f-input f-input--sm"><input value={d.name} placeholder={autoName(d)} onInput={(e) => patch({ name: (e.target as HTMLInputElement).value })} /></span><span class="f-field__help">Empty = “{autoName(d)}”</span></label>
+        <button type="button" class={cx("f-switch", custom && "is-on")} role="switch" aria-checked={custom} onClick={() => custom ? pickCamera(CAMERAS[0].id) : patch({ cameraId: CUSTOM_CAMERA_ID, formatId: null })}>
+          <span class="f-switch__track"><span class="f-switch__knob">{custom && <Icon name="check" />}</span></span>Custom sensor size
+        </button>
+        {!custom && (
+          <>
+            <div class="f-field"><span class="f-field__label">Camera body</span><Combobox small options={CAMERAS.map((c) => ({ value: c.id, label: c.name }))} value={d.cameraId} clearable={false} onChange={pickCamera} /></div>
+            <div class="f-field"><span class="f-field__label">Format</span><Combobox small options={(cam?.formats ?? []).map((f) => ({ value: f.id, label: `${f.name} · ${f.widthMm} × ${f.heightMm} mm`, hint: f.windowed ? "windowed" : undefined }))} value={d.formatId} clearable={false} onChange={pickFormat} /></div>
+          </>
+        )}
+        <div class="two-col">
+          <label class="f-field"><span class="f-field__label" style={custom ? undefined : { color: "var(--text-disabled)" }}>Width</span><span class={cx("f-input f-input--sm", !custom && "is-disabled")}><input inputMode="decimal" value={d.w} disabled={!custom} onInput={(e) => patch({ w: (e.target as HTMLInputElement).value })} /><span class="f-input__unit">mm</span></span></label>
+          <label class="f-field"><span class="f-field__label" style={custom ? undefined : { color: "var(--text-disabled)" }}>Height</span><span class={cx("f-input f-input--sm", !custom && "is-disabled")}><input inputMode="decimal" value={d.h} disabled={!custom} onInput={(e) => patch({ h: (e.target as HTMLInputElement).value })} /><span class="f-input__unit">mm</span></span></label>
+        </div>
+        <label class="f-field"><span class="f-field__label">Speedbooster</span><span class="f-input f-input--sm" style={{ width: "140px" }}><input inputMode="decimal" value={d.sb} onInput={(e) => patch({ sb: (e.target as HTMLInputElement).value })} /><span class="f-input__unit">×</span></span><span class="f-field__help">1.00 = none · 0.71 = Metabones Ultra · 0.64 = XL</span></label>
+        <div class="f-field"><span class="f-field__label">Lens range</span>
+          <div class="btn-row" style={{ gap: "8px" }}>
+            <span class={cx("f-input f-input--sm", rangeError && "is-error")} style={{ width: "100px" }}><input inputMode="decimal" aria-label="Shortest focal length" value={d.lmin} placeholder="min" onInput={(e) => patch({ lmin: (e.target as HTMLInputElement).value })} /><span class="f-input__unit">mm</span></span>–
+            <span class={cx("f-input f-input--sm", rangeError && "is-error")} style={{ width: "100px" }}><input inputMode="decimal" aria-label="Longest focal length" value={d.lmax} placeholder="max" onInput={(e) => patch({ lmax: (e.target as HTMLInputElement).value })} /><span class="f-input__unit">mm</span></span>
           </div>
-          <label>Name (optional)<input value={d.name} onInput={(e) => patch({ name: (e.target as HTMLInputElement).value })} placeholder={autoName(d)} /></label>
-          {error && <ErrorLine>{error}</ErrorLine>}
-          <div class="form-actions">
-            <button type="submit" class="f-btn">Save rig</button>
-            <button type="button" class="f-btn f-btn--secondary" onClick={() => { setD(null); setError(null); }}>Cancel</button>
-          </div>
-        </form>
-      )}
-      <p class="meta">The server copy is the source of truth; the phone pulls it on every launch.</p>
-    </div>
+          {rangeError && <ErrorLine>{rangeError}</ErrorLine>}
+          <span class="f-field__help">Empty = any lens. Limits the phone’s lens strip and the rig explorer.</span>
+        </div>
+        <dl class="f-facts" style={{ paddingTop: "8px", borderTop: "var(--bw) solid var(--border-subtle)" }}>
+          <dt>Crop</dt><dd>{crop ? `${crop.toFixed(2)} × (FF diagonal)${sb && sb !== 1 ? ` · with ×${sb}: ${(crop * sb).toFixed(2)}` : ""}` : "—"}</dd>
+          {!d.isNew && <><dt>Used by</dt><dd>{used} shot{used === 1 ? "" : "s"} · they keep their framing snapshot</dd></>}
+        </dl>
+        {error && <ErrorLine>{error}</ErrorLine>}
+      </div>
+      <div class="f-panel__foot">
+        {!d.isNew && <button type="button" class="f-btn f-btn--danger f-btn--sm" onClick={() => void remove()}><Icon name="delete-outline" />Delete…</button>}
+        <span class="grow" />
+        <button type="button" class="f-btn f-btn--sm" disabled={invalid || busy} onClick={() => void save()}>{busy ? "Saving…" : "Save rig"}<span class="f-btn__kbd">⌘S</span></button>
+      </div>
+    </aside>
   );
 }

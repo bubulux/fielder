@@ -1,0 +1,154 @@
+import { Fragment } from "preact";
+import { useEffect, useRef, useState } from "preact/hooks";
+import type { Project, SavedView } from "./api";
+import type { LibrarySection, Route } from "./router";
+import type { ThemeChoice } from "./theme";
+import { cx, Icon, Kbd } from "./ui";
+
+export const ALL_PROJECTS = "all";
+/** The project the dashboard works on, or every project at once. */
+export type Scope = string;
+
+interface Props {
+  route: Route;
+  rail: boolean;
+  scope: Scope;
+  projects: Project[];
+  views: SavedView[];
+  /** The saved view with unsaved edits, if any. */
+  editedViewId: string | null;
+  counts: { shots: number; unreviewed: number; projects: number; fields: number; rigs: number; locations: number };
+  theme: ThemeChoice;
+  onTheme: (t: ThemeChoice) => void;
+  onScope: (s: Scope) => void;
+  onNavigate: (r: Route) => void;
+  onNewView: () => void;
+  onPalette: () => void;
+  onReload: () => void;
+  loadedAt: Date | null;
+}
+
+const THEME_NEXT: Record<ThemeChoice, ThemeChoice> = { auto: "sun", sun: "set", set: "auto" };
+const THEME_LABEL: Record<ThemeChoice, string> = { auto: "Theme: Auto (follows the system)", sun: "Theme: Sun", set: "Theme: Set" };
+const THEME_ICON: Record<ThemeChoice, string> = { auto: "theme-light-dark", sun: "white-balance-sunny", set: "weather-night" };
+
+/** Left sidebar (a 56 px rail below 1024 px and in the shot view): scope, sections, saved views, palette, theme, reload. */
+export function Sidebar({ route, rail, scope, projects, views, editedViewId, counts, theme, onTheme, onScope, onNavigate, onNewView, onPalette, onReload, loadedAt }: Props) {
+  const scopeName = scope === ALL_PROJECTS ? "All projects" : projects.find((p) => p.id === scope)?.name ?? "—";
+  const section = route.page === "shot" ? "shots" : route.page;
+  const lib = route.page === "library" ? route.section : null;
+  const viewId = route.page === "shots" ? route.viewId : null;
+  const nav = (id: string, icon: string, text: string, to: Route, count?: number, warn?: boolean) => (
+    <a class={cx("f-nav", section === id && !(id === "shots" && viewId) && "is-current")} href="#" aria-label={rail ? `${text}${count ? `, ${count}` : ""}` : undefined} title={rail ? text : undefined}
+      aria-current={section === id ? "page" : undefined} onClick={(e) => { e.preventDefault(); onNavigate(to); }}>
+      <Icon name={icon} />{!rail && <span class="f-nav__txt">{text}</span>}
+      {count !== undefined && (warn ? count > 0 && <span class="f-nav__count f-nav__count--warn">{count}</span> : !rail && <span class="f-nav__count">{count}</span>)}
+    </a>
+  );
+  const sub = (s: LibrarySection, text: string, count: number) => (
+    <a class={cx("f-nav f-nav--sub", lib === s && "is-current")} href="#" onClick={(e) => { e.preventDefault(); onNavigate({ page: "library", section: s, id: null }); }}>
+      <span class="f-nav__txt">{text}</span><span class="f-nav__count">{count}</span>
+    </a>
+  );
+  return (
+    <nav class="f-side" aria-label="Sections">
+      <div class="f-side__brand" style={rail ? { padding: 0, justifyContent: "center" } : undefined}><Icon name="camera-iris" />{!rail && "Fielder"}</div>
+      <ScopeSwitch rail={rail} scope={scope} name={scopeName} projects={projects} onScope={onScope} onManage={() => onNavigate({ page: "library", section: "projects", id: null })} />
+      <div style={{ height: "10px" }} />
+      {nav("shots", "view-grid-outline", "Shots", { page: "shots", viewId: null }, counts.shots)}
+      {nav("review", "checkbox-marked-outline", "Review", { page: "review" }, counts.unreviewed, true)}
+      {nav("plan", "calendar-clock", "Plan", { page: "plan", dayId: null })}
+      {nav("library", "bookshelf", "Library", { page: "library", section: lib ?? "projects", id: null })}
+      {!rail && section === "library" && (
+        <>
+          {sub("projects", "Projects", counts.projects)}
+          {sub("fields", "Fields", counts.fields)}
+          {sub("rigs", "Rigs", counts.rigs)}
+          {sub("locations", "Locations", counts.locations)}
+        </>
+      )}
+      {!rail && (
+        <>
+          <div class="f-side__label">
+            <span>Saved views</span>
+            <button type="button" class="f-btn f-btn--ghost f-btn--sm f-btn--icon" aria-label="New view" title="New view: build a filter in Shots and save it" style={{ height: "22px", width: "22px", margin: "-4px -4px -4px 0" }} onClick={onNewView}><Icon name="plus" /></button>
+          </div>
+          {views.length === 0 && <span class="meta" style={{ padding: "2px 10px" }}>Filter shots, then save the filter as a view.</span>}
+          {views.map((v) => (
+            <a key={v.id} class={cx("f-nav f-nav--sub", viewId === v.id && "is-current")} style={{ paddingLeft: "12px" }} href="#" onClick={(e) => { e.preventDefault(); onNavigate({ page: "shots", viewId: v.id }); }}>
+              <Icon name="filter-variant" size={16} /><span class="f-nav__txt">{v.name}</span>
+              {editedViewId === v.id && <span class="f-nav__dot" title="Unsaved changes" />}
+            </a>
+          ))}
+        </>
+      )}
+      <div class="f-side__grow" />
+      {rail ? (
+        <>
+          <button type="button" class="f-nav" aria-label="Go to… (⌘K)" title="Go to… (⌘K)" onClick={onPalette}><Icon name="magnify" /></button>
+          <button type="button" class="f-nav" aria-label={THEME_LABEL[theme]} title={THEME_LABEL[theme]} onClick={() => onTheme(THEME_NEXT[theme])}><Icon name={THEME_ICON[theme]} /></button>
+          <button type="button" class="f-nav" aria-label="Reload data" title="Reload data" onClick={onReload}><Icon name="refresh" /></button>
+        </>
+      ) : (
+        <div class="f-side__foot">
+          <button type="button" class="f-btn f-btn--secondary f-btn--sm" style={{ flex: 1, justifyContent: "flex-start" }} onClick={onPalette}><Icon name="magnify" />Go to…<span style={{ marginLeft: "auto" }}><Kbd>⌘K</Kbd></span></button>
+          <button type="button" class="f-btn f-btn--ghost f-btn--sm f-btn--icon" aria-label={THEME_LABEL[theme]} title={THEME_LABEL[theme]} onClick={() => onTheme(THEME_NEXT[theme])}><Icon name={THEME_ICON[theme]} /></button>
+          <button type="button" class="f-btn f-btn--ghost f-btn--sm f-btn--icon" aria-label="Reload data" title={loadedAt ? `Reload data (loaded ${loadedAt.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })})` : "Reload data"} onClick={onReload}><Icon name="refresh" /></button>
+        </div>
+      )}
+    </nav>
+  );
+}
+
+/** Scope switcher: a listbox of projects, "All projects" and "Manage projects…". */
+function ScopeSwitch({ rail, scope, name, projects, onScope, onManage }: { rail: boolean; scope: Scope; name: string; projects: Project[]; onScope: (s: Scope) => void; onManage: () => void }) {
+  const [open, setOpen] = useState(false);
+  const [hi, setHi] = useState(0);
+  const box = useRef<HTMLDivElement>(null);
+  const items: { id: string; label: string; icon: string; meta?: string }[] = [
+    ...projects.map((p) => ({ id: p.id, label: p.name, icon: "folder-outline", meta: `${p.shot_count}` })),
+    { id: ALL_PROJECTS, label: "All projects", icon: "folder-multiple-outline" },
+    { id: "__manage__", label: "Manage projects…", icon: "cog-outline" },
+  ];
+  useEffect(() => {
+    if (!open) return;
+    setHi(Math.max(0, items.findIndex((i) => i.id === scope)));
+    const close = (e: MouseEvent) => { if (!box.current?.contains(e.target as Node)) setOpen(false); };
+    document.addEventListener("mousedown", close);
+    return () => document.removeEventListener("mousedown", close);
+  }, [open]);
+  const take = (id: string) => { setOpen(false); if (id === "__manage__") onManage(); else onScope(id); };
+  const onKey = (e: KeyboardEvent) => {
+    if (!open) { if (e.key === "ArrowDown" || e.key === "Enter" || e.key === " ") { e.preventDefault(); setOpen(true); } return; }
+    if (e.key === "ArrowDown") { e.preventDefault(); setHi((i) => Math.min(items.length - 1, i + 1)); }
+    else if (e.key === "ArrowUp") { e.preventDefault(); setHi((i) => Math.max(0, i - 1)); }
+    else if (e.key === "Enter") { e.preventDefault(); take(items[hi].id); }
+    else if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); setOpen(false); }
+  };
+  return (
+    <div ref={box} style={{ position: "relative", width: "100%" }} onKeyDown={onKey}>
+      {rail ? (
+        <button type="button" class="f-nav" style={{ border: "1px solid var(--border)" }} aria-label={`Scope: ${name}`} title={name} aria-haspopup="listbox" aria-expanded={open} onClick={() => setOpen(!open)}><Icon name="folder-outline" /></button>
+      ) : (
+        <button type="button" class="f-scope" aria-haspopup="listbox" aria-expanded={open} title="Switch scope (⌘K → project)" onClick={() => setOpen(!open)}>
+          <span class="f-scope__main"><span class="f-scope__lbl">Scope</span><span class="f-scope__name">{name}</span></span>
+          <Icon name="unfold-more-horizontal" />
+        </button>
+      )}
+      {open && (
+        <div class="f-menu" role="listbox" style={{ position: "absolute", top: "calc(100% + 4px)", left: 0, zIndex: 60, width: rail ? "260px" : "100%", maxHeight: "60vh", overflow: "auto" }}>
+          {items.map((it, i) => (
+            <Fragment key={it.id}>
+              {it.id === ALL_PROJECTS && <div class="f-menu__sep" />}
+              <button type="button" role="option" aria-selected={it.id === scope} class={cx("f-menu__item", i === hi && "is-hi", it.id === scope && "is-sel")}
+                onMouseEnter={() => setHi(i)} onClick={() => take(it.id)}>
+                <Icon name={it.id === scope ? "check" : it.icon} /><span style={{ overflow: "hidden", textOverflow: "ellipsis", flex: 1 }}>{it.label}</span>
+                {it.meta && <span class="f-nav__count">{it.meta}</span>}
+              </button>
+            </Fragment>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}

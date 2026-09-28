@@ -28,13 +28,18 @@ Project-specific details of a shot (nearest U-Bahn station, access notes, parkin
 
 ## Storage and API
 
-- Definitions are global (`field_definitions`, one row per top-level field). A project picks and orders the ones it uses (`project_fields`), via the Projects tab → Edit.
+- Definitions are global (`field_definitions`, one row per top-level field). A project picks and orders the ones it uses (`project_fields`), in Library › Projects.
 - `POST /api/fields/import` takes an array: new keys are created, existing keys replaced, everything validated before anything is written.
 - Deleting a definition keeps the stored values on shots; they are just no longer shown or edited.
 
 ## UI
 
-- **Dashboard Fields tab** (`Fields.tsx`): list with the projects using each field, New field (from text/select/group templates), a JSON editor with a live form preview (`ExtraEditor.tsx`), Import JSON, Copy all as JSON, Copy prompt for AI.
+- **Dashboard Library › Fields** (`Fields.tsx`):
+  - a list with type and usage
+  - "New field ▾" from templates (text, number, yes/no, select, group with a dependent select)
+  - a JSON editor with line numbers; a parse error highlights its line and shows the message. Save field (⌘S) or Revert.
+  - a live form preview (`ExtraEditor.tsx`, showing the last valid version while the JSON is broken)
+  - Import JSON…, Copy all, Copy prompt for AI
 - **Tag forms**: dashboard `ExtraEditor.tsx` (combobox selects), phone `components/ExtraEditor.tsx` (chips, with a search list above 12 options). They render the fields of the shot's project.
 - **Phone offline**: definitions and each project's `fieldIds` are cached during `flush()`. `store.fieldsForProject(projectId)` reads them.
-- **Filters**: `extraFilterFields(defs)` turns every leaf into a filter field `extra.<path>` (select → enum/set, boolean → yes/no, number, text). The Views builder shows them under "Extra fields" (the active project's fields, or all of them for "All projects").
+- **Filters**: `extraFilterFields(defs)` turns every leaf into a filter field `extra.<path>` (select → enum/set, boolean → yes/no, number, text). The Shots filter panel shows them under "Extra fields" (the active project's fields, or all of them for "All projects").

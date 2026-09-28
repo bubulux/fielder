@@ -7,7 +7,7 @@ Single-user tool for film location scouting and shoot planning. A phone (Android
 | Path | Stack | Role |
 | --- | --- | --- |
 | `apps/worker` | Cloudflare Worker, D1 (SQLite), R2 | JSON API, image proxy, serves the dashboard as static assets. Hand-written router (`src/http.ts`). |
-| `apps/dashboard` | Vite + Preact + Leaflet, plain CSS (design-system classes in `src/design/`, layouts in `src/styles.css`) | Web UI. Built into `dist/`, served by the Worker. |
+| `apps/dashboard` | Vite + Preact + Leaflet, plain CSS (design-system classes in `src/design/`, layouts in `src/styles.css`), hash routes, sidebar shell | Web UI. Built into `dist/`, served by the Worker. |
 | `apps/mobile` | Expo SDK 57, React Native 0.86, runs in **Expo Go** | Viewfinder, capture, review, day mode. Own UI primitives in `src/components/ui.tsx`. |
 | `packages/fov-math` | Pure TS, `node --test` | Camera bodies/formats, lenses, speedboosters, FOV and overlay math, re-framing. |
 | `packages/vocab` | Pure TS, `node --test` | Shared vocabularies (light, weather, INT/EXT, states), filter model, extra-field definitions, sun/daylight math. |

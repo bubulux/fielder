@@ -13,9 +13,9 @@
 
 ## Manual correction
 
-- **Dashboard** (`PositionEditor.tsx`): shot dialog or review panel → Position → "correct". A map at zoom 18 shows the reported accuracy circle. Drag the pin or click the map, then Save position.
+- **Dashboard** (`PositionEditor.tsx`): the shot view or Review → stage **Position** (or the inspector’s Position → Correct). The stage becomes a map at zoom 18 with the reported accuracy circle and the original position. Drag the pin or click the map; the bar shows the coordinates and the distance moved. Save position (Enter) or Cancel (Esc).
 - **Phone** (`components/PositionPicker.tsx`): Gallery → shot → Correct position. Same idea on a Leaflet map in a WebView.
 - For a sequence, "All n photos of this shot" moves every photo (default on).
 - API: `PATCH /api/photos/:id { lat, lon, all_in_shot }`. It sets `photos.position_corrected = 1`, keeps the original `gps_accuracy_m`, and the UI shows "corrected" instead of the accuracy.
 
-Maps use the cover photo's position for a shot (dashboard `MapView.tsx`, phone `MapScreen.tsx`).
+Maps use the cover photo's position for a shot (dashboard Shots › Map, `MapView.tsx`; phone `MapScreen.tsx`).

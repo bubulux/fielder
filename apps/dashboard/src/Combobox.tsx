@@ -14,6 +14,12 @@ interface Props {
   clearable?: boolean;
   autoFocus?: boolean;
   id?: string;
+  /** 32 px high (toolbars, inspector, rule builder). */
+  small?: boolean;
+  /** Leading icon inside the input. */
+  icon?: string;
+  /** Called when Esc closes the list without a pick. */
+  onCancel?: () => void;
 }
 
 const norm = (s: string) => s.trim().toLowerCase();
@@ -23,7 +29,7 @@ const norm = (s: string) => s.trim().toLowerCase();
  * (Tab also moves on to the next field), Esc to cancel. Matches at the start of the
  * label rank first, then matches anywhere.
  */
-export function Combobox({ options, value, onChange, placeholder, onCreate, clearable = true, autoFocus, id }: Props) {
+export function Combobox({ options, value, onChange, placeholder, onCreate, clearable = true, autoFocus, id, small, icon, onCancel }: Props) {
   const selected = options.find((o) => o.value === value) ?? null;
   const [query, setQuery] = useState<string | null>(null); // null = not typing: show the selected label
   const [open, setOpen] = useState(false);
@@ -50,6 +56,7 @@ export function Combobox({ options, value, onChange, placeholder, onCreate, clea
   useEffect(() => { list.current?.querySelector(".is-hi")?.scrollIntoView({ block: "nearest" }); }, [hi]);
 
   const close = () => { setOpen(false); setQuery(null); };
+  const cancel = () => { close(); onCancel?.(); };
   const take = (e: Entry | undefined) => {
     if (!e) return;
     if (e.kind === "option") onChange(e.option.value);
@@ -63,12 +70,13 @@ export function Combobox({ options, value, onChange, placeholder, onCreate, clea
     else if (e.key === "ArrowUp") { e.preventDefault(); setHi((i) => Math.max(0, i - 1)); }
     else if (e.key === "Enter") { if (open && entries.length) { e.preventDefault(); take(entries[hi]); } }
     else if (e.key === "Tab") { if (open && q && entries.length) take(entries[hi]); else close(); } // no preventDefault: focus moves on
-    else if (e.key === "Escape") { if (open) { e.preventDefault(); e.stopPropagation(); close(); } }
+    else if (e.key === "Escape") { if (open) { e.preventDefault(); e.stopPropagation(); cancel(); } }
   }
 
   return (
     <div class="combo f-combo">
-      <div class="f-input">
+      <div class={small ? "f-input f-input--sm" : "f-input"}>
+        {icon && <i class={`mdi mdi-${icon} f-input__icon`} aria-hidden="true" />}
         <input
           id={id}
           ref={input}
