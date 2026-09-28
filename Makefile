@@ -34,5 +34,5 @@ deploy: ## Production: apply new D1 migrations, build the dashboard, deploy Work
 apk-cloud: ## APK on EAS (cloud build; counts against the monthly quota)
 	pnpm -C apps/mobile build:apk
 
-apk-local: ## APK built locally, copied to the Windows Downloads folder (~10 min)
+apk-local: ## APK built locally in Docker, copied to the Windows Downloads folder (~10 min)
 	bash scripts/apk-local.sh

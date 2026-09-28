@@ -1,17 +1,17 @@
 #!/usr/bin/env bash
-# Build the APK locally (EAS --local, same keystore) and copy it to the Windows Downloads folder.
-# WSL only. Toolchain as in docs/development.md (JDK 17 in ~/tools, Android SDK in ~/Android/Sdk).
+# Build the APK locally (EAS --local, same keystore from Expo) in a Docker container, then copy
+# it to the Windows Downloads folder. WSL + Docker Desktop (WSL integration on).
+# Needs an Expo session: `npx eas login` once (kept in ~/.expo), or EXPO_TOKEN in the environment.
 # Overrides: API_URL (the Worker the app talks to), DOWNLOADS (target folder).
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-JAVA_HOME=$(ls -d ~/tools/jdk-17* 2>/dev/null | head -1 || true)
-[ -n "$JAVA_HOME" ] || { echo "No JDK 17 in ~/tools (see docs/development.md)" >&2; exit 1; }
-export JAVA_HOME ANDROID_HOME=~/Android/Sdk ANDROID_SDK_ROOT=~/Android/Sdk
-export PATH=$JAVA_HOME/bin:$ANDROID_HOME/platform-tools:$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/cmake/3.22.1/bin:$PATH
-export EXPO_PUBLIC_API_URL=${API_URL:-https://fielder-api.fielder-worker.workers.dev}
+command -v docker > /dev/null || { echo "docker not found: Docker Desktop → Settings → Resources → WSL integration → enable this distro" >&2; exit 1; }
+if [ -z "${EXPO_TOKEN:-}" ] && ! npx --no-install eas whoami > /dev/null 2>&1; then
+  echo "Not logged in to Expo: run 'npx eas login' once (or set EXPO_TOKEN)" >&2; exit 1
+fi
 
-# The Windows user's Downloads, as a WSL path (cmd.exe complains about the UNC cwd; hence /mnt/c).
+# The Windows user's Downloads, as a WSL path (cmd.exe complains about a UNC cwd; hence /mnt/c).
 if [ -z "${DOWNLOADS:-}" ]; then
   win_home=$(cd /mnt/c && cmd.exe /c "echo %USERPROFILE%" 2>/dev/null | tr -d '\r')
   [ -n "$win_home" ] || { echo "Could not find the Windows user folder; set DOWNLOADS=/mnt/c/Users/<you>/Downloads" >&2; exit 1; }
@@ -21,8 +21,17 @@ fi
 
 commit=$(git rev-parse --short HEAD)
 [ -z "$(git status --porcelain)" ] || echo "Note: uncommitted changes are built, but the file is named after $commit."
-pnpm -C apps/mobile build:apk:local   # writes ~/fielder-builds/fielder-<commit>.apk
+out=~/fielder-builds
+mkdir -p "$out" ~/.expo
 
-apk=~/fielder-builds/fielder-$commit.apk
-cp "$apk" "$DOWNLOADS/"
+# Rebuilds only when the Dockerfile changed (layer cache). Gradle's cache lives in a volume.
+docker build -t fielder-android -f docker/android.Dockerfile docker
+docker run --rm \
+  -v "$PWD":/work -v ~/.expo:/root/.expo -v "$out":/out -v fielder-gradle:/root/.gradle \
+  -e EXPO_TOKEN -e EXPO_PUBLIC_API_URL="${API_URL:-https://fielder-api.fielder-worker.workers.dev}" \
+  -w /work/apps/mobile fielder-android \
+  bash -c "node /work/node_modules/eas-cli/bin/run build --local --platform android --profile apk --non-interactive --output /out/fielder-$commit.apk \
+           && chown $(id -u):$(id -g) /out/fielder-$commit.apk"
+
+cp "$out/fielder-$commit.apk" "$DOWNLOADS/"
 echo "APK: $DOWNLOADS/fielder-$commit.apk"

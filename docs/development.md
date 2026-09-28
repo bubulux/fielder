@@ -63,16 +63,10 @@ pnpm -C apps/worker run deploy     # builds the dashboard, deploys Worker + asse
 
 Cloud: `pnpm -C apps/mobile eas build --platform android --profile apk` (EAS free plan has a monthly build quota).
 
-Local (same keystore, fetched from Expo), in WSL:
-
-```bash
-export JAVA_HOME=$(ls -d ~/tools/jdk-17*) ANDROID_HOME=~/Android/Sdk ANDROID_SDK_ROOT=~/Android/Sdk
-export PATH=$JAVA_HOME/bin:$ANDROID_HOME/platform-tools:$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/cmake/3.22.1/bin:$PATH
-export EXPO_PUBLIC_API_URL=https://fielder-api.fielder-worker.workers.dev
-cd apps/mobile && pnpm build:apk:local     # writes ~/fielder-builds/fielder-<commit>.apk
-```
-
-Toolchain installed on 2026-09-13: Temurin JDK 17 in `~/tools`, Android SDK in `~/Android/Sdk` (platform 36, build-tools 36.0.0, NDK 27.1.12297006, cmake 3.22.1, platform-tools). A build takes about 10 minutes.
+Local (same keystore, fetched from Expo): `make apk-local`, in a Docker container (`docker/android.Dockerfile`: JDK 17, Android SDK 36, build-tools 36.0.0, NDK 27.1.12297006, cmake 3.22.1, Node 22.20.0, pnpm 11.13.1; nothing installed in WSL).
+- Once: Docker Desktop → Settings → Resources → WSL integration → enable this distro; `npx eas login` (the session in `~/.expo` is mounted into the container; `EXPO_TOKEN` works too).
+- `scripts/apk-local.sh` builds the image (cached after the first run), runs `eas build --local --profile apk` with the repo mounted and Gradle's cache in the `fielder-gradle` volume, writes `~/fielder-builds/fielder-<commit>.apk` and copies it to the Windows Downloads folder.
+- The app points at `https://fielder-api.fielder-worker.workers.dev` unless `API_URL=…` is set. The first run downloads the SDK and Gradle dependencies (several GB); later builds take about 10 minutes.
 
 ## Debugging on the phone
 
