@@ -1,9 +1,10 @@
 import { useEffect, useState } from "react";
-import { Modal, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from "react-native";
+import { Modal, Pressable, ScrollView, useWindowDimensions, View } from "react-native";
 import { Image } from "expo-image";
-import { FramedImage, FRAME_MODES, frameModeLabel, type FrameMode } from "../components/FramedImage";
+import { FramedImage, FrameModeSeg, type FrameMode } from "../components/FramedImage";
 import { TagsForm } from "../components/TagsForm";
-import { Chip, ChipRow, colors } from "../components/ui";
+import { Header } from "../components/ui";
+import { FIXED, makeStyles, RADIUS } from "../theme";
 import type { FieldDef } from "@fielder/vocab";
 import type { CaptureDraft, LocationEntry, Settings, ShotTags } from "../types";
 
@@ -24,6 +25,7 @@ let lastTags: Partial<ShotTags> = {};
 
 /** Capture (or finished sequence) -> this form -> Upload or Discard. Every field is optional. */
 export function ShotReview({ draft, settings, locations, countAt, fields, onUpload, onDiscard }: Props) {
+  const s = useStyles();
   const { width, height } = useWindowDimensions();
   const portrait = height >= width;
   const [mode, setMode] = useState<FrameMode>("mask");
@@ -39,15 +41,13 @@ export function ShotReview({ draft, settings, locations, countAt, fields, onUplo
       {draft.photos.length > 1 && (
         <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ maxWidth: photoWidth }} contentContainerStyle={{ gap: 6, paddingVertical: 8 }}>
           {draft.photos.map((p, i) => (
-            <Pressable key={p.meta.id} onPress={() => setIndex(i)} style={[s.thumb, i === index && { borderColor: colors.accent }]}>
+            <Pressable key={p.meta.id} onPress={() => setIndex(i)} style={[s.thumb, i === index && s.thumbOn]} accessibilityLabel={`Photo ${i + 1}`} accessibilityState={{ selected: i === index }}>
               <Image source={{ uri: p.uri }} style={{ width: "100%", height: "100%" }} contentFit="cover" />
             </Pressable>
           ))}
         </ScrollView>
       )}
-      <View style={{ marginTop: 8 }}>
-        <ChipRow>{FRAME_MODES.map((m) => <Chip key={m} label={frameModeLabel(m)} selected={mode === m} onPress={() => setMode(m)} />)}</ChipRow>
-      </View>
+      <View style={{ marginTop: 8 }}><FrameModeSeg value={mode} onChange={setMode} /></View>
     </View>
   );
   const form = (
@@ -67,7 +67,7 @@ export function ShotReview({ draft, settings, locations, countAt, fields, onUplo
   return (
     <Modal visible animationType="slide" onRequestClose={onDiscard}>
       <View style={s.root}>
-        <View style={s.header}><Text style={s.title}>{draft.photos.length > 1 ? `New sequence · ${draft.photos.length} photos` : "New shot"}</Text></View>
+        <Header title={draft.photos.length > 1 ? `New sequence · ${draft.photos.length} photos` : "New shot"} sub="Every field is optional" />
         {portrait ? (
           <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ padding: 16, paddingBottom: 40 }}>
             {photo}
@@ -86,9 +86,8 @@ export function ShotReview({ draft, settings, locations, countAt, fields, onUplo
   );
 }
 
-const s = StyleSheet.create({
-  root: { flex: 1, backgroundColor: colors.bg },
-  header: { paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border },
-  title: { color: colors.text, fontSize: 18, fontWeight: "600" },
-  thumb: { width: 64, height: 48, borderRadius: 6, overflow: "hidden", borderWidth: 2, borderColor: "transparent", backgroundColor: "#000" },
-});
+const useStyles = makeStyles((c) => ({
+  root: { flex: 1, backgroundColor: c.bg },
+  thumb: { width: 68, height: 51, borderRadius: RADIUS.sm, overflow: "hidden", borderWidth: 1, borderColor: c.border, backgroundColor: FIXED.photoBg },
+  thumbOn: { borderWidth: 3, borderColor: c.accent },
+}));

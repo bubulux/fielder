@@ -17,4 +17,5 @@ export const DEFAULT_SETTINGS: Settings = {
   directUpload: false,
   loggingEnabled: false,
   hudEnabled: true,
+  theme: "auto",
 };

@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { ActivityIndicator, Alert, FlatList, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from "react-native";
+import { Alert, FlatList, Pressable, ScrollView, Text, useWindowDimensions, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { dayLight, lightLabel, localDay, shootableWindows, type DayLight, type Interval } from "@fielder/vocab";
+import { dayLight, lightLabel, localDay, PHASE_ICONS, shootableWindows, type DayLight, type Interval } from "@fielder/vocab";
 import { api, cover, type Shot, type ShootingDay } from "../api";
 import { offlineDays, removeOfflineDay, saveDayOffline, type OfflineDay } from "../offline";
-import { FRAME_MODES, frameModeLabel, imageAspect, frameOf, ShotFrame, type FrameMode } from "../components/ShotFrame";
-import { Button, Chip, ChipRow, colors, Sheet } from "../components/ui";
+import { FrameModeSeg, imageAspect, frameOf, ShotFrame, type FrameMode } from "../components/ShotFrame";
+import { Banner, Button, Chip, Empty, Header, Icon, IconButton, SeqBadge, Sheet } from "../components/ui";
+import { makeStyles, num, RADIUS, type, useTheme, type Palette } from "../theme";
 import type { ProjectEntry, Settings } from "../types";
 import { placeLabel, rigLabel, shotTitle, tagsLabel, type useShots } from "./Gallery";
 
@@ -13,7 +14,9 @@ interface Props { settings: Settings; data: ReturnType<typeof useShots>; project
 
 const NAV = 88;
 const BERLIN = { lat: 52.52, lon: 13.405 };
-const PHASE_COLORS: Record<string, string> = { night: "#1c2340", dawn: "#e0925a", day: "#f2d36b", dusk: "#b8628a" };
+const phaseFill = (c: Palette, phase: string) => (phase === "dawn" ? c.phaseDawn : phase === "day" ? c.phaseDay : phase === "dusk" ? c.phaseDusk : c.phaseNight);
+const phaseInk = (c: Palette, phase: string) => (phase === "dawn" ? c.onPhaseDawn : phase === "day" ? c.onPhaseDay : phase === "dusk" ? c.onPhaseDusk : c.onPhaseNight);
+const cap = (s: string) => s[0].toUpperCase() + s.slice(1);
 const hhmm = (d: Date) => d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 const windowsText = (w: Interval[]) => (w.length ? w.map((x) => `${hhmm(x.start)}–${hhmm(x.end)}`).join(", ") : "light not on this day");
 const dateLabel = (date: string) => new Date(`${date}T12:00:00`).toLocaleDateString([], { weekday: "short", day: "numeric", month: "short" });
@@ -31,6 +34,8 @@ function centroid(shots: Shot[]) {
  * the camera). A day can be saved offline; it then works without any connection.
  */
 export function ShootDay({ settings, data, project }: Props) {
+  const p = useStyles();
+  const { c } = useTheme();
   const [days, setDays] = useState<ShootingDay[] | null>(null);
   const [offline, setOffline] = useState<OfflineDay[]>(() => offlineDays());
   const [online, setOnline] = useState(true);
@@ -74,36 +79,39 @@ export function ShootDay({ settings, data, project }: Props) {
     ]);
   }
 
-  if (!project) return <Text style={p.status}>Choose a project first (Setup → Project).</Text>;
-  if (online && !days) return <ActivityIndicator color={colors.accent} style={{ marginTop: 40 }} />;
+  if (!project) return <View style={p.root}><Empty icon="folder-alert-outline" title="No project" body="Choose a project first (Setup → Project)." /></View>;
+  if (online && !days) return <View style={p.root}><Empty loading title="Loading shooting days…" /></View>;
 
   if (!day) {
     const today = todayIso();
     return (
-      <View style={{ flex: 1, backgroundColor: colors.bg }}>
-        <View style={p.bar}><Text style={p.barTitle}>Shooting days · {project.name}</Text></View>
-        {!online && <Text style={p.offlineBanner}>Offline: showing the days saved on this phone.</Text>}
+      <View style={p.root}>
+        <Header title="Shooting days" sub={project.name} />
+        {!online && <View style={{ padding: 12, paddingBottom: 0 }}><Banner kind="offline" title="Offline" meta="Showing the days saved on this phone" /></View>}
         <FlatList
           data={list}
           keyExtractor={(d) => d.id}
-          contentContainerStyle={{ padding: 12, gap: 8 }}
+          contentContainerStyle={{ padding: 12, gap: 10 }}
           onRefresh={() => void load()}
           refreshing={false}
-          ListEmptyComponent={<Text style={p.status}>{online ? "No shooting days yet. Plan them in the dashboard's Schedule tab." : "No days saved offline for this project."}</Text>}
+          ListEmptyComponent={<Empty icon="calendar-blank-outline" title={online ? "No shooting days yet" : "Nothing saved offline"} body={online ? "Plan them in the dashboard's Schedule tab." : "Make a day available offline while you have a connection."} />}
           renderItem={({ item }) => {
             const s = saved(item.id);
             const stale = s && item.updated_at && s.day.updated_at !== item.updated_at;
             const progress = busy?.startsWith(`${item.id}:`) ? busy.split(":")[1] : null;
             return (
-              <View style={[p.dayRow, item.date < today && { opacity: 0.6 }]}>
-                <Pressable onPress={() => { setDayId(item.id); setStep(null); }} style={{ flex: 1 }}>
-                  <Text style={p.dayName}>{dateLabel(item.date)}{item.date === today ? " · today" : ""}</Text>
-                  {!!item.title && <Text style={p.daySub}>{item.title}</Text>}
-                  <Text style={p.daySub}>{item.shots.length} shot{item.shots.length === 1 ? "" : "s"}{s ? ` · offline${stale ? " (plan changed)" : ""}` : ""}</Text>
+              <View style={[p.dayRow, item.date === today && p.dayToday]}>
+                <Pressable onPress={() => { setDayId(item.id); setStep(null); }} style={({ pressed }) => [{ flex: 1, flexDirection: "row", alignItems: "center", gap: 10, minHeight: 56 }, pressed && { opacity: 0.7 }]} accessibilityRole="button">
+                  <View style={{ flex: 1 }}>
+                    <Text style={[p.dayName, item.date < today && { color: c.textDim }]}>{dateLabel(item.date)}{item.date === today ? " · today" : ""}</Text>
+                    {!!item.title && <Text style={p.daySub}>{item.title}</Text>}
+                    <Text style={[p.daySub, num]}>{item.shots.length} shot{item.shots.length === 1 ? "" : "s"}{s ? ` · offline${stale ? " (plan changed)" : ""}` : ""}</Text>
+                  </View>
+                  <Icon name="chevron-right" />
                 </Pressable>
                 {online && (progress ? <Text style={p.progress}>{progress}</Text>
-                  : s && !stale ? <Pressable onPress={() => dropOffline(item)} hitSlop={8}><Text style={p.offlineOn}>✓ offline</Text></Pressable>
-                  : <Pressable onPress={() => void makeOffline(item)} hitSlop={8}><Text style={p.offlineBtn}>{stale ? "Update offline" : "Make offline"}</Text></Pressable>)}
+                  : s && !stale ? <Chip icon="cloud-check-outline" label="Offline" selected onPress={() => dropOffline(item)} />
+                  : <Chip icon="cloud-download-outline" label={stale ? "Update offline" : "Make offline"} onPress={() => void makeOffline(item)} />)}
               </View>
             );
           }}
@@ -128,34 +136,38 @@ function useDayLight(day: ShootingDay, shots: Shot[]): { light: DayLight; start:
 }
 
 function DayOverview({ day, shots, online, onBack, onStart, settings }: { day: ShootingDay; shots: Shot[]; online: boolean; onBack: () => void; onStart: (i: number) => void; settings: Settings }) {
+  const p = useStyles();
+  const { c } = useTheme();
   const { light, start, hours } = useDayLight(day, shots);
   const now = new Date();
   const current = light.phases.find((ph) => now >= ph.start && now < ph.end && day.date === todayIso());
   const plannedOf = (id: string) => day.shots.find((x) => x.shot_id === id)?.planned_time ?? null;
   let lastLocation = "";
   return (
-    <View style={{ flex: 1, backgroundColor: colors.bg }}>
-      <View style={[p.bar, { flexDirection: "row", alignItems: "center", gap: 12 }]}>
-        <Pressable onPress={onBack} hitSlop={8}><Text style={{ color: colors.accent, fontSize: 15 }}>‹ Days</Text></Pressable>
-        <Text style={[p.barTitle, { flex: 1 }]} numberOfLines={1}>{dateLabel(day.date)}{day.title ? ` · ${day.title}` : ""}</Text>
-      </View>
-      <ScrollView contentContainerStyle={{ padding: 12, paddingBottom: 32 }}>
+    <View style={p.root}>
+      <Header title={dateLabel(day.date)} sub={[day.title, `${shots.length} shot${shots.length === 1 ? "" : "s"}`].filter(Boolean).join(" · ")} onBack={onBack} backLabel="Days" />
+      <ScrollView contentContainerStyle={{ padding: 12, paddingBottom: 32, gap: 10 }}>
+        {!online && <Banner kind="offline" title="Offline copy" meta="Saved on this phone" />}
         <View style={p.lightBox}>
           <View style={p.bar24}>
-            {light.phases.map((ph) => (
-              <View key={ph.start.toISOString()} style={{ position: "absolute", top: 0, bottom: 0, left: `${pct(ph.start, start, hours)}%`, width: `${pct(ph.end, start, hours) - pct(ph.start, start, hours)}%`, backgroundColor: PHASE_COLORS[ph.phase] }} />
-            ))}
+            {light.phases.map((ph) => {
+              const w = pct(ph.end, start, hours) - pct(ph.start, start, hours);
+              return (
+                <View key={ph.start.toISOString()} style={[p.seg, { left: `${pct(ph.start, start, hours)}%`, width: `${w}%`, backgroundColor: phaseFill(c, ph.phase) }]}>
+                  {w > 7 && <Icon name={PHASE_ICONS[ph.phase]} size={16} color={phaseInk(c, ph.phase)} />}
+                </View>
+              );
+            })}
             {day.date === todayIso() && <View style={[p.nowMark, { left: `${pct(now, start, hours)}%` }]} />}
           </View>
-          <Text style={p.lightText}>
+          {current && <Text style={p.now}>Now: {current.phase} until {hhmm(current.end)}</Text>}
+          <Text style={[p.lightText, num]}>
             {light.sunrise ? `Sunrise ${hhmm(light.sunrise)}` : ""}{light.sunset ? ` · Sunset ${hhmm(light.sunset)}` : ""}
           </Text>
-          <Text style={p.lightText}>{light.phases.filter((ph) => ph.phase === "dawn" || ph.phase === "dusk").map((ph) => `${ph.phase} ${hhmm(ph.start)}–${hhmm(ph.end)}`).join(" · ")}</Text>
-          {current && <Text style={[p.lightText, { color: colors.accent }]}>Now: {current.phase} until {hhmm(current.end)}</Text>}
-          {!!day.notes && <Text style={[p.lightText, { color: colors.text, marginTop: 6 }]}>{day.notes}</Text>}
+          <Text style={[p.lightText, num]}>{light.phases.filter((ph) => ph.phase === "dawn" || ph.phase === "dusk").map((ph) => `${cap(ph.phase)} ${hhmm(ph.start)}–${hhmm(ph.end)}`).join(" · ")}</Text>
+          {!!day.notes && <Text style={p.notes}>{day.notes}</Text>}
         </View>
-        {!online && <Text style={p.offlineBanner}>Offline copy</Text>}
-        {shots.length === 0 && <Text style={p.status}>No shots on this day.</Text>}
+        {shots.length === 0 && <Empty icon="image-off-outline" title="No shots on this day" />}
         {shots.map((s, i) => {
           const loc = placeLabel(s) || "No location";
           const header = loc !== lastLocation ? loc : null;
@@ -164,20 +176,21 @@ function DayOverview({ day, shots, online, onBack, onStart, settings }: { day: S
           const planned = plannedOf(s.id);
           return (
             <View key={s.id}>
-              {header && <Text style={p.locHeader}>{header}</Text>}
-              <Pressable onPress={() => onStart(i)} style={p.shotRow}>
-                <ShotFrame photo={cover(s)} width={110} settings={settings} mode="fit" style={{ borderRadius: 6 }} />
-                <View style={{ flex: 1 }}>
+              {header && <View style={p.locHeader}><Icon name="map-marker-outline" size={20} /><Text style={p.locHeaderText}>{header}</Text></View>}
+              <Pressable onPress={() => onStart(i)} style={({ pressed }) => [p.shotRow, pressed && { backgroundColor: c.surfaceSunken }]} accessibilityRole="button">
+                <ShotFrame photo={cover(s)} width={110} settings={settings} mode="fit" style={{ borderRadius: RADIUS.xs }} />
+                <View style={{ flex: 1, gap: 2 }}>
                   <Text style={p.shotName} numberOfLines={1}>{i + 1}. {shotTitle(s)}</Text>
-                  {!!planned && <Text style={[p.daySub, { color: colors.accent }]}>Planned {planned}</Text>}
-                  <Text style={p.daySub}>{lightLabel(s.light, s.artificial) || "any light"} · {windowsText(w)}</Text>
-                  {s.photos.length > 1 && <Text style={p.daySub}>{s.photos.length} photos</Text>}
+                  {!!planned && <Text style={[p.planned, num]}>Planned {planned}</Text>}
+                  <Text style={[p.daySub, num]}>{lightLabel(s.light, s.artificial) || "Any light"} · {windowsText(w)}</Text>
+                  {s.photos.length > 1 && <SeqBadge count={s.photos.length} />}
                 </View>
+                <Icon name="chevron-right" />
               </Pressable>
             </View>
           );
         })}
-        {shots.length > 0 && <Button label="Start from the first shot" onPress={() => onStart(0)} />}
+        {shots.length > 0 && <Button label="Start from the first shot" icon="play" onPress={() => onStart(0)} />}
       </ScrollView>
     </View>
   );
@@ -187,6 +200,8 @@ const pct = (d: Date, start: Date, hours: number) => Math.max(0, Math.min(100, (
 
 /** Big-button stepping through the day's shots (the old Prep mode), one photo at a time. */
 function StepThrough({ settings, day, shots, index, onIndex, onBack }: { settings: Settings; day: ShootingDay; shots: Shot[]; index: number; onIndex: (i: number) => void; onBack: () => void }) {
+  const p = useStyles();
+  const { c } = useTheme();
   const { width, height } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const portrait = height >= width;
@@ -200,7 +215,7 @@ function StepThrough({ settings, day, shots, index, onIndex, onBack }: { setting
   const photo = shot.photos[Math.min(photoIndex, shot.photos.length - 1)];
   const planned = day.shots.find((x) => x.shot_id === shot.id)?.planned_time;
   const atStart = index === 0, atEnd = index === shots.length - 1;
-  const barH = 56;
+  const barH = 64;
   const availW = portrait ? width - 24 : width - 2 * NAV - 24;
   const availH = portrait ? height - barH - NAV - 60 - insets.top : height - barH - 60;
   const f = frameOf(photo);
@@ -210,35 +225,26 @@ function StepThrough({ settings, day, shots, index, onIndex, onBack }: { setting
   const navBtn = (dir: -1 | 1) => {
     const disabled = dir < 0 ? atStart : atEnd;
     return (
-      <Pressable onPress={() => onIndex(index + dir)} disabled={disabled} style={[p.nav, portrait ? { flex: 1, height: NAV } : { width: NAV, alignSelf: "stretch" }, disabled && { opacity: 0.25 }]} hitSlop={8}>
-        <Text style={p.navText}>{dir < 0 ? "◀" : "▶"}</Text>
+      <Pressable onPress={() => onIndex(index + dir)} disabled={disabled} accessibilityRole="button" accessibilityLabel={dir < 0 ? "Previous shot" : "Next shot"}
+        style={({ pressed }) => [p.nav, portrait ? { flex: 1, height: NAV } : { width: NAV, alignSelf: "stretch" }, pressed && { backgroundColor: c.accent }, disabled && p.navOff]}>
+        {({ pressed }) => <Icon name={dir < 0 ? "chevron-left" : "chevron-right"} size={56} color={disabled ? c.textDisabled : pressed ? c.onAccent : c.chromeText} />}
       </Pressable>
     );
   };
   const image = (
     <View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}>
       <ShotFrame photo={photo} width={imgW} settings={settings} mode={mode} />
-      <View style={{ marginTop: 8, flexDirection: "row", gap: 12, alignItems: "center" }}>
-        <ChipRow>{FRAME_MODES.map((m) => <Chip key={m} label={frameModeLabel(m)} selected={mode === m} onPress={() => setMode(m)} />)}</ChipRow>
-        {shot.photos.length > 1 && (
-          <Pressable onPress={() => setPhotoIndex((photoIndex + 1) % shot.photos.length)} hitSlop={8}>
-            <Text style={{ color: colors.accent, fontWeight: "600" }}>photo {photoIndex + 1}/{shot.photos.length} ›</Text>
-          </Pressable>
-        )}
+      <View style={{ marginTop: 8, flexDirection: "row", gap: 12, alignItems: "center", flexWrap: "wrap", justifyContent: "center" }}>
+        <FrameModeSeg value={mode} onChange={setMode} />
+        {shot.photos.length > 1 && <Chip icon="layers-triple-outline" label={`Photo ${photoIndex + 1}/${shot.photos.length}`} onPress={() => setPhotoIndex((photoIndex + 1) % shot.photos.length)} />}
       </View>
     </View>
   );
 
   return (
-    <View style={{ flex: 1, backgroundColor: colors.bg }}>
-      <View style={[p.bar, { height: barH, flexDirection: "row", alignItems: "center", gap: 12 }]}>
-        <Pressable onPress={onBack} hitSlop={8}><Text style={{ color: colors.accent, fontSize: 15 }}>‹ Day</Text></Pressable>
-        <View style={{ flex: 1 }}>
-          <Text style={p.barTitle} numberOfLines={1}>{index + 1}/{shots.length} · {shotTitle(shot)}</Text>
-          <Text style={p.daySub} numberOfLines={1}>{[placeLabel(shot), planned ? `planned ${planned}` : null, windowsText(shootableWindows(light, shot.light))].filter(Boolean).join(" · ")}</Text>
-        </View>
-        <Pressable onPress={() => setInfo(true)} hitSlop={8} style={p.infoBtn}><Text style={p.infoText}>i</Text></Pressable>
-      </View>
+    <View style={p.root}>
+      <Header title={`${index + 1}/${shots.length} · ${shotTitle(shot)}`} sub={[placeLabel(shot), planned ? `planned ${planned}` : null, windowsText(shootableWindows(light, shot.light))].filter(Boolean).join(" · ")}
+        onBack={onBack} backLabel="Day" right={<IconButton icon="information-outline" label="Shot details" onPress={() => setInfo(true)} />} />
       {portrait ? (
         <>
           {image}
@@ -248,8 +254,8 @@ function StepThrough({ settings, day, shots, index, onIndex, onBack }: { setting
         <View style={{ flex: 1, flexDirection: "row" }}>{navBtn(-1)}{image}{navBtn(1)}</View>
       )}
       <Sheet visible={info} title={shotTitle(shot)} onClose={() => setInfo(false)}>
-        <Text style={p.infoLine}>{placeLabel(shot) || "no location"}</Text>
-        <Text style={p.infoDim}>{tagsLabel(shot) || "no tags"}</Text>
+        <Text style={p.infoLine}>{placeLabel(shot) || "No location"}</Text>
+        <Text style={p.infoDim}>{tagsLabel(shot) || "No tags"}</Text>
         <Text style={p.infoDim}>{rigLabel(photo)}</Text>
         <Text style={p.infoDim}>{new Date(shot.captured_at).toLocaleString()}</Text>
         <Text style={p.infoDim}>{photo.lat.toFixed(5)}, {photo.lon.toFixed(5)}</Text>
@@ -259,28 +265,27 @@ function StepThrough({ settings, day, shots, index, onIndex, onBack }: { setting
   );
 }
 
-const p = StyleSheet.create({
-  bar: { paddingHorizontal: 12, paddingVertical: 8, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border },
-  barTitle: { color: colors.text, fontSize: 16, fontWeight: "600" },
-  status: { color: colors.dim, textAlign: "center", marginTop: 40, paddingHorizontal: 24 },
-  offlineBanner: { color: "#000", backgroundColor: colors.accent, textAlign: "center", paddingVertical: 4, fontSize: 12, fontWeight: "600", marginBottom: 8 },
-  dayRow: { flexDirection: "row", alignItems: "center", backgroundColor: colors.panel, borderWidth: 1, borderColor: colors.border, borderRadius: 10, padding: 14, gap: 12 },
-  dayName: { color: colors.text, fontSize: 16, fontWeight: "600" },
-  daySub: { color: colors.dim, fontSize: 12, marginTop: 2 },
-  offlineBtn: { color: colors.accent, fontSize: 13, fontWeight: "600" },
-  offlineOn: { color: colors.ok, fontSize: 13, fontWeight: "600" },
-  progress: { color: colors.dim, fontSize: 13, fontVariant: ["tabular-nums"] },
-  lightBox: { backgroundColor: colors.panel, borderWidth: 1, borderColor: colors.border, borderRadius: 10, padding: 12, marginBottom: 12 },
-  bar24: { height: 18, borderRadius: 4, overflow: "hidden", position: "relative", marginBottom: 8 },
-  nowMark: { position: "absolute", top: -2, bottom: -2, width: 3, marginLeft: -1, backgroundColor: "#fff" },
-  lightText: { color: colors.dim, fontSize: 12, marginTop: 2 },
-  locHeader: { color: colors.text, fontSize: 14, fontWeight: "700", marginTop: 12, marginBottom: 6 },
-  shotRow: { flexDirection: "row", gap: 12, alignItems: "center", backgroundColor: colors.panel, borderWidth: 1, borderColor: colors.border, borderRadius: 10, padding: 8, marginBottom: 8 },
-  shotName: { color: colors.text, fontSize: 15, fontWeight: "600" },
-  nav: { alignItems: "center", justifyContent: "center" },
-  navText: { color: colors.text, fontSize: 40 },
-  infoBtn: { width: 28, height: 28, borderRadius: 14, borderWidth: 1, borderColor: colors.accent, alignItems: "center", justifyContent: "center" },
-  infoText: { color: colors.accent, fontWeight: "700", fontStyle: "italic" },
-  infoLine: { color: colors.text, fontSize: 15, marginTop: 8 },
-  infoDim: { color: colors.dim, marginTop: 6 },
-});
+const useStyles = makeStyles((c) => ({
+  root: { flex: 1, backgroundColor: c.bg },
+  dayRow: { flexDirection: "row", alignItems: "center", gap: 10, backgroundColor: c.surface, borderWidth: 1, borderColor: c.border, borderRadius: RADIUS.md, paddingVertical: 8, paddingHorizontal: 12 },
+  dayToday: { borderWidth: 2, borderColor: c.accent },
+  dayName: { ...type("body", "bold"), color: c.text },
+  daySub: { ...type("caption"), color: c.textDim },
+  planned: { ...type("caption", "bold"), color: c.text },
+  progress: { ...type("small", "bold"), color: c.text, ...num },
+  lightBox: { backgroundColor: c.surface, borderWidth: 1, borderColor: c.border, borderRadius: RADIUS.md, padding: 12, gap: 4 },
+  bar24: { height: 30, borderRadius: RADIUS.xs, overflow: "hidden", position: "relative", marginBottom: 6, borderWidth: 1, borderColor: c.border },
+  seg: { position: "absolute", top: 0, bottom: 0, alignItems: "center", justifyContent: "center" },
+  nowMark: { position: "absolute", top: 0, bottom: 0, width: 3, marginLeft: -1, backgroundColor: c.accent },
+  now: { ...type("body", "heavy"), color: c.text },
+  lightText: { ...type("small"), color: c.textDim },
+  notes: { ...type("small"), color: c.text, marginTop: 6 },
+  locHeader: { flexDirection: "row", alignItems: "center", gap: 6, marginTop: 8, marginBottom: 6 },
+  locHeaderText: { ...type("overline", "bold"), color: c.text },
+  shotRow: { flexDirection: "row", gap: 12, alignItems: "center", backgroundColor: c.surface, borderWidth: 1, borderColor: c.border, borderRadius: RADIUS.md, padding: 8, marginBottom: 8, minHeight: 64 },
+  shotName: { ...type("body", "bold"), color: c.text },
+  nav: { alignItems: "center", justifyContent: "center", backgroundColor: c.chromeBg, borderColor: c.chromeBorder, borderWidth: 2 },
+  navOff: { borderStyle: "dashed", borderColor: c.textDisabled },
+  infoLine: { ...type("body", "semibold"), color: c.text, marginTop: 12 },
+  infoDim: { ...type("small"), color: c.textDim, marginTop: 6 },
+}));

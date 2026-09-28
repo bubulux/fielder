@@ -1,5 +1,6 @@
 import { StyleSheet, Text, View } from "react-native";
 import type { Box, Rect } from "../framing";
+import { FIXED, FONT } from "../theme";
 import type { Settings } from "../types";
 
 interface Props {
@@ -9,16 +10,24 @@ interface Props {
   exceedsPreview: boolean;
   /** Optional human-view reference frame (thin cyan line, no blackout). */
   human?: { rect: Rect; fits: boolean } | null;
+  /** Stored photos: neutral mask and white frame regardless of the live-view settings (photos never take a colour). */
+  neutral?: boolean;
 }
 
-export const HUMAN_COLOR = "#00E5FF";
+export const HUMAN_COLOR = FIXED.human;
 
-/** Frame rectangle plus optional blackout outside it. Pure layout, no per-frame work. */
-export function Overlay({ preview, rect, settings, exceedsPreview, human }: Props) {
+/**
+ * Frame rectangle plus optional blackout outside it. Pure layout, no per-frame work.
+ * The frame line has a 1 dp black outline on both sides so it reads over sky and shadow alike.
+ */
+export function Overlay({ preview, rect, settings, exceedsPreview, human, neutral }: Props) {
   const right = preview.width - rect.left - rect.width;
   const bottom = preview.height - rect.top - rect.height;
-  const tint = settings.blackoutEnabled ? settings.blackoutColor : "transparent";
-  const borderColor = settings.borderColor;
+  const tint = neutral ? FIXED.mask : settings.blackoutColor;
+  const borderColor = neutral ? FIXED.frameLine : settings.borderColor;
+  const bw = neutral ? 2 : settings.borderWidthPx;
+  // dashed = the frame extends beyond what the phone can see
+  const style = exceedsPreview ? "dashed" : "solid";
   return (
     <View pointerEvents="none" style={[StyleSheet.absoluteFill, { width: preview.width, height: preview.height }]}>
       {settings.blackoutEnabled && (
@@ -29,18 +38,9 @@ export function Overlay({ preview, rect, settings, exceedsPreview, human }: Prop
           <View style={{ position: "absolute", right: 0, top: rect.top, width: right, height: rect.height, backgroundColor: tint }} />
         </>
       )}
-      <View
-        style={{
-          position: "absolute",
-          left: rect.left,
-          top: rect.top,
-          width: rect.width,
-          height: rect.height,
-          borderWidth: settings.borderWidthPx,
-          borderColor,
-          borderStyle: exceedsPreview ? "dashed" : "solid", // dashed = frame extends beyond what the phone can see
-        }}
-      />
+      <View style={{ position: "absolute", left: rect.left - 1, top: rect.top - 1, width: rect.width + 2, height: rect.height + 2, borderWidth: 1, borderColor: FIXED.frameOutline, borderStyle: style }} />
+      <View style={{ position: "absolute", left: rect.left, top: rect.top, width: rect.width, height: rect.height, borderWidth: bw, borderColor, borderStyle: style }} />
+      <View style={{ position: "absolute", left: rect.left + bw, top: rect.top + bw, width: Math.max(0, rect.width - 2 * bw), height: Math.max(0, rect.height - 2 * bw), borderWidth: 1, borderColor: FIXED.frameOutline, borderStyle: style }} />
       {human && (
         <View
           style={{
@@ -49,14 +49,19 @@ export function Overlay({ preview, rect, settings, exceedsPreview, human }: Prop
             top: human.rect.top,
             width: human.rect.width,
             height: human.rect.height,
-            borderWidth: 1,
+            borderWidth: 1.5,
             borderColor: HUMAN_COLOR,
             borderStyle: human.fits ? "solid" : "dashed",
           }}
         >
-          <Text style={{ position: "absolute", left: 4, top: 2, color: HUMAN_COLOR, fontSize: 10, letterSpacing: 0.5 }}>human</Text>
+          <Text style={s.humanLabel}>HUMAN</Text>
         </View>
       )}
     </View>
   );
 }
+
+const s = StyleSheet.create({
+  // Solid black tag: readable over any image.
+  humanLabel: { position: "absolute", left: -1.5, top: -1.5, backgroundColor: FIXED.black, color: HUMAN_COLOR, fontFamily: FONT.bold, fontSize: 10, letterSpacing: 0.6, paddingHorizontal: 5, paddingVertical: 3 },
+});

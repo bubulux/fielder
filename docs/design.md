@@ -10,6 +10,7 @@ Both themes are high contrast, and both follow the OS by default.
 
 Switching:
 - **Dashboard**: header switch Auto / Sun / Set. Stored in `localStorage["theme"]`; absent means Auto. An inline script in `index.html` sets `data-theme` on `<html>` before first paint; `src/theme.ts` keeps it in sync.
+- **Phone**: `settings.theme` (`"auto" | "sun" | "set"`), set in Setup → Display, or with the Sun/Set button on the camera screen (one tap flips it and leaves Auto). Auto uses `useColorScheme()` (`app.json` has `userInterfaceStyle: "automatic"`).
 
 ## Rules
 
@@ -35,6 +36,7 @@ Switching:
 
 | Surface | Files |
 | --- | --- |
+| Phone | `apps/mobile/src/theme.tsx`: the Sun and Set palettes (from `fielder-tokens.rn.json`), `FIXED` colours for things over photos, the type scale (`type(step, weight)`: the custom font needs a family per weight, so use it instead of `fontWeight`), `RADIUS`, `SIZE`, `BORDER`, `ThemeProvider`, `useTheme()` and `makeStyles()` (a themed `StyleSheet`, built once per theme). `components/ui.tsx` holds the primitives (`Icon`, `Button`, `IconButton`, `Chip`, `Seg`, `Toggle`, `Input`, `Sheet`, `Header`, `Row`, `StateMarker`, `SeqBadge`, `Banner`, `Empty`, `Hint`). Icons come from `@expo/vector-icons/MaterialCommunityIcons`; the font from `@expo-google-fonts/atkinson-hyperlegible-next` (only the five weights used are imported, per weight). Maps in WebViews share `components/mapHtml.ts`. Control borders are 2 dp and touch targets at least 48 dp. |
 | Dashboard | `apps/dashboard/src/design/*.css`: tokens (`colors.css`, `typography.css`, `spacing.css`) and component classes (`f-btn`, `f-tab`, `f-seg`, `f-chip`, `f-input`, `f-combo__*`, `f-card`, `f-state`, `f-seq`, `f-tl__*`, `f-wx__*`, `f-pin`, …), copied unchanged from the export. `src/ui.tsx` wraps the common ones (`Icon`, `Seg`, `Chip`, `LightChips`, `StateMarker`, `SeqBadge`, `Empty`, `Loading`, `ErrorLine`). `src/styles.css` holds only the layouts and must use tokens. Fonts and the MDI webfont are loaded in `index.html`. |
 
-To update the design system: re-export from Claude Design, copy the changed CSS over `apps/dashboard/src/design/`, and check the pages that use it.
+To update the design system: re-export from Claude Design, copy the changed CSS over `apps/dashboard/src/design/`, carry colour changes into the palettes in `apps/mobile/src/theme.tsx`, and check the screens that use them.

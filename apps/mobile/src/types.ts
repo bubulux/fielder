@@ -48,6 +48,8 @@ export interface Settings {
   loggingEnabled: boolean;
   /** Show the info overlay (rig, math, warnings) on the live view. */
   hudEnabled: boolean;
+  /** "auto" follows the phone's dark mode; "sun" = light (daylight), "set" = dark. */
+  theme: "auto" | "sun" | "set";
 }
 
 /** Scouting tags entered in the review form after capture. Values are @fielder/vocab ids; null / [] / false = not specified. */

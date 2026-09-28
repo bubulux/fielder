@@ -1,14 +1,15 @@
 import { useEffect, useMemo, useState } from "react";
-import { ActivityIndicator, Alert, ScrollView, StyleSheet, Text, useWindowDimensions, View } from "react-native";
+import { Alert, Pressable, ScrollView, Text, useWindowDimensions, View } from "react-native";
 import { api, type Shot } from "../api";
 import { PhotoStrip } from "../components/PhotoStrip";
-import { FRAME_MODES, frameModeLabel, ShotFrame, type FrameMode } from "../components/ShotFrame";
+import { FrameModeSeg, ShotFrame, type FrameMode } from "../components/ShotFrame";
 import { TagsForm } from "../components/TagsForm";
-import { Button, Chip, ChipRow, colors } from "../components/ui";
+import { Button, Empty, Icon, StateMarker } from "../components/ui";
+import { makeStyles, num, RADIUS, type, useTheme } from "../theme";
 import { ensureLocation } from "../namedSync";
 import { store } from "../storage";
 import type { LocationEntry, Settings, ShotTags } from "../types";
-import { badgeOf, photoCountLabel, placeLabel, rigLabel, shotTitle, tagsLabel, type useShots } from "./Gallery";
+import { photoCountLabel, placeLabel, rigLabel, shotTitle, tagsLabel, type useShots } from "./Gallery";
 
 interface Props {
   settings: Settings;
@@ -22,6 +23,8 @@ const fmt = (iso: string) => new Date(iso).toLocaleString();
 
 /** Unreviewed shots one at a time, oldest first, with prev/next. Approve or Archive (both keep the photos); details are edited in place. */
 export function Review({ settings, data, locations, onLocations, countAt }: Props) {
+  const r = useStyles();
+  const { c } = useTheme();
   const { width, height } = useWindowDimensions();
   const portrait = height >= width;
   const [mode, setMode] = useState<FrameMode>("mask");
@@ -66,19 +69,17 @@ export function Review({ settings, data, locations, onLocations, countAt }: Prop
       { text: "Delete", style: "destructive", onPress: async () => { try { await api.deleteShot(shot.id); remove(shot.id); } catch (e) { Alert.alert("Delete failed", String(e)); } } },
     ]);
 
-  if (error) return <Text style={r.status}>Could not load: {error}</Text>;
-  if (!shots) return <ActivityIndicator color={colors.accent} style={{ marginTop: 40 }} />;
-  if (!current) return <View style={{ flex: 1, backgroundColor: colors.bg }}><Text style={r.status}>Nothing to review.</Text></View>;
+  if (error) return <View style={r.root}><Empty icon="cloud-alert" title="Could not load" body={error} /></View>;
+  if (!shots) return <View style={r.root}><Empty loading title="Loading shots…" /></View>;
+  if (!current) return <View style={r.root}><Empty icon="check-all" title="Nothing to review" body="New shots show up here after they are uploaded." /></View>;
 
   const photo = current.photos[Math.min(photoIndex, current.photos.length - 1)];
   const photoWidth = portrait ? width - 32 : Math.min(width * 0.55, height * 1.25);
   const photoView = (
     <View style={{ alignItems: "center" }}>
-      <ShotFrame photo={photo} width={photoWidth} settings={settings} mode={mode} style={{ borderRadius: 8 }} />
+      <ShotFrame photo={photo} width={photoWidth} settings={settings} mode={mode} style={{ borderRadius: RADIUS.sm }} />
       <PhotoStrip shot={current} index={photoIndex} onPick={setPhotoIndex} />
-      <View style={{ marginTop: 8 }}>
-        <ChipRow>{FRAME_MODES.map((m) => <Chip key={m} label={frameModeLabel(m)} selected={mode === m} onPress={() => setMode(m)} />)}</ChipRow>
-      </View>
+      <View style={{ marginTop: 8 }}><FrameModeSeg value={mode} onChange={setMode} /></View>
     </View>
   );
   const info = editing ? (
@@ -97,27 +98,27 @@ export function Review({ settings, data, locations, onLocations, countAt }: Prop
   ) : (
     <View style={{ flex: 1 }}>
       <Text style={r.title}>{shotTitle(current)}</Text>
-      <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginTop: 4 }}>{badgeOf(current)}<Text style={r.line}>{placeLabel(current) || "no location"}</Text></View>
+      <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginTop: 6 }}><StateMarker state={current.state} /><Text style={r.line}>{placeLabel(current) || "No location"}</Text></View>
       {!!tagsLabel(current) && <Text style={r.dim}>{tagsLabel(current)}</Text>}
       <Text style={r.dim}>{rigLabel(photo)}</Text>
-      <Text style={r.dim}>{[fmt(current.captured_at), photoCountLabel(current)].filter(Boolean).join(" · ")}</Text>
+      <Text style={[r.dim, num]}>{[fmt(current.captured_at), photoCountLabel(current)].filter(Boolean).join(" · ")}</Text>
       <View style={{ flexDirection: "row", gap: 12, marginTop: 12 }}>
-        <View style={{ flex: 1 }}><Button label="Archive" kind="archive" onPress={() => void setState(current, "archived")} disabled={busy} /></View>
-        <View style={{ flex: 1 }}><Button label="Approve" kind="approve" onPress={() => void setState(current, "approved")} disabled={busy} /></View>
+        <View style={{ flex: 1 }}><Button label="Archive" icon="archive-outline" kind="archive" onPress={() => void setState(current, "archived")} disabled={busy} /></View>
+        <View style={{ flex: 1 }}><Button label="Approve" icon="check" kind="approve" onPress={() => void setState(current, "approved")} disabled={busy} /></View>
       </View>
       <View style={{ flexDirection: "row", gap: 12 }}>
-        <View style={{ flex: 2 }}><Button label="Edit details" kind="ghost" onPress={() => setEditing(true)} /></View>
-        <View style={{ flex: 1 }}><Button label="Delete" kind="danger" onPress={() => del(current)} /></View>
+        <View style={{ flex: 2 }}><Button label="Edit details" icon="pencil-outline" kind="ghost" onPress={() => setEditing(true)} /></View>
+        <View style={{ flex: 1 }}><Button label="Delete" icon="delete-outline" kind="danger" onPress={() => del(current)} /></View>
       </View>
     </View>
   );
 
   return (
-    <View style={{ flex: 1, backgroundColor: colors.bg }}>
+    <View style={r.root}>
       <View style={r.bar}>
-        <Text style={[r.nav, index === 0 && r.navOff]} onPress={() => go(-1)} suppressHighlighting>‹ Prev</Text>
+        <NavButton dir={-1} disabled={index === 0} onPress={() => go(-1)} />
         <Text style={r.barTitle}>{index + 1} / {queue.length} to review</Text>
-        <Text style={[r.nav, index === queue.length - 1 && r.navOff]} onPress={() => go(1)} suppressHighlighting>Next ›</Text>
+        <NavButton dir={1} disabled={index === queue.length - 1} onPress={() => go(1)} />
       </View>
       {portrait ? (
         <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ padding: 16, paddingBottom: 32, gap: 12 }}>{photoView}{info}</ScrollView>
@@ -131,13 +132,29 @@ export function Review({ settings, data, locations, onLocations, countAt }: Prop
   );
 }
 
-const r = StyleSheet.create({
-  bar: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 12, paddingVertical: 8, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border },
-  barTitle: { color: colors.text, fontSize: 16, fontWeight: "600" },
-  nav: { color: colors.accent, fontSize: 16, fontWeight: "600", paddingHorizontal: 8, paddingVertical: 6 },
-  navOff: { opacity: 0.25 },
-  status: { color: colors.dim, textAlign: "center", marginTop: 40 },
-  title: { color: colors.text, fontSize: 18, fontWeight: "600" },
-  line: { color: colors.text, fontSize: 15 },
-  dim: { color: colors.dim, marginTop: 4 },
-});
+/** Big Prev/Next in the top bar: outlined, dashed when there is nothing that way. */
+function NavButton({ dir, disabled, onPress }: { dir: -1 | 1; disabled: boolean; onPress: () => void }) {
+  const r = useStyles();
+  const { c } = useTheme();
+  const fg = disabled ? c.textDisabled : c.text;
+  return (
+    <Pressable onPress={onPress} disabled={disabled} accessibilityRole="button" accessibilityLabel={dir < 0 ? "Previous shot" : "Next shot"}
+      style={({ pressed }) => [r.nav, pressed && { backgroundColor: c.surfaceSunken }, disabled && r.navOff]}>
+      {dir < 0 && <Icon name="chevron-left" color={fg} />}
+      <Text style={[r.navText, { color: fg }]}>{dir < 0 ? "Prev" : "Next"}</Text>
+      {dir > 0 && <Icon name="chevron-right" color={fg} />}
+    </Pressable>
+  );
+}
+
+const useStyles = makeStyles((c) => ({
+  root: { flex: 1, backgroundColor: c.bg },
+  bar: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8, paddingHorizontal: 10, paddingVertical: 8, backgroundColor: c.surface, borderBottomWidth: 2, borderBottomColor: c.border },
+  barTitle: { ...type("body", "bold"), color: c.text, ...num },
+  nav: { flexDirection: "row", alignItems: "center", gap: 2, minHeight: 48, paddingHorizontal: 10, borderRadius: RADIUS.sm, borderWidth: 2, borderColor: c.border },
+  navOff: { borderStyle: "dashed", borderColor: c.textDisabled },
+  navText: { ...type("label", "bold") },
+  title: { ...type("heading", "bold"), color: c.text },
+  line: { ...type("body", "semibold"), color: c.text, flexShrink: 1 },
+  dim: { ...type("small"), color: c.textDim, marginTop: 4 },
+}));

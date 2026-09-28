@@ -4,7 +4,7 @@ import { offlinePhotoUri } from "../offline";
 import type { Settings } from "../types";
 import { FramedImage, type FrameFractions, type FrameMode } from "./FramedImage";
 
-export { FRAME_MODES, frameModeLabel, type FrameMode } from "./FramedImage";
+export { FRAME_MODES, FrameModeSeg, frameModeLabel, type FrameMode } from "./FramedImage";
 
 export function frameOf(photo: Photo): FrameFractions | null {
   const fr = photo.framing?.frame as { width_fraction?: unknown; height_fraction?: unknown } | undefined;

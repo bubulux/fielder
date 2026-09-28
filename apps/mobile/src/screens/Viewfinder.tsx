@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { ActivityIndicator, Alert, Platform, Pressable, StyleSheet, Text, View, type LayoutChangeEvent } from "react-native";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import * as Location from "expo-location";
@@ -24,17 +24,19 @@ import { LensSheet } from "../components/LensSheet";
 import { HUMAN_COLOR, Overlay } from "../components/Overlay";
 import { PresetSheet } from "../components/PresetSheet";
 import { ShotReview } from "./ShotReview";
-import { colors } from "../components/ui";
+import { Button, Empty, Icon, SeqBadge } from "../components/ui";
+import { FIXED, makeStyles, num, RADIUS, SIZE, type, useTheme } from "../theme";
 
-const CONTROLS_SIZE = 104;
-const LENS_STRIP = 72;
+/** Control panel: lens strip + two rows in portrait, a right-hand panel in landscape. */
+const CONTROLS_H = 68 + 56 + 10 + SIZE.shutter + 20;
+const CONTROLS_W = 2 * 56 + 8 + 18;
+const LENS_STRIP = 76;
 /** Minimum clearance between the lens strip and the screen edge (camera cutout in landscape). */
 const EDGE_PAD = 32;
 const MAX_UPLOAD_EDGE = 1280;
 const HUMAN_STEPS = [35, 43, 50];
 /** A watched GPS fix younger than this is used as is; otherwise the capture waits briefly for a fresh one. */
 const FIX_MAX_AGE_MS = 15_000;
-const SEQ_COLOR = "#FF3B30";
 
 const NO_TAGS: ShotTags = { name: null, light: [], artificial: false, weather: null, int_ext: null, location_id: null, extra: {} };
 
@@ -54,6 +56,8 @@ interface Props {
 }
 
 export function Viewfinder({ settings, onSettings, active: tabActive, project, shots, locations, onLocations }: Props) {
+  const s = useStyles();
+  const { c, name: themeName } = useTheme();
   const [size, setSize] = useState<Box>({ width: 0, height: 0 });
   const onLayout = (e: LayoutChangeEvent) => {
     const { width, height } = e.nativeEvent.layout;
@@ -77,6 +81,9 @@ export function Viewfinder({ settings, onSettings, active: tabActive, project, s
   const [busy, setBusy] = useState<"capture" | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const pendingCount = usePendingCount();
+  /** Any queued shot the server keeps rejecting (re-read when the queue changes or a flush reports back). */
+  const [stuck, setStuck] = useState(() => store.loadPending().some((p) => p.stuck));
+  useEffect(() => { setStuck(store.loadPending().some((p) => p.stuck)); }, [pendingCount, toast]);
   /** Capture or finished sequence waiting in the tag form. */
   const [draft, setDraft] = useState<CaptureDraft | null>(() => restoreDraft(store.loadCaptureDraft()));
   /** Sequence mode: on while non-null; resumes after an app restart. */
@@ -145,8 +152,8 @@ export function Viewfinder({ settings, onSettings, active: tabActive, project, s
 
   // Layout: preview box fills the space left after the control strip.
   const area: Box = portrait
-    ? { width: window.width, height: Math.max(0, window.height - CONTROLS_SIZE - 64) }
-    : { width: Math.max(0, window.width - CONTROLS_SIZE - LENS_STRIP - lensPad), height: window.height };
+    ? { width: window.width, height: Math.max(0, window.height - CONTROLS_H) }
+    : { width: Math.max(0, window.width - CONTROLS_W - LENS_STRIP - lensPad), height: window.height };
   const preview = useMemo(() => previewBox(area), [area.width, area.height]);
   const overlay = useMemo(
     () => (active ? computeOverlay(settings, active, lensMm, preview) : null),
@@ -344,9 +351,10 @@ export function Viewfinder({ settings, onSettings, active: tabActive, project, s
   if (!camPerm) return <View style={s.root} onLayout={onLayout} />;
   if (!camPerm.granted) {
     return (
-      <View style={[s.root, s.center]}>
-        <Text style={s.msg}>Fielder needs the camera to work as a viewfinder.</Text>
-        <Pressable style={s.primary} onPress={() => void requestCamPerm()}><Text style={s.primaryText}>Grant camera access</Text></Pressable>
+      <View style={[s.root, s.center, { backgroundColor: c.bg }]}>
+        <Empty icon="camera-off" title="Camera access needed" body="Fielder uses the camera as a viewfinder for your rig's frame.">
+          <Button label="Grant camera access" icon="camera-iris" onPress={() => void requestCamPerm()} />
+        </Empty>
       </View>
     );
   }
@@ -356,12 +364,42 @@ export function Viewfinder({ settings, onSettings, active: tabActive, project, s
   );
   const shutterDisabled = !!busy || !active || !cameraReady || !project;
 
+  const gpsWarn = gpsAccuracy == null || gpsAccuracy > 20;
+  const cycleTheme = () => setSettings((x) => ({ ...x, theme: themeName === "sun" ? "set" : "sun" }));
+
+  // Rig · Human · Fit · Light, then Seq · Shutter · Uploads in the thumb zone (a right-hand panel in landscape).
+  const small = (
+    <>
+      <VfButton icon="camera-control" label="Rig" onPress={() => setSheet("rig")} warn={!active} />
+      <VfButton icon="human-male" label={settings.humanViewEnabled ? `Human ${settings.humanViewFocalMm}` : "Human"} onPress={pressHuman} on={settings.humanViewEnabled} />
+      <VfButton icon="fit-to-screen-outline" label="Fit" onPress={() => setSettings((x) => ({ ...x, fitToFrame: !x.fitToFrame }))} on={settings.fitToFrame} />
+      <VfButton icon={torch ? "flashlight" : "flashlight-off"} label="Light" onPress={() => setTorch((t) => !t)} on={torch} />
+    </>
+  );
+  const shutter = (
+    <Pressable onPress={capture} disabled={shutterDisabled} accessibilityRole="button" accessibilityLabel={sequence ? `Capture into sequence (${sequence.photos.length})` : "Capture"}
+      style={[s.shutter, sequence && s.shutterSeq, shutterDisabled && !busy && s.shutterOff]}>
+      {({ pressed }) => busy === "capture"
+        ? <ActivityIndicator color={c.chromeText} size="large" />
+        : <View style={[s.disc, pressed && s.discPressed, sequence && { backgroundColor: FIXED.record }, shutterDisabled && { backgroundColor: "transparent" }]}>
+            {sequence ? <Text style={s.discText}>{sequence.photos.length}</Text> : shutterDisabled ? <Icon name="close" size={28} color={c.textDisabled} /> : null}
+          </View>}
+    </Pressable>
+  );
+  const big = (
+    <>
+      <VfButton icon="layers-triple-outline" label={sequence ? `Seq ${sequence.photos.length}` : "Seq"} onPress={toggleSequence} disabled={!!busy} on={!!sequence} record={!!sequence} />
+      {shutter}
+      <VfButton icon="cloud-upload-outline" label="Uploads" onPress={() => void retryUploads()} count={pendingCount} stuck={stuck} />
+    </>
+  );
+
   return (
     <View style={[s.root, { flexDirection: portrait ? "column" : "row" }]} onLayout={onLayout}>
       <StatusBar hidden />
-      {!portrait && <View style={{ paddingLeft: lensPad, backgroundColor: colors.bg }}>{lensStrip}</View>}
+      {!portrait && <View style={{ paddingLeft: lensPad, backgroundColor: c.chromeBg }}>{lensStrip}</View>}
       <View style={[s.previewArea, { width: area.width, height: area.height }]}>
-        <View style={{ width: preview.width, height: preview.height, backgroundColor: "#000", overflow: "hidden" }}>
+        <View style={{ width: preview.width, height: preview.height, backgroundColor: FIXED.photoBg, overflow: "hidden" }}>
           {window.width > 0 && (
             <CameraView
               ref={camera}
@@ -375,58 +413,59 @@ export function Viewfinder({ settings, onSettings, active: tabActive, project, s
             />
           )}
           {overlay && <Overlay preview={preview} rect={overlay.rect} settings={settings} exceedsPreview={overlay.exceedsPreview} human={overlay.human} />}
-          {/* HUD (can be hidden in Setup; the "no rig" hint always shows) */}
-          {(settings.hudEnabled || !active) && <View style={s.hud} pointerEvents="none">
-            {active && overlay ? (
-              <>
-                <Text style={s.hudProject} numberOfLines={1}>{project?.name ?? "No project"}</Text>
-                <Text style={s.hudMain}>{active.name} · {lensMm} mm{active.speedboosterFactor !== 1 ? ` ×${active.speedboosterFactor}` : ""}</Text>
-                <Text style={s.hudSub}>
-                  {round(overlay.framing.effectiveFocalLengthMm)} mm eff · {round(overlay.framing.fullFrameEquivalentMm)} mm FF-eq · {formatDeg(overlay.framing.fov.horizontal)} × {formatDeg(overlay.framing.fov.vertical)}
-                </Text>
-                <Text style={[s.hudSub, gpsAccuracy != null && gpsAccuracy > 20 && { color: colors.accent }]}>
-                  GPS {gpsAccuracy == null ? "searching…" : `±${Math.round(gpsAccuracy)} m`}
-                </Text>
-                {overlay.exceedsPreview && <Text style={s.hudWarn}>Rig sees more than the phone camera: live image shrunk to fit the frame; black areas are outside the phone's view</Text>}
-                {settings.fitToFrame && !overlay.exceedsPreview && <Text style={s.hudWarn}>Fit: digital zoom ×{(overlay.camera.width / preview.width).toFixed(2)}</Text>}
-                {overlay.human && (
-                  <Text style={[s.hudSub, { color: HUMAN_COLOR }]}>
-                    {overlay.human.relation === "equal"
-                      ? `Rig matches the human view (${overlay.human.focalMm} mm-eq)`
-                      : overlay.human.relation === "wider"
-                        ? `Rig is wider than the human view (${overlay.human.focalMm} mm-eq): cyan frame inside`
-                        : `Rig is narrower than the human view (${overlay.human.focalMm} mm-eq)${overlay.human.fits ? ": cyan frame around it" : "; the cyan frame is outside the preview"}`}
-                  </Text>
-                )}
-              </>
-            ) : (
-              <Text style={s.hudWarn}>No rig selected. Tap "Rig" to create one.</Text>
-            )}
-            {!isConfigured && <Text style={s.hudWarn}>Build has no API configuration; shots stay on device.</Text>}
-            {isConfigured && !authEmail && <Text style={s.hudWarn}>Not signed in: shots are kept on the phone. Sign in via Setup.</Text>}
-          </View>}
-          {sequence && (
-            <View style={s.seqBadge} pointerEvents="none">
-              <View style={s.seqDot} />
-              <Text style={s.seqText}>SEQ · {sequence.photos.length}</Text>
+          {/* HUD: solid chips, never translucent text on the image. Can be hidden in Setup; the "no rig" hint always shows. */}
+          <View style={s.hud} pointerEvents="box-none">
+            <View style={s.hudChips} pointerEvents="none">
+              {(settings.hudEnabled || !active) && (active && overlay ? (
+                <>
+                  {project ? <Hud icon="folder-outline">{project.name}</Hud> : <Hud icon="folder-alert-outline" kind="danger">No project</Hud>}
+                  <Hud icon="camera-outline">{active.name} · {lensMm} mm{active.speedboosterFactor !== 1 ? ` ×${active.speedboosterFactor}` : ""}</Hud>
+                  <Hud icon="angle-acute">{round(overlay.framing.fullFrameEquivalentMm)} mm FF · {formatDeg(overlay.framing.fov.horizontal)} × {formatDeg(overlay.framing.fov.vertical)}</Hud>
+                  <Hud icon={gpsWarn ? "crosshairs-question" : "crosshairs-gps"} kind={gpsWarn ? "warn" : undefined}>{gpsAccuracy == null ? "GPS searching…" : `GPS ±${Math.round(gpsAccuracy)} m`}</Hud>
+                  {overlay.exceedsPreview && <Hud icon="arrow-expand-all" kind="warn">Rig sees more than the phone: live image shrunk; black = outside the phone's view</Hud>}
+                  {settings.fitToFrame && !overlay.exceedsPreview && <Hud icon="fit-to-screen-outline">Fit: digital zoom ×{(overlay.camera.width / preview.width).toFixed(2)}</Hud>}
+                  {overlay.human && (
+                    <Hud icon="human-male" iconColor={HUMAN_COLOR}>
+                      {overlay.human.relation === "equal"
+                        ? `Rig matches the human view (${overlay.human.focalMm} mm-eq)`
+                        : overlay.human.relation === "wider"
+                          ? `Rig is wider than the human view (${overlay.human.focalMm} mm-eq): cyan frame inside`
+                          : `Rig is narrower than the human view (${overlay.human.focalMm} mm-eq)${overlay.human.fits ? ": cyan frame around it" : "; the cyan frame is outside the preview"}`}
+                    </Hud>
+                  )}
+                </>
+              ) : (
+                <Hud icon="camera-control" kind="warn">No rig selected. Tap "Rig" to create one.</Hud>
+              ))}
+              {!isConfigured && <Hud icon="cloud-off-outline" kind="warn">Build has no API configuration; shots stay on device.</Hud>}
+              {isConfigured && !authEmail && <Hud icon="account-circle-outline" kind="warn">Not signed in: shots stay on the phone. Sign in via Setup.</Hud>}
             </View>
-          )}
-          {toast && <View style={s.toast}><Text style={s.toastText}>{toast}</Text></View>}
+            <Pressable onPress={cycleTheme} style={({ pressed }) => [s.themeBtn, pressed && { backgroundColor: c.accent }]} accessibilityRole="button"
+              accessibilityLabel={`Theme: ${themeName === "sun" ? "Sun" : "Set"}${settings.theme === "auto" ? " (following the phone)" : ""}. Tap to switch.`}>
+              <Icon name={themeName === "sun" ? "white-balance-sunny" : "weather-night"} size={22} color={c.chromeText} />
+              <View>
+                <Text style={s.themeText}>{themeName === "sun" ? "Sun" : "Set"}</Text>
+                {settings.theme === "auto" && <Text style={s.themeAuto}>AUTO</Text>}
+              </View>
+            </Pressable>
+          </View>
+          {sequence && <View style={s.seqBadge} pointerEvents="none"><SeqBadge count={sequence.photos.length} recording /></View>}
+          {toast && <View style={s.toast} pointerEvents="none"><Icon name="check-circle" size={20} color={c.ok} /><Text style={s.toastText}>{toast}</Text></View>}
         </View>
       </View>
 
-      {portrait && lensStrip}
-      <View style={[s.controls, portrait ? { height: CONTROLS_SIZE, flexDirection: "row" } : { width: CONTROLS_SIZE, flexDirection: "column" }]}>
-        <Ctl label="Rig" value={active ? "●" : "＋"} onPress={() => setSheet("rig")} />
-        <Ctl label="Human" value={settings.humanViewEnabled ? `${settings.humanViewFocalMm}` : "off"} onPress={pressHuman} accent={settings.humanViewEnabled} />
-        <Ctl label="Fit" value={settings.fitToFrame ? "ON" : "off"} onPress={() => setSettings((x) => ({ ...x, fitToFrame: !x.fitToFrame }))} accent={settings.fitToFrame} />
-        <Pressable onPress={capture} disabled={shutterDisabled} style={[s.shutter, sequence && { borderColor: SEQ_COLOR }, shutterDisabled && { opacity: 0.4 }]}>
-          {busy === "capture" ? <ActivityIndicator color="#000" /> : <View style={[s.shutterInner, sequence && { backgroundColor: SEQ_COLOR }]} />}
-        </Pressable>
-        <Ctl label="Light" value={torch ? "ON" : "off"} onPress={() => setTorch((t) => !t)} accent={torch} />
-        <Ctl label="Seq" value={sequence ? `${sequence.photos.length}` : "off"} onPress={toggleSequence} disabled={!!busy} color={sequence ? SEQ_COLOR : undefined} />
-        <Ctl label="Uploads" value={pendingCount ? `${pendingCount}` : "✓"} onPress={() => void retryUploads()} />
-      </View>
+      {portrait ? (
+        <View style={s.panel}>
+          {lensStrip}
+          <View style={s.rowSmall}>{small}</View>
+          <View style={s.rowBig}>{big}</View>
+        </View>
+      ) : (
+        <View style={[s.panel, s.panelSide, { width: CONTROLS_W }]}>
+          <View style={s.grid}>{small}</View>
+          <View style={s.colBig}>{big}</View>
+        </View>
+      )}
 
       <ShotReview draft={draft} settings={settings} locations={locations} countAt={countAt} fields={draft ? store.fieldsForProject(project?.id) : []} onUpload={uploadDraft} onDiscard={discardDraft} />
       <PresetSheet visible={sheet === "rig"} onClose={() => setSheet(null)} presets={presets} activeId={active?.id ?? null}
@@ -436,11 +475,31 @@ export function Viewfinder({ settings, onSettings, active: tabActive, project, s
   );
 }
 
-function Ctl({ label, value, onPress, accent, color, disabled }: { label: string; value: string; onPress: () => void; accent?: boolean; color?: string; disabled?: boolean }) {
+/** Solid HUD chip over the camera image (chrome colours, or warn / danger fills). */
+function Hud({ icon, kind, iconColor, children }: { icon: string; kind?: "warn" | "danger"; iconColor?: string; children: ReactNode }) {
+  const s = useStyles();
+  const { c } = useTheme();
+  const fg = kind === "warn" ? c.onWarn : kind === "danger" ? FIXED.white : c.chromeText;
   return (
-    <Pressable onPress={onPress} disabled={disabled} style={[s.ctl, disabled && { opacity: 0.4 }]} hitSlop={6}>
-      <Text style={[s.ctlValue, accent && { color: colors.accent }, color ? { color } : null]}>{value}</Text>
-      <Text style={[s.ctlLabel, color ? { color } : null]}>{label}</Text>
+    <View style={[s.hudChip, kind === "warn" && s.hudWarn, kind === "danger" && s.hudDanger]}>
+      <Icon name={icon} size={17} color={iconColor ?? fg} />
+      <Text style={[s.hudText, { color: fg }]}>{children}</Text>
+    </View>
+  );
+}
+
+/** Viewfinder control: icon over label, 56 dp, opaque. On = accent fill + heavy label. */
+function VfButton({ icon, label, onPress, on, disabled, count, stuck, record, warn }: { icon: string; label: string; onPress: () => void; on?: boolean; disabled?: boolean; count?: number; stuck?: boolean; record?: boolean; warn?: boolean }) {
+  const s = useStyles();
+  const { c } = useTheme();
+  const bg = record ? FIXED.record : on ? c.accent : c.chromeBg;
+  const fg = disabled ? c.textDisabled : record ? FIXED.white : on ? c.onAccent : c.chromeText;
+  return (
+    <Pressable onPress={onPress} disabled={disabled} accessibilityRole="button" accessibilityLabel={count ? `${label}, ${count} waiting` : label} accessibilityState={{ selected: !!on, disabled }}
+      style={({ pressed }) => [s.vfBtn, { backgroundColor: bg, borderColor: record ? FIXED.white : on ? c.accent : c.chromeBorder }, warn && { borderColor: c.warn }, pressed && s.vfPressed, disabled && s.vfOff]}>
+      <Icon name={icon} size={24} color={fg} />
+      <Text style={[s.vfLabel, { color: fg }, on && s.vfLabelOn]} numberOfLines={1}>{label}</Text>
+      {!!count && <Text style={[s.vfCount, stuck && s.vfCountStuck]}>{count}</Text>}
     </Pressable>
   );
 }
@@ -448,27 +507,39 @@ function Ctl({ label, value, onPress, accent, color, disabled }: { label: string
 const round = (n: number) => Math.round(n * 10) / 10;
 const round4 = (n: number) => Math.round(n * 10000) / 10000;
 
-const s = StyleSheet.create({
-  root: { flex: 1, backgroundColor: "#000" },
+const useStyles = makeStyles((c) => ({
+  root: { flex: 1, backgroundColor: FIXED.photoBg },
   center: { alignItems: "center", justifyContent: "center", padding: 24 },
-  msg: { color: colors.text, fontSize: 16, textAlign: "center", marginBottom: 16 },
-  primary: { backgroundColor: colors.accent, paddingHorizontal: 20, paddingVertical: 12, borderRadius: 10 },
-  primaryText: { color: "#000", fontWeight: "600" },
   previewArea: { alignItems: "center", justifyContent: "center" },
-  hud: { position: "absolute", top: 10, left: 10, right: 10, backgroundColor: "rgba(0,0,0,0.45)", borderRadius: 8, padding: 8 },
-  hudProject: { color: colors.accent, fontSize: 11, fontWeight: "700", textTransform: "uppercase", letterSpacing: 0.6, marginBottom: 2 },
-  hudMain: { color: "#fff", fontSize: 14, fontWeight: "600" },
-  hudSub: { color: "#ddd", fontSize: 12, marginTop: 2, fontVariant: ["tabular-nums"] },
-  hudWarn: { color: colors.accent, fontSize: 12, marginTop: 4 },
-  seqBadge: { position: "absolute", bottom: 12, left: 12, flexDirection: "row", alignItems: "center", gap: 6, backgroundColor: "rgba(0,0,0,0.7)", borderWidth: 1, borderColor: SEQ_COLOR, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 999 },
-  seqDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: SEQ_COLOR },
-  seqText: { color: "#fff", fontWeight: "700", fontSize: 13, letterSpacing: 0.5 },
-  toast: { position: "absolute", bottom: 16, alignSelf: "center", backgroundColor: "rgba(0,0,0,0.75)", paddingHorizontal: 14, paddingVertical: 8, borderRadius: 999 },
-  toastText: { color: "#fff" },
-  controls: { backgroundColor: colors.bg, alignItems: "center", justifyContent: "space-evenly" },
-  ctl: { alignItems: "center", minWidth: 44 },
-  ctlValue: { color: colors.text, fontSize: 17, fontWeight: "600" },
-  ctlLabel: { color: colors.dim, fontSize: 10, marginTop: 2, textTransform: "uppercase", letterSpacing: 0.5 },
-  shutter: { width: 72, height: 72, borderRadius: 36, borderWidth: 4, borderColor: "#fff", alignItems: "center", justifyContent: "center" },
-  shutterInner: { width: 56, height: 56, borderRadius: 28, backgroundColor: "#fff" },
-});
+  hud: { position: "absolute", top: 8, left: 8, right: 8, flexDirection: "row", alignItems: "flex-start", gap: 6 },
+  hudChips: { flex: 1, flexDirection: "row", flexWrap: "wrap", gap: 6 },
+  hudChip: { flexDirection: "row", alignItems: "center", gap: 6, maxWidth: "100%", minHeight: 32, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 6, backgroundColor: c.chromeBg, borderWidth: 1.5, borderColor: c.chromeBorder },
+  hudWarn: { backgroundColor: c.warn, borderColor: FIXED.black },
+  hudDanger: { backgroundColor: FIXED.record, borderColor: FIXED.white },
+  hudText: { ...type("hud", "bold"), ...num, flexShrink: 1 },
+  themeBtn: { flexDirection: "row", alignItems: "center", gap: 6, minHeight: 48, minWidth: 48, paddingHorizontal: 10, borderRadius: 6, backgroundColor: c.chromeBg, borderWidth: 1.5, borderColor: c.chromeBorder },
+  themeText: { ...type("label", "bold"), color: c.chromeText },
+  themeAuto: { fontFamily: type("caption", "heavy").fontFamily, fontSize: 9, lineHeight: 10, letterSpacing: 0.8, color: c.chromeText },
+  seqBadge: { position: "absolute", bottom: 12, left: 12 },
+  toast: { position: "absolute", bottom: 12, alignSelf: "center", maxWidth: "80%", flexDirection: "row", alignItems: "center", gap: 8, minHeight: 44, paddingHorizontal: 12, paddingVertical: 6, borderRadius: RADIUS.md, backgroundColor: c.surfaceRaised, borderWidth: 2, borderColor: c.borderStrong, elevation: 6 },
+  toastText: { ...type("small", "semibold"), color: c.text, flexShrink: 1 },
+  panel: { backgroundColor: c.chromeBg, borderColor: c.chromeBorder },
+  panelSide: { borderLeftWidth: 2, paddingVertical: 10, paddingHorizontal: 8, justifyContent: "space-evenly", alignItems: "center", gap: 10 },
+  rowSmall: { flexDirection: "row", justifyContent: "space-around", paddingHorizontal: 10, paddingTop: 10 },
+  rowBig: { flexDirection: "row", justifyContent: "space-around", alignItems: "center", paddingHorizontal: 16, paddingTop: 8, paddingBottom: 12 },
+  grid: { flexDirection: "row", flexWrap: "wrap", justifyContent: "center", gap: 8, width: 2 * 56 + 8 },
+  colBig: { alignItems: "center", gap: 10 },
+  vfBtn: { width: 56, minHeight: 56, alignItems: "center", justifyContent: "center", gap: 2, paddingVertical: 4, borderRadius: 10, borderWidth: 2 },
+  vfPressed: { transform: [{ translateY: 1 }], borderColor: c.chromeText },
+  vfOff: { borderStyle: "dashed", borderColor: c.textDisabled },
+  vfLabel: { fontFamily: type("caption", "semibold").fontFamily, fontSize: 11, lineHeight: 13 },
+  vfLabelOn: { fontFamily: type("caption", "heavy").fontFamily },
+  vfCount: { position: "absolute", top: -8, right: -8, minWidth: 22, height: 22, paddingHorizontal: 5, borderRadius: 11, overflow: "hidden", backgroundColor: c.warn, color: c.onWarn, textAlign: "center", fontFamily: type("caption", "heavy").fontFamily, fontSize: 12, lineHeight: 22, borderWidth: 2, borderColor: c.chromeBg },
+  vfCountStuck: { backgroundColor: FIXED.record, color: FIXED.white },
+  shutter: { width: SIZE.shutter, height: SIZE.shutter, borderRadius: SIZE.shutter / 2, borderWidth: 4, borderColor: c.chromeText, backgroundColor: c.chromeBg, alignItems: "center", justifyContent: "center" },
+  shutterSeq: { borderColor: FIXED.record, borderWidth: 5 },
+  shutterOff: { borderStyle: "dashed", borderColor: c.textDisabled, borderWidth: 3 },
+  disc: { width: 58, height: 58, borderRadius: 29, backgroundColor: c.chromeText, alignItems: "center", justifyContent: "center" },
+  discPressed: { width: 52, height: 52, borderRadius: 26 },
+  discText: { ...type("title", "heavy"), color: FIXED.white, ...num },
+}));

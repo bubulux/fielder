@@ -2,11 +2,13 @@ import { useState } from "react";
 import { Text } from "react-native";
 import type { LensRange } from "../types";
 import { lensList } from "../lens";
-import { Button, Chip, ChipRow, colors, Hint, Input, Row, Sheet } from "./ui";
+import { type, useTheme } from "../theme";
+import { Button, Chip, ChipRow, Hint, Input, Row, Sheet } from "./ui";
 
 interface Props { visible: boolean; onClose: () => void; lensMm: number; onChange: (mm: number) => void; range: LensRange | null }
 
 export function LensSheet({ visible, onClose, lensMm, onChange, range }: Props) {
+  const { c } = useTheme();
   const [custom, setCustom] = useState("");
   const [error, setError] = useState<string | null>(null);
   const applyCustom = () => {
@@ -26,9 +28,9 @@ export function LensSheet({ visible, onClose, lensMm, onChange, range }: Props) 
       </Row>
       <Row label="Custom / zoom position">
         <Input value={custom} onChangeText={(t) => { setCustom(t); setError(null); }} placeholder={range ? `${range.min}–${range.max}` : "e.g. 70"} keyboardType="decimal-pad" onSubmitEditing={applyCustom} />
-        {error && <Text style={{ color: colors.danger, marginTop: 6, fontSize: 12 }}>{error}</Text>}
+        {error && <Text style={{ ...type("small", "semibold"), color: c.danger }} accessibilityRole="alert">{error}</Text>}
         <Hint>Enter the lens's native focal length. The speedbooster from the active rig is applied automatically.</Hint>
-        <Button label="Use" onPress={applyCustom} disabled={!custom} />
+        <Button label="Use this focal length" icon="check" onPress={applyCustom} disabled={!custom} />
       </Row>
     </Sheet>
   );

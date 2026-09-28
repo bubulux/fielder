@@ -38,7 +38,7 @@ A **shot** holds the metadata (name, location, INT/EXT, light phases + artificia
   Keep it that way.
 - **Shared rules go in `packages/vocab`** and are reused by the Worker. Interactive edits are validated strictly, uploads leniently.
 - **Migrations**: a new numbered file for every change; never edit an applied one. Production holds real data now: ask before anything destructive.
-- **Match the surrounding code**: terse doc comments on exported functions explaining *why*; plain CSS on the design tokens, never hard-coded colours (`docs/design.md`; both themes, Sun and Set, must stay high contrast); mobile UI from `components/ui.tsx`. No new dependencies without a reason (the sun math and combobox are hand-written on purpose).
+- **Match the surrounding code**: terse doc comments on exported functions explaining *why*; plain CSS on the design tokens, never hard-coded colours (`docs/design.md`; both themes, Sun and Set, must stay high contrast); mobile UI from `components/ui.tsx` with `makeStyles`/`useTheme` from `theme.tsx`. No new dependencies without a reason (the sun math and combobox are hand-written on purpose).
 - **Deploys to production are done by the owner** (`pnpm -C apps/worker run deploy`). You prepare, check and commit. You may apply additive remote migrations when asked. Commit only when asked or when working through an agreed plan; work on a branch.
 
 ## Verify before you say "done"

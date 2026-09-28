@@ -1,34 +1,37 @@
 import { useMemo, type ComponentType } from "react";
-import { StyleSheet, Text, View } from "react-native";
+import { View } from "react-native";
 import { WebView as RNWebView, type WebViewMessageEvent, type WebViewProps } from "react-native-webview";
 
 // react-native-webview's class typings collapse to `never` under this TS/React combination; use the props type directly.
 const WebView = RNWebView as unknown as ComponentType<WebViewProps>;
 import { cover, type Shot } from "../api";
-import { colors } from "../components/ui";
-import { STATE_COLORS } from "@fielder/vocab";
+import { Empty } from "../components/ui";
+import { MAP_CSS } from "../components/mapHtml";
+import { STATE_ICONS } from "@fielder/vocab";
+import { useTheme } from "../theme";
 import { applyFilter, placeLabel, rigLabel, ShotDetail, shotTitle, type ShotListProps } from "./Gallery";
 
 type Props = Omit<ShotListProps, "onFilter" | "onShowOnMap"> & { focus: Shot | null };
 
-/** Leaflet + OpenStreetMap inside a WebView: no API key, no native map SDK. Markers are coloured by review state. */
+/** Leaflet + OpenStreetMap inside a WebView: no API key, no native map SDK. Pins show the review state (colour + icon). */
 export function MapScreen({ settings, data, focus, filter, locations, onLocations, countAt, open, onOpen }: Props) {
   const { shots, remove, update } = data;
+  const { c, name } = useTheme();
 
   const markers = useMemo(
-    () => applyFilter(shots, filter).map((s) => { const p = cover(s); return { id: s.id, lat: p.lat, lon: p.lon, color: STATE_COLORS[s.state] ?? "#ffb300", title: shotTitle(s), sub: [placeLabel(s) || rigLabel(p), new Date(s.captured_at).toLocaleString()].join(" · ") }; }),
+    () => applyFilter(shots, filter).map((s) => { const p = cover(s); return { id: s.id, lat: p.lat, lon: p.lon, state: s.state, icon: STATE_ICONS[s.state], title: shotTitle(s), sub: [placeLabel(s) || rigLabel(p), new Date(s.captured_at).toLocaleString()].join(" · ") }; }),
     [shots, filter],
   );
-  const html = useMemo(() => buildHtml(markers, focus ? { lat: cover(focus).lat, lon: cover(focus).lon } : null), [markers, focus]);
+  const html = useMemo(() => buildHtml(markers, focus ? { lat: cover(focus).lat, lon: cover(focus).lon } : null, name === "set", c.bg), [markers, focus, name, c.bg]);
   const openLatest = open ? (shots ?? []).find((s) => s.id === open.id) ?? open : null;
 
   return (
-    <View style={{ flex: 1, backgroundColor: colors.bg }}>
-      {!shots && <Text style={m.status}>Loading…</Text>}
+    <View style={{ flex: 1, backgroundColor: c.bg }}>
+      {!shots && <Empty loading title="Loading shots…" />}
       <WebView
         originWhitelist={["*"]}
         source={{ html, baseUrl: "https://fielder.local/" }}
-        style={{ flex: 1, backgroundColor: colors.bg }}
+        style={{ flex: 1, backgroundColor: c.bg }}
         onMessage={(e: WebViewMessageEvent) => {
           const id = e.nativeEvent.data;
           const s = shots?.find((x) => x.id === id);
@@ -44,20 +47,21 @@ export function MapScreen({ settings, data, focus, filter, locations, onLocation
   );
 }
 
-function buildHtml(markers: { id: string; lat: number; lon: number; color: string; title: string; sub: string }[], focus: { lat: number; lon: number } | null): string {
+function buildHtml(markers: { id: string; lat: number; lon: number; state: string; icon: string; title: string; sub: string }[], focus: { lat: number; lon: number } | null, dark: boolean, bg: string): string {
   const data = JSON.stringify(markers).replace(/</g, "\\u003c");
   const focusJson = JSON.stringify(focus);
-  return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  return `<!doctype html><html${dark ? ' class="dark"' : ""}><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@mdi/font@7.4.47/css/materialdesignicons.min.css">
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-<style>html,body,#m{margin:0;height:100%;background:#0b0b0d}.leaflet-popup-content-wrapper,.leaflet-popup-tip{background:#16161a;color:#f2f2f5}.t{font-weight:600}.s{color:#9a9aa5;font-size:12px}.b{display:inline-block;margin-top:6px;padding:6px 10px;border-radius:999px;background:#ffb300;color:#000;font-weight:600;font-size:12px}</style>
+<style>html,body,#m{margin:0;height:100%;background:${bg}}${MAP_CSS}</style>
 </head><body><div id="m"></div><script>
 var shots=${data}, focus=${focusJson};
 var map=L.map('m',{zoomControl:true});
 L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'&copy; OpenStreetMap'}).addTo(map);
 var b=[];
 shots.forEach(function(s){b.push([s.lat,s.lon]);
-  var mk=L.circleMarker([s.lat,s.lon],{radius:9,color:s.color,weight:2,fillColor:s.color,fillOpacity:.6}).addTo(map);
+  var mk=L.marker([s.lat,s.lon],{icon:L.divIcon({className:'pin-icon',html:'<span class="pin pin--'+s.state+'"><i class="mdi mdi-'+s.icon+'"></i></span>',iconSize:[26,26],iconAnchor:[13,13],popupAnchor:[0,-14]})}).addTo(map);
   var el=document.createElement('div');
   var t=document.createElement('div');t.className='t';t.textContent=s.title;
   var su=document.createElement('div');su.className='s';su.textContent=s.sub;
@@ -72,4 +76,3 @@ else{map.setView([51,10],5);}
 </script></body></html>`;
 }
 
-const m = StyleSheet.create({ status: { color: colors.dim, padding: 12, textAlign: "center" } });

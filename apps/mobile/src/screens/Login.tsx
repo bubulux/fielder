@@ -1,8 +1,9 @@
 import { useState, type ComponentType } from "react";
-import { Modal, Pressable, StyleSheet, Text, View } from "react-native";
+import { Modal, Pressable, Text, View } from "react-native";
 import { WebView as RNWebView, type WebViewMessageEvent, type WebViewProps } from "react-native-webview";
 import { setToken } from "../auth";
-import { colors } from "../components/ui";
+import { Banner, Header, Hint } from "../components/ui";
+import { makeStyles, type, useTheme } from "../theme";
 import { API_URL } from "../config";
 
 // react-native-webview's class typings collapse to `never` under this TS/React combination; use the props type directly.
@@ -16,6 +17,8 @@ interface Props { visible: boolean; onDone: () => void; onSkip: () => void }
  * the Access token back to the app.
  */
 export function Login({ visible, onDone, onSkip }: Props) {
+  const s = useStyles();
+  const { c } = useTheme();
   const [error, setError] = useState<string | null>(null);
   const onMessage = (e: WebViewMessageEvent) => {
     try {
@@ -27,12 +30,11 @@ export function Login({ visible, onDone, onSkip }: Props) {
   return (
     <Modal visible={visible} animationType="slide" onRequestClose={onSkip}>
       <View style={s.root}>
-        <View style={s.header}>
-          <Text style={s.title}>Sign in</Text>
-          <Pressable onPress={onSkip} hitSlop={10}><Text style={s.skip}>Later</Text></Pressable>
+        <Header title="Sign in" right={<Pressable onPress={onSkip} style={s.skip} accessibilityRole="button"><Text style={s.skipText}>Later</Text></Pressable>} />
+        <View style={{ padding: 16, gap: 8 }}>
+          <Hint>Enter your email, then the PIN from the mail. Without signing in, shots stay on the phone until you do.</Hint>
+          {error && <Banner kind="danger" title={error} />}
         </View>
-        <Text style={s.hint}>Enter your email, then the PIN from the mail. Without signing in, shots stay on the phone until you do.</Text>
-        {error && <Text style={[s.hint, { color: colors.danger }]}>{error}</Text>}
         <WebView
           key={visible ? "open" : "closed"}
           source={{ uri: `${API_URL}/auth/mobile` }}
@@ -41,17 +43,15 @@ export function Login({ visible, onDone, onSkip }: Props) {
           javaScriptEnabled
           domStorageEnabled
           setSupportMultipleWindows={false}
-          style={{ flex: 1, backgroundColor: colors.bg }}
+          style={{ flex: 1, backgroundColor: c.bg }}
         />
       </View>
     </Modal>
   );
 }
 
-const s = StyleSheet.create({
-  root: { flex: 1, backgroundColor: colors.bg },
-  header: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border },
-  title: { color: colors.text, fontSize: 18, fontWeight: "600" },
-  skip: { color: colors.accent, fontSize: 16, fontWeight: "600" },
-  hint: { color: colors.dim, fontSize: 12, paddingHorizontal: 16, paddingVertical: 8 },
-});
+const useStyles = makeStyles((c) => ({
+  root: { flex: 1, backgroundColor: c.bg },
+  skip: { minHeight: 48, justifyContent: "center", paddingHorizontal: 10 },
+  skipText: { ...type("body", "bold"), color: c.accent },
+}));

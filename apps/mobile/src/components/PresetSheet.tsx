@@ -4,7 +4,8 @@ import * as Crypto from "expo-crypto";
 import { CAMERAS, CUSTOM_CAMERA_ID, describeRig, findFormat, SPEEDBOOSTER_PRESETS } from "@fielder/fov-math";
 import { api } from "../api";
 import type { Preset } from "../types";
-import { Button, Chip, ChipRow, colors, Hint, Input, Row, Sheet } from "./ui";
+import { type, useTheme } from "../theme";
+import { Button, Chip, ChipRow, Hint, Input, Row, Sheet } from "./ui";
 
 interface Props {
   visible: boolean;
@@ -30,6 +31,7 @@ interface Draft {
 }
 
 export function PresetSheet({ visible, onClose, presets, activeId, onChange }: Props) {
+  const { c } = useTheme();
   const [d, setD] = useState<Draft | null>(null);
   const patch = (x: Partial<Draft>) => setD((cur) => (cur ? { ...cur, ...x } : cur));
 
@@ -119,21 +121,21 @@ export function PresetSheet({ visible, onClose, presets, activeId, onChange }: P
             {presets.length === 0 && <Hint>No rigs yet. A rig is a camera body in a recording format, plus an optional speedbooster.</Hint>}
             <ChipRow>
               {presets.map((p) => (
-                <Chip key={p.id} label={`${p.name}${p.synced ? "" : " •"}`} selected={p.id === activeId} onPress={() => onChange(presets, p.id)} />
+                <Chip key={p.id} icon={p.synced ? undefined : "cloud-off-outline"} label={p.name} selected={p.id === activeId} onPress={() => onChange(presets, p.id)} />
               ))}
             </ChipRow>
-            {presets.some((p) => !p.synced) && <Hint>• = not yet synced to the server</Hint>}
+            {presets.some((p) => !p.synced) && <Hint>Cloud-off icon: not synced to the server yet.</Hint>}
           </Row>
           {active && (
             <Row label="Active rig">
-              <Text style={{ color: colors.text, fontSize: 15 }}>{active.name}</Text>
-              <Text style={{ color: colors.dim, marginTop: 2 }}>{describeRig(active.cameraId, active.formatId, active.sensorWidthMm, active.sensorHeightMm)}</Text>
-              <Text style={{ color: colors.dim, marginTop: 2 }}>{active.sensorWidthMm} × {active.sensorHeightMm} mm · speedbooster {active.speedboosterFactor === 1 ? "none" : `×${active.speedboosterFactor}`}</Text>
-              <Text style={{ color: colors.dim, marginTop: 2 }}>lens {active.lensMinMm != null && active.lensMaxMm != null ? `${active.lensMinMm}–${active.lensMaxMm} mm` : "any focal length"}</Text>
-              <Button label="Edit" kind="ghost" onPress={() => startEdit(active)} />
+              <Text style={{ ...type("body", "bold"), color: c.text }}>{active.name}</Text>
+              <Text style={{ ...type("small"), color: c.textDim }}>{describeRig(active.cameraId, active.formatId, active.sensorWidthMm, active.sensorHeightMm)}</Text>
+              <Text style={{ ...type("small"), color: c.textDim }}>{active.sensorWidthMm} × {active.sensorHeightMm} mm · speedbooster {active.speedboosterFactor === 1 ? "none" : `×${active.speedboosterFactor}`}</Text>
+              <Text style={{ ...type("small"), color: c.textDim }}>Lens {active.lensMinMm != null && active.lensMaxMm != null ? `${active.lensMinMm}–${active.lensMaxMm} mm` : "any focal length"}</Text>
+              <Button label="Edit rig" icon="pencil-outline" kind="ghost" onPress={() => startEdit(active)} />
             </Row>
           )}
-          <Button label="New rig" onPress={startNew} />
+          <Button label="New rig" icon="plus" onPress={startNew} />
         </>
       ) : (
         <>
@@ -177,8 +179,8 @@ export function PresetSheet({ visible, onClose, presets, activeId, onChange }: P
           <Row label="Name (optional)">
             <Input value={d.name} onChangeText={(name) => patch({ name })} placeholder={autoName(d)} />
           </Row>
-          <Button label="Save rig" onPress={save} />
-          {!d.isNew && <Button label="Delete rig" kind="danger" onPress={() => confirmDelete(d.id)} />}
+          <Button label="Save rig" icon="check" onPress={save} />
+          {!d.isNew && <Button label="Delete rig" icon="delete-outline" kind="danger" onPress={() => confirmDelete(d.id)} />}
         </>
       )}
     </Sheet>

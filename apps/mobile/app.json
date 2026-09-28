@@ -5,7 +5,7 @@
     "version": "0.1.0",
     "orientation": "default",
     "icon": "./assets/icon.png",
-    "userInterfaceStyle": "light",
+    "userInterfaceStyle": "automatic",
     "android": {
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
@@ -38,7 +38,8 @@
         {
           "locationWhenInUsePermission": "Fielder tags each captured framing with its GPS position."
         }
-      ]
+      ],
+      "expo-font"
     ],
     "extra": {
       "eas": {

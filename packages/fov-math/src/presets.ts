@@ -22,5 +22,6 @@ export const OVERLAY_DEFAULTS = {
   borderColor: "#FFFFFF",
   borderWidthPx: 2,
   blackoutEnabled: false,
-  blackoutColor: "rgba(255, 0, 0, 0.5)",
+  /** The neutral mask of the design system; the phone lets the user pick another. */
+  blackoutColor: "rgba(0, 0, 0, 0.62)",
 } as const;

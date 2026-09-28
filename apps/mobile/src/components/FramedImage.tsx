@@ -1,12 +1,14 @@
 import { View, type StyleProp, type ViewStyle } from "react-native";
 import { Image, type ImageSource } from "expo-image";
 import type { Settings } from "../types";
+import { FIXED } from "../theme";
 import { Overlay } from "./Overlay";
+import { Seg } from "./ui";
 
-/** "mask" = tint outside the frame, "frame" = border only, "fit" = crop to the frame, "off" = raw photo. */
+/** "mask" = neutral dark mask outside the frame, "frame" = border only, "fit" = crop to the frame, "off" = raw photo. */
 export type FrameMode = "mask" | "frame" | "fit" | "off";
 export const FRAME_MODES: readonly FrameMode[] = ["mask", "frame", "fit", "off"];
-export const frameModeLabel = (m: FrameMode) => (m === "off" ? "raw" : m);
+export const frameModeLabel = (m: FrameMode) => (m === "off" ? "Raw" : m[0].toUpperCase() + m.slice(1));
 
 export interface FrameFractions { width: number; height: number }
 
@@ -41,7 +43,7 @@ export function FramedImage({ source, aspect, frame: f, width, settings, mode, s
   }
   const shrunk = img.width < box.width - 0.5 || img.height < box.height - 0.5;
   return (
-    <View style={[{ width: box.width, height: box.height, backgroundColor: "#000", overflow: "hidden" }, style]}>
+    <View style={[{ width: box.width, height: box.height, backgroundColor: FIXED.photoBg, overflow: "hidden" }, style]}>
       <Image
         source={source}
         style={{ position: "absolute", width: img.width, height: img.height, left: (box.width - img.width) / 2, top: (box.height - img.height) / 2 }}
@@ -50,8 +52,13 @@ export function FramedImage({ source, aspect, frame: f, width, settings, mode, s
         transition={120}
       />
       {rect && mode !== "off" && (
-        <Overlay preview={box} rect={rect} settings={{ ...settings, blackoutEnabled: mode === "mask" }} exceedsPreview={shrunk} />
+        <Overlay preview={box} rect={rect} settings={{ ...settings, blackoutEnabled: mode === "mask" }} exceedsPreview={shrunk} neutral />
       )}
     </View>
   );
+}
+
+/** Mask / Frame / Fit / Raw switch shown under photos. */
+export function FrameModeSeg({ value, onChange }: { value: FrameMode; onChange: (m: FrameMode) => void }) {
+  return <Seg accessibilityLabel="How to show the rig frame" value={value} onChange={onChange} options={FRAME_MODES.map((m) => ({ id: m, label: frameModeLabel(m) }))} />;
 }

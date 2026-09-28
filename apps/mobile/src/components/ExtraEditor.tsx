@@ -1,7 +1,8 @@
 import { useState } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Pressable, Text, View } from "react-native";
 import { selectOptions, type Extra, type ExtraValue, type FieldDef } from "@fielder/vocab";
-import { Chip, ChipRow, colors, Hint, Input, Row } from "./ui";
+import { makeStyles, RADIUS, type, useTheme } from "../theme";
+import { Chip, ChipRow, Hint, Icon, Input, Row } from "./ui";
 
 /** Selects with more options than this get a search box instead of chips. */
 const CHIP_LIMIT = 12;
@@ -10,6 +11,7 @@ interface Props { defs: readonly FieldDef[]; value: Extra; onChange: (v: Extra) 
 
 /** Form for a project's extra fields; groups nest, dependent selects follow their sibling. */
 export function ExtraEditor({ defs, value, onChange, nested }: Props) {
+  const s = useStyles();
   return (
     <View style={nested ? s.nested : undefined}>
       {defs.map((f) => (
@@ -58,6 +60,8 @@ function Field({ def, value, siblings, onChange }: { def: FieldDef; value: Extra
 }
 
 function Select({ def, value, siblings, onChange }: { def: FieldDef; value: ExtraValue | undefined; siblings: Extra; onChange: (v: ExtraValue) => void }) {
+  const s = useStyles();
+  const { c } = useTheme();
   const [query, setQuery] = useState("");
   const opts = selectOptions(def, siblings);
   if (def.optionsBy && opts.length === 0) return <Hint>Choose {def.optionsBy.field} first.</Hint>;
@@ -72,25 +76,28 @@ function Select({ def, value, siblings, onChange }: { def: FieldDef; value: Extr
   const hits = (q ? opts.filter((o) => o.toLowerCase().includes(q)) : opts).slice(0, CHIP_LIMIT);
   return (
     <>
-      {selected.length > 0 && <ChipRow>{selected.map((o) => <Chip key={o} label={`${o} ✕`} selected onPress={() => toggle(o)} />)}</ChipRow>}
+      {selected.length > 0 && <ChipRow>{selected.map((o) => <Chip key={o} label={o} icon="close" selected onPress={() => toggle(o)} />)}</ChipRow>}
       <View style={{ marginTop: selected.length ? 8 : 0 }}>
         <Input value={query} onChangeText={setQuery} placeholder={`Search ${def.label}…`} />
         <View style={s.list}>
           {hits.map((o) => (
-            <Pressable key={o} onPress={() => { toggle(o); setQuery(""); }} style={s.item}>
-              <Text style={[s.itemText, selected.includes(o) && { color: colors.accent }]}>{o}</Text>
+            <Pressable key={o} onPress={() => { toggle(o); setQuery(""); }} style={({ pressed }) => [s.item, pressed && { backgroundColor: c.surfaceSunken }, selected.includes(o) && s.itemOn]}>
+              <Text style={[s.itemText, selected.includes(o) && s.itemTextOn]}>{o}</Text>
+              {selected.includes(o) && <Icon name="check" size={20} />}
             </Pressable>
           ))}
-          {hits.length === 0 && <Text style={[s.itemText, { color: colors.dim, padding: 10 }]}>No match.</Text>}
+          {hits.length === 0 && <View style={{ padding: 12 }}><Hint>No match.</Hint></View>}
         </View>
       </View>
     </>
   );
 }
 
-const s = StyleSheet.create({
-  nested: { borderLeftWidth: 2, borderLeftColor: colors.border, paddingLeft: 10 },
-  list: { marginTop: 6, borderWidth: 1, borderColor: colors.border, borderRadius: 8, overflow: "hidden" },
-  item: { paddingHorizontal: 12, paddingVertical: 10, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border, backgroundColor: colors.panel },
-  itemText: { color: colors.text, fontSize: 15 },
-});
+const useStyles = makeStyles((c) => ({
+  nested: { borderLeftWidth: 3, borderLeftColor: c.border, paddingLeft: 12 },
+  list: { marginTop: 4, borderWidth: 2, borderColor: c.border, borderRadius: RADIUS.sm, overflow: "hidden", backgroundColor: c.surface },
+  item: { flexDirection: "row", alignItems: "center", minHeight: 52, paddingHorizontal: 12, borderTopWidth: 1, borderTopColor: c.borderSubtle },
+  itemOn: { backgroundColor: c.accentTint },
+  itemText: { ...type("body"), color: c.text, flex: 1 },
+  itemTextOn: { fontFamily: type("body", "bold").fontFamily },
+}));

@@ -1,10 +1,11 @@
 import { useMemo, useState } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Pressable, Text, View } from "react-native";
 import * as Crypto from "expo-crypto";
-import { INT_EXT, label, LIGHT, WEATHER, type Extra, type FieldDef } from "@fielder/vocab";
+import { INT_EXT, label, LIGHT, PHASE_ICONS, WEATHER, type Extra, type FieldDef } from "@fielder/vocab";
 import type { LocationEntry, ShotTags } from "../types";
 import { ExtraEditor } from "./ExtraEditor";
-import { Button, Chip, ChipRow, colors, Hint, Input, Row } from "./ui";
+import { makeStyles, RADIUS, type, useTheme } from "../theme";
+import { Button, Chip, ChipRow, Hint, Icon, Input, Row } from "./ui";
 
 interface Props {
   /** Pre-filled values (editing, or the previous capture's tags). */
@@ -23,6 +24,8 @@ interface Props {
 
 /** The scouting-tags form: name, location (pick or add), INT/EXT, light phases + artificial, weather. Everything is optional. */
 export function TagsForm({ initial, locations, countAt, fields = [], submitLabel, onSubmit, cancelLabel, onCancel, busy }: Props) {
+  const s = useStyles();
+  const { c } = useTheme();
   const [name, setName] = useState(initial?.name ?? "");
   const [light, setLight] = useState<string[]>(initial?.light ?? []);
   const [artificial, setArtificial] = useState(initial?.artificial ?? false);
@@ -67,26 +70,28 @@ export function TagsForm({ initial, locations, countAt, fields = [], submitLabel
       </Row>
       <Row label="Location">
         {picked || newLoc ? (
-          <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
-            <Chip label={picked ? picked.name : `${newLoc} · new`} selected onPress={clearLocation} />
-            <Pressable onPress={clearLocation} hitSlop={8}><Text style={{ color: colors.dim }}>change</Text></Pressable>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+            <Chip icon="map-marker-outline" label={picked ? picked.name : `${newLoc} · new`} selected onPress={clearLocation} />
+            <Pressable onPress={clearLocation} hitSlop={4} style={s.link} accessibilityRole="button"><Text style={s.linkText}>Change</Text></Pressable>
           </View>
         ) : (
           <>
             <Input value={query} onChangeText={setQuery} placeholder="Search existing or type a new location" autoCapitalize="words" maxLength={80} />
             <View style={s.list}>
               {matches.map((l) => (
-                <Pressable key={l.id} onPress={() => pickLocation(l)} style={s.item}>
-                  <Text style={s.itemName}>{l.name}</Text>
+                <Pressable key={l.id} onPress={() => pickLocation(l)} style={({ pressed }) => [s.item, pressed && { backgroundColor: c.surfaceSunken }]}>
+                  <Icon name="map-marker-outline" size={20} />
+                  <Text style={s.itemName} numberOfLines={1}>{l.name}</Text>
                   <Text style={s.itemSub}>{countAt(l.id)} shot{countAt(l.id) === 1 ? "" : "s"}</Text>
                 </Pressable>
               ))}
               {query.trim().length > 0 && !exact && (
-                <Pressable onPress={addLocation} style={s.item}>
-                  <Text style={[s.itemName, { color: colors.accent }]}>＋ Add “{query.trim()}” as a new location</Text>
+                <Pressable onPress={addLocation} style={({ pressed }) => [s.item, pressed && { backgroundColor: c.accentTint }]}>
+                  <Icon name="plus" size={20} color={c.accent} />
+                  <Text style={[s.itemName, s.create]}>Create “{query.trim()}”</Text>
                 </Pressable>
               )}
-              {matches.length === 0 && !query.trim() && <Hint>No locations yet. Type a name to create the first one.</Hint>}
+              {matches.length === 0 && !query.trim() && <View style={{ padding: 12 }}><Hint>No locations yet. Type a name to create the first one.</Hint></View>}
             </View>
           </>
         )}
@@ -98,8 +103,8 @@ export function TagsForm({ initial, locations, countAt, fields = [], submitLabel
       </Row>
       <Row label="Light (every phase the shot works in)">
         <ChipRow>
-          {LIGHT.map((v) => <Chip key={v} label={label(v)} selected={light.includes(v)} onPress={() => toggleLight(v)} />)}
-          <Chip label="Artificial" selected={artificial} onPress={() => setArtificial(!artificial)} />
+          {LIGHT.map((v) => <Chip key={v} icon={PHASE_ICONS[v]} label={label(v)} selected={light.includes(v)} onPress={() => toggleLight(v)} />)}
+          <Chip icon={PHASE_ICONS.artificial} label="Artificial" selected={artificial} onPress={() => setArtificial(!artificial)} />
         </ChipRow>
       </Row>
       <Row label="Weather">
@@ -107,16 +112,19 @@ export function TagsForm({ initial, locations, countAt, fields = [], submitLabel
       </Row>
       {fields.length > 0 && <ExtraEditor defs={fields} value={extra} onChange={setExtra} />}
       <View style={{ flexDirection: "row", gap: 12, marginTop: 8 }}>
-        {onCancel && <View style={{ flex: 1 }}><Button label={cancelLabel ?? "Cancel"} kind={cancelLabel === "Discard" ? "danger" : "ghost"} onPress={onCancel} /></View>}
-        <View style={{ flex: 2 }}><Button label={submitLabel} onPress={submit} disabled={busy} /></View>
+        {onCancel && <View style={{ flex: 1 }}><Button label={cancelLabel ?? "Cancel"} icon={cancelLabel === "Discard" ? "delete-outline" : undefined} kind={cancelLabel === "Discard" ? "danger" : "ghost"} onPress={onCancel} /></View>}
+        <View style={{ flex: 2 }}><Button label={submitLabel} icon={submitLabel.startsWith("Upload") ? "cloud-upload-outline" : "check"} onPress={submit} busy={busy} /></View>
       </View>
     </>
   );
 }
 
-const s = StyleSheet.create({
-  list: { marginTop: 6, borderWidth: 1, borderColor: colors.border, borderRadius: 8, overflow: "hidden" },
-  item: { paddingHorizontal: 12, paddingVertical: 10, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border, backgroundColor: colors.panel },
-  itemName: { color: colors.text, fontSize: 15 },
-  itemSub: { color: colors.dim, fontSize: 12, marginTop: 2 },
-});
+const useStyles = makeStyles((c) => ({
+  list: { marginTop: 4, borderWidth: 2, borderColor: c.border, borderRadius: RADIUS.sm, overflow: "hidden", backgroundColor: c.surface },
+  item: { flexDirection: "row", alignItems: "center", gap: 10, minHeight: 52, paddingHorizontal: 12, borderTopWidth: 1, borderTopColor: c.borderSubtle },
+  itemName: { ...type("body", "semibold"), color: c.text, flex: 1 },
+  itemSub: { ...type("caption"), color: c.textDim },
+  create: { color: c.accent },
+  link: { minHeight: 48, justifyContent: "center", paddingHorizontal: 8 },
+  linkText: { ...type("label", "bold"), color: c.accent, textDecorationLine: "underline" },
+}));

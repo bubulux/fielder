@@ -1,9 +1,18 @@
 import { useCallback, useEffect, useState } from "react";
-import { Pressable, StyleSheet, Text, useWindowDimensions, View } from "react-native";
+import { Pressable, Text, useColorScheme, useWindowDimensions, View } from "react-native";
 import { SafeAreaProvider, useSafeAreaInsets } from "react-native-safe-area-context";
 import * as ScreenOrientation from "expo-screen-orientation";
+import { StatusBar } from "expo-status-bar";
+import { useFonts } from "expo-font";
+// One module per weight, so only the five weights in use are bundled.
+import { AtkinsonHyperlegibleNext_400Regular } from "@expo-google-fonts/atkinson-hyperlegible-next/400Regular";
+import { AtkinsonHyperlegibleNext_500Medium } from "@expo-google-fonts/atkinson-hyperlegible-next/500Medium";
+import { AtkinsonHyperlegibleNext_600SemiBold } from "@expo-google-fonts/atkinson-hyperlegible-next/600SemiBold";
+import { AtkinsonHyperlegibleNext_700Bold } from "@expo-google-fonts/atkinson-hyperlegible-next/700Bold";
+import { AtkinsonHyperlegibleNext_800ExtraBold } from "@expo-google-fonts/atkinson-hyperlegible-next/800ExtraBold";
 import type { Shot } from "./src/api";
-import { colors } from "./src/components/ui";
+import { Icon } from "./src/components/ui";
+import { makeStyles, PALETTES, resolveTheme, SIZE, ThemeProvider, type, useTheme } from "./src/theme";
 import { ProjectSheet } from "./src/components/ProjectSheet";
 import { flush, onFlushed } from "./src/uploads";
 import { isSignedIn, onAuthChange } from "./src/auth";
@@ -20,12 +29,25 @@ import { store } from "./src/storage";
 import type { LocationEntry, ProjectEntry, Settings } from "./src/types";
 
 type Mode = "shoot" | "review" | "gallery" | "map" | "day" | "setup";
-const ICONS: Record<Mode, string> = { shoot: "◉", review: "☑", gallery: "▦", map: "⌖", day: "▷", setup: "⚙" };
-const TAB = 52;
+const TABS: { mode: Mode; label: string; icon: string }[] = [
+  { mode: "shoot", label: "Shoot", icon: "camera-iris" },
+  { mode: "review", label: "Review", icon: "checkbox-marked-outline" },
+  { mode: "gallery", label: "Gallery", icon: "view-grid-outline" },
+  { mode: "map", label: "Map", icon: "map-outline" },
+  { mode: "day", label: "Day", icon: "calendar-clock" },
+  { mode: "setup", label: "Setup", icon: "cog-outline" },
+];
+const TAB = SIZE.tabBar;
 /** Minimum clearance between the UI strips and the screen edge (camera cutout, Android navigation bar). */
 export const EDGE_PAD = 32;
 
 export default function Root() {
+  // The UI font; render nothing for the few frames it takes to load (and carry on with the system font if it fails).
+  const [fontsLoaded, fontError] = useFonts({
+    AtkinsonHyperlegibleNext_400Regular, AtkinsonHyperlegibleNext_500Medium, AtkinsonHyperlegibleNext_600SemiBold,
+    AtkinsonHyperlegibleNext_700Bold, AtkinsonHyperlegibleNext_800ExtraBold,
+  });
+  if (!fontsLoaded && !fontError) return null;
   return (
     <SafeAreaProvider>
       <App />
@@ -93,19 +115,13 @@ function App() {
 
   // The tab bar sits on the navigation-bar edge; keep at least EDGE_PAD clear of it.
   const barPad = portrait ? Math.max(insets.bottom, EDGE_PAD) : Math.max(insets.right, EDGE_PAD);
-  const tabs = (
-    <View style={[t.bar, portrait ? { height: TAB + barPad, paddingBottom: barPad, flexDirection: "row" } : { width: TAB + barPad, paddingRight: barPad, flexDirection: "column" }]}>
-      {(Object.keys(ICONS) as Mode[]).map((m) => (
-        <Pressable key={m} onPress={() => setMode(m)} style={t.tab} hitSlop={6}>
-          <Text style={[t.icon, mode === m && { color: colors.accent }]}>{ICONS[m]}</Text>
-          <Text style={[t.label, mode === m && { color: colors.accent }]}>{m === "review" && unreviewed ? `review ${unreviewed}` : m}</Text>
-        </Pressable>
-      ))}
-    </View>
-  );
+  const os = useColorScheme();
+  const themeName = resolveTheme(settings.theme, os);
 
   return (
-    <View style={[t.root, { flexDirection: portrait ? "column" : "row" }]}>
+    <ThemeProvider choice={settings.theme}>
+    <StatusBar style={themeName === "set" ? "light" : "dark"} />
+    <View style={{ flex: 1, flexDirection: portrait ? "column" : "row", backgroundColor: PALETTES[themeName].bg }}>
       {/* Content stays clear of the camera cutout (top in portrait, left in landscape). */}
       <View style={{ flex: 1, paddingTop: portrait ? insets.top : 0, paddingLeft: portrait ? 0 : insets.left }}>
         {/* Viewfinder stays mounted so state and camera warm-up survive tab switches; it releases the camera when inactive. */}
@@ -119,18 +135,42 @@ function App() {
         {mode === "setup" && <Setup settings={settings} onChange={setSettings} project={project} onSwitchProject={() => setProjectSheet(true)} onSignIn={() => setLogin(true)} />}
         {mode === "map" && <MapScreen settings={settings} data={shots} focus={focus} filter={filter} locations={locations} onLocations={setLocations} countAt={countAt} open={open} onOpen={setOpen} />}
       </View>
-      {tabs}
+      <TabBar mode={mode} onMode={setMode} unreviewed={unreviewed} portrait={portrait} pad={barPad} />
       <Login visible={login} onDone={() => setLogin(false)} onSkip={() => setLogin(false)} />
       {/* Asked once (after sign-in) when no project is active; afterwards only when switching from Setup. */}
       <ProjectSheet visible={!login && (projectSheet || !project)} projects={projects} activeId={project?.id ?? null} onPick={pickProject} onClose={project ? () => setProjectSheet(false) : null} />
     </View>
+    </ThemeProvider>
   );
 }
 
-const t = StyleSheet.create({
-  root: { flex: 1, backgroundColor: colors.bg },
-  bar: { backgroundColor: colors.panel, borderColor: colors.border, borderTopWidth: StyleSheet.hairlineWidth, borderLeftWidth: StyleSheet.hairlineWidth, justifyContent: "space-evenly", alignItems: "center" },
-  tab: { alignItems: "center", minWidth: 48 },
-  icon: { color: colors.dim, fontSize: 18 },
-  label: { color: colors.dim, fontSize: 10, textTransform: "uppercase", letterSpacing: 0.5 },
-});
+/** Bottom tab bar (a right-hand column in landscape). Selected = accent pill behind the icon + heavy label. */
+function TabBar({ mode, onMode, unreviewed, portrait, pad }: { mode: Mode; onMode: (m: Mode) => void; unreviewed: number; portrait: boolean; pad: number }) {
+  const s = useStyles();
+  const { c } = useTheme();
+  return (
+    <View style={[s.bar, portrait ? { height: TAB + pad, paddingBottom: pad, flexDirection: "row", borderTopWidth: 2 } : { width: 76 + pad, paddingRight: pad, flexDirection: "column", borderLeftWidth: 2 }]}>
+      {TABS.map((t) => {
+        const on = mode === t.mode;
+        return (
+          <Pressable key={t.mode} onPress={() => onMode(t.mode)} style={s.tab} accessibilityRole="tab" accessibilityState={{ selected: on }} accessibilityLabel={t.label}>
+            <View style={[s.pill, on && { backgroundColor: c.accent }]}>
+              <Icon name={t.icon} size={22} color={on ? c.onAccent : c.text} />
+            </View>
+            <Text style={[s.label, on && s.labelOn]} numberOfLines={1}>{t.label}</Text>
+            {t.mode === "review" && unreviewed > 0 && <Text style={s.badge}>{unreviewed}</Text>}
+          </Pressable>
+        );
+      })}
+    </View>
+  );
+}
+
+const useStyles = makeStyles((c) => ({
+  bar: { backgroundColor: c.surface, borderColor: c.border, justifyContent: "space-around", alignItems: "stretch", paddingHorizontal: 4, paddingTop: 4 },
+  tab: { flex: 1, alignItems: "center", justifyContent: "center", gap: 3, minWidth: 52, minHeight: 56 },
+  pill: { width: 52, height: 30, borderRadius: 999, alignItems: "center", justifyContent: "center" },
+  label: { ...type("caption", "medium"), fontSize: 12, lineHeight: 14, color: c.text },
+  labelOn: { fontFamily: type("caption", "heavy").fontFamily },
+  badge: { position: "absolute", top: 0, left: "54%", minWidth: 20, height: 20, paddingHorizontal: 5, borderRadius: 10, overflow: "hidden", backgroundColor: c.warn, color: c.onWarn, textAlign: "center", ...type("caption", "bold"), fontSize: 12, lineHeight: 20 },
+}));

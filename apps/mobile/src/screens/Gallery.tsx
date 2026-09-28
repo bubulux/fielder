@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { ActivityIndicator, Alert, FlatList, Pressable, RefreshControl, StyleSheet, Text, useWindowDimensions, View } from "react-native";
+import { Alert, FlatList, Pressable, RefreshControl, ScrollView, Text, useWindowDimensions, View } from "react-native";
 import { api, cover, type Photo, type Shot } from "../api";
-import { FRAME_MODES, frameModeLabel, ShotFrame, type FrameMode } from "../components/ShotFrame";
-import { extraLabel, label, lightLabel, SHOT_STATES, STATE_COLORS, type ShotState } from "@fielder/vocab";
-import { Button, Chip, ChipRow, colors, Sheet, StateBadge } from "../components/ui";
+import { FrameModeSeg, ShotFrame, type FrameMode } from "../components/ShotFrame";
+import { extraLabel, label, lightLabel, SHOT_STATES, type ShotState } from "@fielder/vocab";
+import { Button, Chip, Empty, SeqBadge, Sheet, StateMarker } from "../components/ui";
+import { makeStyles, num, RADIUS, type, useTheme } from "../theme";
 import { TagsForm } from "../components/TagsForm";
 import { PhotoStrip } from "../components/PhotoStrip";
 import { PositionPicker } from "../components/PositionPicker";
@@ -48,7 +49,6 @@ export const tagsLabel = (s: Shot): string =>
   [label(s.int_ext), lightLabel(s.light, s.artificial), label(s.weather), extraLabel(s.extra)].filter(Boolean).join(" · ");
 /** "3 photos" for sequences, "" for single shots. */
 export const photoCountLabel = (s: Shot): string => (s.photos.length > 1 ? `${s.photos.length} photos` : "");
-export const badgeOf = (s: Shot) => <StateBadge state={s.state} color={STATE_COLORS[s.state] ?? colors.dim} />;
 
 function fovLabel(p: Photo): string {
   const f = p.framing ?? {};
@@ -74,6 +74,7 @@ interface DetailProps {
 
 export function ShotDetail({ shot, onClose, settings, mode: initialMode, onDeleted, onUpdated, onShowOnMap, locations, onLocations, countAt }: DetailProps) {
   const { width } = useWindowDimensions();
+  const d = useStyles();
   const [mode, setMode] = useState<FrameMode>(initialMode);
   const [editing, setEditing] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -105,22 +106,18 @@ export function ShotDetail({ shot, onClose, settings, mode: initialMode, onDelet
     ]);
   return (
     <Sheet visible title={shotTitle(shot)} onClose={onClose}>
-      <ShotFrame photo={photo} width={Math.min(width - 32, 720)} settings={settings} mode={mode} style={{ borderRadius: 8, alignSelf: "center" }} />
+      <ShotFrame photo={photo} width={Math.min(width - 40, 720)} settings={settings} mode={mode} style={{ borderRadius: RADIUS.sm, alignSelf: "center", marginTop: 12 }} />
       <PhotoStrip shot={shot} index={photoIndex} onPick={setPhotoIndex} />
-      <View style={{ marginTop: 10 }}>
-        <ChipRow>
-          {FRAME_MODES.map((m) => <Chip key={m} label={frameModeLabel(m)} selected={mode === m} onPress={() => setMode(m)} />)}
-        </ChipRow>
-      </View>
-      <View style={{ marginTop: 12, flexDirection: "row", alignItems: "center", gap: 8 }}>
-        {badgeOf(shot)}
-        <Text style={{ color: colors.text, fontSize: 15 }}>{placeLabel(shot) || "no location"}</Text>
+      <View style={{ marginTop: 10 }}><FrameModeSeg value={mode} onChange={setMode} /></View>
+      <View style={{ marginTop: 14, flexDirection: "row", alignItems: "center", gap: 8 }}>
+        <StateMarker state={shot.state} />
+        <Text style={d.place}>{placeLabel(shot) || "No location"}</Text>
       </View>
       {!!tagsLabel(shot) && <Text style={d.dim}>{tagsLabel(shot)}</Text>}
-      <Text style={d.line}>{[fmt(shot.captured_at), photoCountLabel(shot)].filter(Boolean).join(" · ")}</Text>
-      <Text style={d.dim}>{rigLabel(photo)}</Text>
-      <Text style={d.dim}>{fovLabel(photo)}</Text>
-      <Text style={d.dim}>{photo.lat.toFixed(5)}, {photo.lon.toFixed(5)}{photo.position_corrected ? " · corrected" : photo.gps_accuracy_m != null ? ` ±${Math.round(photo.gps_accuracy_m)} m` : ""}</Text>
+      <Text style={[d.line, num]}>{[fmt(shot.captured_at), photoCountLabel(shot)].filter(Boolean).join(" · ")}</Text>
+      <Text style={[d.dim, num]}>{rigLabel(photo)}</Text>
+      <Text style={[d.dim, num]}>{fovLabel(photo)}</Text>
+      <Text style={[d.dim, num]}>{photo.lat.toFixed(5)}, {photo.lon.toFixed(5)}{photo.position_corrected ? " · corrected" : photo.gps_accuracy_m != null ? ` ±${Math.round(photo.gps_accuracy_m)} m` : ""}</Text>
       {editing ? (
         <TagsForm
           initial={{ name: shot.name, light: shot.light, artificial: shot.artificial, weather: shot.weather, int_ext: shot.int_ext, location_id: shot.location_id, extra: shot.extra }}
@@ -135,14 +132,14 @@ export function ShotDetail({ shot, onClose, settings, mode: initialMode, onDelet
       ) : (
         <>
           <View style={{ flexDirection: "row", gap: 12 }}>
-            {shot.state !== "approved" && <View style={{ flex: 1 }}><Button label="Approve" kind="approve" onPress={() => void setState("approved")} disabled={busy} /></View>}
-            {shot.state !== "archived" && <View style={{ flex: 1 }}><Button label="Archive" kind="archive" onPress={() => void setState("archived")} disabled={busy} /></View>}
-            {shot.state !== "unreviewed" && <View style={{ flex: 1 }}><Button label="Back to review" kind="archive" onPress={() => void setState("unreviewed")} disabled={busy} /></View>}
+            {shot.state !== "approved" && <View style={{ flex: 1 }}><Button label="Approve" icon="check" kind="approve" onPress={() => void setState("approved")} disabled={busy} /></View>}
+            {shot.state !== "archived" && <View style={{ flex: 1 }}><Button label="Archive" icon="archive-outline" kind="archive" onPress={() => void setState("archived")} disabled={busy} /></View>}
+            {shot.state !== "unreviewed" && <View style={{ flex: 1 }}><Button label="Back to review" icon="undo" kind="archive" onPress={() => void setState("unreviewed")} disabled={busy} /></View>}
           </View>
-          <Button label="Edit details" kind="ghost" onPress={() => setEditing(true)} />
-          <Button label="Show on map" kind="ghost" onPress={() => onShowOnMap(shot)} />
-          <Button label="Correct position" kind="ghost" onPress={() => setMovingPin(true)} />
-          <Button label="Delete shot" kind="danger" onPress={del} />
+          <Button label="Edit details" icon="pencil-outline" kind="ghost" onPress={() => setEditing(true)} />
+          <Button label="Show on map" icon="map-marker-outline" kind="ghost" onPress={() => onShowOnMap(shot)} />
+          <Button label="Correct position" icon="crosshairs-gps" kind="ghost" onPress={() => setMovingPin(true)} />
+          <Button label="Delete shot" icon="delete-outline" kind="danger" onPress={del} />
         </>
       )}
       <PositionPicker key={photo.id} visible={movingPin} lat={photo.lat} lon={photo.lon} accuracyM={photo.gps_accuracy_m} photoCount={shot.photos.length}
@@ -168,6 +165,8 @@ export interface ShotListProps {
 
 export function Gallery({ settings, data, onShowOnMap, filter, onFilter, locations, onLocations, countAt, open, onOpen }: ShotListProps) {
   const { width, height } = useWindowDimensions();
+  const g = useStyles();
+  const { c } = useTheme();
   const [mode, setMode] = useState<FrameMode>("mask");
   const cols = width > height ? 4 : 2;
   const gap = 8;
@@ -179,17 +178,15 @@ export function Gallery({ settings, data, onShowOnMap, filter, onFilter, locatio
   const counts = useMemo(() => Object.fromEntries(STATE_FILTERS.map((f) => [f, applyFilter(shots, f).length])), [shots]);
 
   return (
-    <View style={{ flex: 1, backgroundColor: colors.bg }}>
+    <View style={g.root}>
       <View style={g.bar}>
-        <ChipRow>
-          {STATE_FILTERS.map((f) => <Chip key={f} label={`${f} ${counts[f] ?? 0}`} selected={filter === f} onPress={() => onFilter(f)} />)}
-        </ChipRow>
-        <ChipRow>
-          {FRAME_MODES.map((m) => <Chip key={m} label={frameModeLabel(m)} selected={mode === m} onPress={() => setMode(m)} />)}
-        </ChipRow>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingHorizontal: 12 }}>
+          {STATE_FILTERS.map((f) => <Chip key={f} label={`${label(f)} ${counts[f] ?? 0}`} selected={filter === f} onPress={() => onFilter(f)} />)}
+        </ScrollView>
+        <View style={{ paddingHorizontal: 12 }}><FrameModeSeg value={mode} onChange={setMode} /></View>
       </View>
-      {error && <Text style={g.error}>Could not load: {error}</Text>}
-      {!shots && !error && <ActivityIndicator color={colors.accent} style={{ marginTop: 40 }} />}
+      {error && <Empty icon="cloud-alert" title="Could not load" body={error} />}
+      {!shots && !error && <Empty loading title="Loading shots…" />}
       {shots && (
         <FlatList
           key={cols}
@@ -199,21 +196,19 @@ export function Gallery({ settings, data, onShowOnMap, filter, onFilter, locatio
           contentContainerStyle={{ padding: gap }}
           columnWrapperStyle={{ gap }}
           ItemSeparatorComponent={() => <View style={{ height: gap }} />}
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => void load()} tintColor={colors.accent} />}
-          ListEmptyComponent={<Text style={g.empty}>{filter === "all" ? "No shots yet." : `No ${filter} shots.`}</Text>}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => void load()} tintColor={c.accent} colors={[c.accent]} progressBackgroundColor={c.surface} />}
+          ListEmptyComponent={<Empty icon="camera-iris" title={filter === "all" ? "No shots yet" : `No ${filter} shots`} body={filter === "all" ? "Take one in the Shoot tab." : undefined} />}
           renderItem={({ item }) => (
-            <Pressable onPress={() => onOpen(item)} style={[g.card, { width: cell }]}>
+            <Pressable onPress={() => onOpen(item)} style={({ pressed }) => [g.card, { width: cell }, pressed && g.cardPressed]} accessibilityRole="button" accessibilityLabel={shotTitle(item)}>
               <View>
-                <ShotFrame photo={cover(item)} width={cell} settings={settings} mode={mode} />
-                {item.photos.length > 1 && <Text style={g.count}>▤ {item.photos.length}</Text>}
+                <ShotFrame photo={cover(item)} width={cell - 2} settings={settings} mode={mode} />
+                <View style={g.tl}><StateMarker state={item.state} iconOnly /></View>
+                {item.photos.length > 1 && <View style={g.tr}><SeqBadge count={item.photos.length} /></View>}
               </View>
-              <View style={{ padding: 8 }}>
+              <View style={{ padding: 10, gap: 2 }}>
                 <Text style={g.cardTitle} numberOfLines={1}>{shotTitle(item)}</Text>
                 <Text style={g.cardSub} numberOfLines={1}>{placeLabel(item) || rigLabel(cover(item))}</Text>
-                <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: 4 }}>
-                  <Text style={g.cardSub} numberOfLines={1}>{fmt(item.captured_at)}</Text>
-                  {badgeOf(item)}
-                </View>
+                <Text style={[g.cardSub, num]} numberOfLines={1}>{fmt(item.captured_at)}</Text>
               </View>
             </Pressable>
           )}
@@ -225,16 +220,16 @@ export function Gallery({ settings, data, onShowOnMap, filter, onFilter, locatio
   );
 }
 
-const g = StyleSheet.create({
-  bar: { gap: 8, paddingHorizontal: 12, paddingVertical: 8, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border },
-  error: { color: colors.danger, padding: 16 },
-  empty: { color: colors.dim, textAlign: "center", marginTop: 40 },
-  card: { backgroundColor: colors.panel, borderRadius: 10, overflow: "hidden", borderWidth: 1, borderColor: colors.border },
-  cardTitle: { color: colors.text, fontSize: 12, fontWeight: "600" },
-  cardSub: { color: colors.dim, fontSize: 11, marginTop: 2 },
-  count: { position: "absolute", top: 6, right: 6, backgroundColor: "rgba(0,0,0,0.7)", color: "#fff", fontSize: 11, fontWeight: "700", paddingHorizontal: 7, paddingVertical: 2, borderRadius: 999, overflow: "hidden" },
-});
-const d = StyleSheet.create({
-  line: { color: colors.text, marginTop: 12, fontSize: 15 },
-  dim: { color: colors.dim, marginTop: 4 },
-});
+const useStyles = makeStyles((c) => ({
+  root: { flex: 1, backgroundColor: c.bg },
+  bar: { gap: 8, paddingVertical: 10, backgroundColor: c.surface, borderBottomWidth: 2, borderBottomColor: c.border },
+  card: { backgroundColor: c.surface, borderRadius: RADIUS.md, overflow: "hidden", borderWidth: 1, borderColor: c.border },
+  cardPressed: { borderColor: c.borderStrong, transform: [{ translateY: 1 }] },
+  tl: { position: "absolute", top: 8, left: 8 },
+  tr: { position: "absolute", top: 8, right: 8 },
+  cardTitle: { ...type("small", "bold"), color: c.text },
+  cardSub: { ...type("caption"), color: c.textDim },
+  place: { ...type("body", "semibold"), color: c.text, flexShrink: 1 },
+  line: { ...type("small"), color: c.text, marginTop: 10 },
+  dim: { ...type("small"), color: c.textDim, marginTop: 4 },
+}));
