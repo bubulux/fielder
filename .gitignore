@@ -9,3 +9,4 @@ dist/
 *.aab
 worker-configuration.d.ts
 .secrets/
+references/
