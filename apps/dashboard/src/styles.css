@@ -42,6 +42,8 @@ button.f-row { width: 100%; }
 .f-pick { position: relative; }
 .f-pick select { flex: 1; min-width: 0; appearance: none; border: 0; background: transparent; color: inherit; font: inherit; cursor: pointer; padding: 0; outline: none; }
 .f-pick b { flex: none; font-weight: var(--weight-bold); }
+.f-select { position: relative; min-width: 0; }
+.f-select__list { position: absolute; top: calc(100% + 4px); left: 0; min-width: 100%; max-height: 320px; overflow: auto; z-index: 30; }
 .f-pick:focus-within { outline: var(--focus-width) solid var(--focus); outline-offset: var(--focus-offset); }
 .f-pick option, .f-pick optgroup { background: var(--surface-raised); color: var(--text); }
 .rule-value { min-width: 0; }

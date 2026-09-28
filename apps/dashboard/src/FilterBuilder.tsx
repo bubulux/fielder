@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "preact/hooks";
 import { FILTER_FIELDS, filterField, isGroup, OP_LABELS, OPS_BY_KIND, type FilterGroup, type FilterOp, type FilterRule } from "@fielder/vocab";
 import { Combobox } from "./Combobox";
 import { fieldOptions, type RefLists } from "./shotsQuery";
-import { cx, ErrorLine, Icon, Kbd } from "./ui";
+import { cx, ErrorLine, Icon, Kbd, Select } from "./ui";
 
 const needsValue = (op: FilterOp) => op !== "empty" && op !== "not_empty";
 const isList = (op: FilterOp) => op === "in" || op === "not_in";
@@ -81,13 +81,9 @@ function RuleRow({ rule, ctx, onChange, onRemove }: { rule: FilterRule; ctx: Ref
   }
   return (
     <div class="f-rule">
-      <label class="f-pick"><select aria-label="Field" value={f.id} onChange={(e) => setField((e.target as HTMLSelectElement).value)}>
-        {FILTER_FIELDS.map((x) => <option key={x.id} value={x.id}>{x.label}</option>)}
-        {ctx.extra.length > 0 && <optgroup label="Extra fields">{ctx.extra.map((x) => <option key={x.id} value={x.id}>{x.label}</option>)}</optgroup>}
-      </select><Icon name="chevron-down" /></label>
-      <label class="f-pick"><select aria-label="Operator" value={rule.op} onChange={(e) => setOp((e.target as HTMLSelectElement).value as FilterOp)}>
-        {ops.map((o) => <option key={o} value={o}>{OP_LABELS[o]}</option>)}
-      </select><Icon name="chevron-down" /></label>
+      <Select label="Field" value={f.id} onChange={setField}
+        options={[...FILTER_FIELDS.map((x) => ({ value: x.id, label: x.label })), ...ctx.extra.map((x) => ({ value: x.id, label: x.label, group: "Extra fields" }))]} />
+      <Select label="Operator" value={rule.op} onChange={(v) => setOp(v as FilterOp)} options={ops.map((o) => ({ value: o, label: OP_LABELS[o] }))} />
       <div class="rule-value">{value}</div>
       <button type="button" class="f-btn f-btn--ghost f-btn--sm f-btn--icon" aria-label="Remove rule" onClick={onRemove}><Icon name="close" /></button>
       {bad && <ErrorLine>Enter a number</ErrorLine>}

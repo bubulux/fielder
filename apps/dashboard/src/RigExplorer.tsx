@@ -4,7 +4,7 @@ import type { Photo, Preset } from "./api";
 import { sourceRigOf, type FrameGeometry } from "./format";
 import { Framed, type MaskMode } from "./Framed";
 import { useKeys } from "./keys";
-import { cx, Empty, Icon, Seg } from "./ui";
+import { cx, Empty, Icon, Seg, Select } from "./ui";
 
 /** "as shot" = the rig the photo was framed with; otherwise a preset id. */
 export interface RigChoice { rig: string; lensMm: number }
@@ -109,7 +109,7 @@ function factsText(rig: RigLens): string {
 function Reframed({ photo, mode, frame, tag }: { photo: Photo; mode: MaskMode; frame: FrameGeometry; tag?: string }) {
   const wider = frame.width_fraction > 1 || frame.height_fraction > 1;
   return (
-    <Framed photo={photo} mode={mode === "fit" ? "frame" : mode} frame={frame} maxHeight="calc(100vh - 290px)">
+    <Framed photo={photo} mode={mode} frame={frame} maxHeight="calc(100vh - 290px)">
       {wider && <span class="f-framed__more" style={{ left: "8px", top: "8px" }}><Icon name="arrow-expand-all" />Sees more than this photo</span>}
       {tag && <span class="f-framed__tag"><Icon name="camera-control" />{tag}</span>}
     </Framed>
@@ -122,13 +122,10 @@ function Pickers({ photo, presets, choice, onChoice }: { photo: Photo; presets: 
   const pickRig = (v: string) => { const p = presets.find((x) => x.id === v); const r = lensRange(p); onChoice({ rig: v, lensMm: r ? Math.min(r.max, Math.max(r.min, choice.lensMm)) : choice.lensMm }); };
   return (
     <>
-      <label class="f-pick" style={{ width: "200px" }}><b>Rig</b><select aria-label="Rig" value={choice.rig} onChange={(e) => pickRig((e.target as HTMLSelectElement).value)}>
-        <option value={AS_SHOT}>As shot</option>
-        {presets.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-      </select><Icon name="chevron-down" /></label>
-      <label class="f-pick" style={{ width: "110px" }}><b>Lens</b><select aria-label="Lens" value={String(choice.lensMm)} onChange={(e) => onChoice({ ...choice, lensMm: Number((e.target as HTMLSelectElement).value) })}>
-        {lenses.map((mm) => <option key={mm} value={mm}>{mm} mm</option>)}
-      </select><Icon name="chevron-down" /></label>
+      <Select label="Rig" prefix="Rig" width="200px" value={choice.rig} onChange={pickRig}
+        options={[{ value: AS_SHOT, label: "As shot" }, ...presets.map((p) => ({ value: p.id, label: p.name }))]} />
+      <Select label="Lens" prefix="Lens" width="120px" value={String(choice.lensMm)} onChange={(v) => onChoice({ ...choice, lensMm: Number(v) })}
+        options={lenses.map((mm) => ({ value: String(mm), label: `${mm} mm` }))} />
     </>
   );
 }

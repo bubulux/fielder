@@ -1,4 +1,4 @@
-import type { ComponentChildren } from "preact";
+import { Fragment, type ComponentChildren } from "preact";
 import { useEffect, useRef, useState } from "preact/hooks";
 import { LIGHT, PHASE_ICONS, STATE_ICONS, label, type ShotState } from "@fielder/vocab";
 
@@ -19,6 +19,72 @@ export function Mark({ size = 22 }: { size?: number }) {
       <path fill="currentColor" d="M0 0H20V12H12V20H0Z M72 0V20H60V12H52V0Z M72 72H52V60H60V52H72Z M0 72V52H12V60H20V72Z" />
       <path fill="var(--accent)" d="M18 26H54V46H18Z" />
     </svg>
+  );
+}
+
+export interface SelectOption { value: string; label: string; /** Heading shown above the first option of a group. */ group?: string }
+
+/**
+ * A single choice in the design-system look (a native <select> list can't be styled). The
+ * trigger is an f-pick; the list an f-menu below it. Keys on the trigger: ↓/Enter/Space open,
+ * ↑/↓/Home/End move, Enter picks, Esc closes, a letter jumps to the next match. While open,
+ * page shortcuts pause (data-overlay).
+ */
+export function Select({ value, options, onChange, label: aria, prefix, icon, width }: { value: string; options: readonly SelectOption[]; onChange: (v: string) => void; label: string; /** Bold word before the value ("Rig"). */ prefix?: string; icon?: string; width?: string }) {
+  const [open, setOpen] = useState(false);
+  const [hi, setHi] = useState(0);
+  const box = useRef<HTMLDivElement>(null);
+  const list = useRef<HTMLDivElement>(null);
+  const sel = Math.max(0, options.findIndex((o) => o.value === value));
+  const current = options.find((o) => o.value === value);
+  useEffect(() => {
+    if (!open) return;
+    setHi(sel);
+    const close = (e: MouseEvent) => { if (!box.current?.contains(e.target as Node)) setOpen(false); };
+    document.addEventListener("mousedown", close);
+    return () => document.removeEventListener("mousedown", close);
+  }, [open]);
+  useEffect(() => { if (open) list.current?.querySelector(".is-hi")?.scrollIntoView({ block: "nearest" }); }, [hi, open]);
+  const pick = (i: number) => { const o = options[i]; if (o) onChange(o.value); setOpen(false); };
+  const onKey = (e: KeyboardEvent) => {
+    const k = e.key;
+    let used = true;
+    if (!open) {
+      if (k === "ArrowDown" || k === "ArrowUp" || k === "Enter" || k === " ") setOpen(true); else used = false;
+    } else if (k === "ArrowDown") setHi((h) => Math.min(options.length - 1, h + 1));
+    else if (k === "ArrowUp") setHi((h) => Math.max(0, h - 1));
+    else if (k === "Home") setHi(0);
+    else if (k === "End") setHi(options.length - 1);
+    else if (k === "Enter" || k === " ") pick(hi);
+    else if (k === "Escape" || k === "Tab") { setOpen(false); used = k === "Escape"; }
+    else if (k.length === 1 && /\S/.test(k)) {
+      const from = open ? hi : sel;
+      const order = [...options.slice(from + 1), ...options.slice(0, from + 1)];
+      const hit = order.find((o) => o.label.toLowerCase().startsWith(k.toLowerCase()));
+      if (hit) setHi(options.indexOf(hit)); else used = false;
+    } else used = false;
+    if (used) { e.preventDefault(); e.stopPropagation(); }
+  };
+  return (
+    <div ref={box} class="f-select" style={{ width }}>
+      <button type="button" class="f-pick" style={{ width: "100%" }} aria-haspopup="listbox" aria-expanded={open} aria-label={`${aria}: ${current?.label ?? ""}`}
+        onClick={() => setOpen(!open)} onKeyDown={onKey}>
+        {icon && <Icon name={icon} />}{prefix && <b>{prefix}</b>}<span>{current?.label ?? ""}</span><Icon name="chevron-down" />
+      </button>
+      {open && (
+        <div ref={list} class="f-menu f-select__list" role="listbox" aria-label={aria} data-overlay>
+          {options.map((o, i) => (
+            <Fragment key={o.value}>
+              {o.group && o.group !== options[i - 1]?.group && <span class="f-menu__label">{o.group}</span>}
+              <button type="button" role="option" aria-selected={i === sel} tabIndex={-1} class={cx("f-menu__item", i === sel && "is-sel", i === hi && "is-hi")}
+                onMouseEnter={() => setHi(i)} onClick={() => pick(i)}>
+                <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis" }}>{o.label}</span>{i === sel && <Icon name="check" />}
+              </button>
+            </Fragment>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
 

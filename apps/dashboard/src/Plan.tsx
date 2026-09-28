@@ -6,7 +6,7 @@ import { Framed, type MaskMode } from "./Framed";
 import { invalidateDays } from "./Inspector";
 import { useKeys } from "./keys";
 import { Popover } from "./ShotsPage";
-import { confirmDialog, cx, Empty, Icon, Kbd, SaveStatus, toast, type SaveState } from "./ui";
+import { confirmDialog, cx, Empty, Icon, Kbd, SaveStatus, Select, toast, type SaveState } from "./ui";
 import { fetchForecast, weatherText, type HourForecast } from "./weather";
 
 interface Props {
@@ -338,10 +338,8 @@ function AddShotsPanel({ shots, light, taken, mask, onAdd, onClose }: { shots: S
     <aside class="f-panel" aria-label="Add shots" style={{ "--panel-w": "340px" }}>
       <div class="f-panel__head"><span class="f-panel__title">Add shots</span><Kbd>N</Kbd><button type="button" class="f-btn f-btn--ghost f-btn--sm f-btn--icon" aria-label="Close" onClick={onClose}><Icon name="close" /></button></div>
       <div class="panel-filters">
-        <label class="f-pick"><Icon name="map-marker-outline" /><select aria-label="Location" value={location} onChange={(e) => setLocation((e.target as HTMLSelectElement).value)}>
-          <option value="">All locations</option>
-          {locations.map(([id, name]) => <option key={id} value={id}>{name}</option>)}
-        </select><Icon name="chevron-down" /></label>
+        <Select label="Location" icon="map-marker-outline" value={location} onChange={setLocation}
+          options={[{ value: "", label: "All locations" }, ...locations.map(([id, name]) => ({ value: id, label: name }))]} />
         <button type="button" class={cx("f-check", onlyApproved && "is-checked")} role="checkbox" aria-checked={onlyApproved} onClick={() => setOnlyApproved(!onlyApproved)}>
           <span class="f-check__box">{onlyApproved && <Icon name="check" />}</span>Approved only <span class="meta">· {notOnDay.length} not on this day</span>
         </button>
