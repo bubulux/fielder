@@ -12,6 +12,8 @@ export type Scope = string;
 interface Props {
   route: Route;
   rail: boolean;
+  /** Collapse to the rail or expand ([). */
+  onToggle: () => void;
   scope: Scope;
   projects: Project[];
   views: SavedView[];
@@ -32,8 +34,8 @@ const THEME_NEXT: Record<ThemeChoice, ThemeChoice> = { auto: "sun", sun: "set", 
 const THEME_LABEL: Record<ThemeChoice, string> = { auto: "Theme: Auto (follows the system)", sun: "Theme: Sun", set: "Theme: Set" };
 const THEME_ICON: Record<ThemeChoice, string> = { auto: "theme-light-dark", sun: "white-balance-sunny", set: "weather-night" };
 
-/** Left sidebar (a 56 px rail below 1024 px and in the shot view): scope, sections, saved views, palette, theme, reload. */
-export function Sidebar({ route, rail, scope, projects, views, editedViewId, counts, theme, onTheme, onScope, onNavigate, onNewView, onPalette, onReload, loadedAt }: Props) {
+/** Left sidebar (a 56 px rail when collapsed): scope, sections, saved views, palette, theme, reload, collapse. */
+export function Sidebar({ route, rail, onToggle, scope, projects, views, editedViewId, counts, theme, onTheme, onScope, onNavigate, onNewView, onPalette, onReload, loadedAt }: Props) {
   const scopeName = scope === ALL_PROJECTS ? "All projects" : projects.find((p) => p.id === scope)?.name ?? "—";
   const section = route.page === "shot" ? "shots" : route.page;
   const lib = route.page === "library" ? route.section : null;
@@ -52,7 +54,10 @@ export function Sidebar({ route, rail, scope, projects, views, editedViewId, cou
   );
   return (
     <nav class="f-side" aria-label="Sections">
-      <div class="f-side__brand" style={rail ? { padding: 0, justifyContent: "center" } : undefined}><Mark />{!rail && "Fielder"}</div>
+      <div class="f-side__brand" style={rail ? { padding: 0, justifyContent: "center" } : undefined}>
+        <Mark />{!rail && <span style={{ flex: 1 }}>Fielder</span>}
+        {!rail && <button type="button" class="f-btn f-btn--ghost f-btn--sm f-btn--icon" aria-label="Collapse the sidebar ([)" title="Collapse the sidebar ([)" onClick={onToggle}><Icon name="chevron-double-left" /></button>}
+      </div>
       <ScopeSwitch rail={rail} scope={scope} name={scopeName} projects={projects} onScope={onScope} onManage={() => onNavigate({ page: "library", section: "projects", id: null })} />
       <div style={{ height: "10px" }} />
       {nav("shots", "view-grid-outline", "Shots", { page: "shots", viewId: null }, counts.shots)}
@@ -88,6 +93,7 @@ export function Sidebar({ route, rail, scope, projects, views, editedViewId, cou
           <button type="button" class="f-nav" aria-label="Go to… (⌘K)" title="Go to… (⌘K)" onClick={onPalette}><Icon name="magnify" /></button>
           <button type="button" class="f-nav" aria-label={THEME_LABEL[theme]} title={THEME_LABEL[theme]} onClick={() => onTheme(THEME_NEXT[theme])}><Icon name={THEME_ICON[theme]} /></button>
           <button type="button" class="f-nav" aria-label="Reload data" title="Reload data" onClick={onReload}><Icon name="refresh" /></button>
+          <button type="button" class="f-nav" aria-label="Expand the sidebar ([)" title="Expand the sidebar ([)" onClick={onToggle}><Icon name="chevron-double-right" /></button>
         </>
       ) : (
         <div class="f-side__foot">
@@ -104,6 +110,7 @@ export function Sidebar({ route, rail, scope, projects, views, editedViewId, cou
 function ScopeSwitch({ rail, scope, name, projects, onScope, onManage }: { rail: boolean; scope: Scope; name: string; projects: Project[]; onScope: (s: Scope) => void; onManage: () => void }) {
   const [open, setOpen] = useState(false);
   const [hi, setHi] = useState(0);
+  const [at, setAt] = useState<{ top: number; left: number; width: number } | null>(null);
   const box = useRef<HTMLDivElement>(null);
   const items: { id: string; label: string; icon: string; meta?: string }[] = [
     ...projects.map((p) => ({ id: p.id, label: p.name, icon: "folder-outline", meta: `${p.shot_count}` })),
@@ -113,6 +120,8 @@ function ScopeSwitch({ rail, scope, name, projects, onScope, onManage }: { rail:
   useEffect(() => {
     if (!open) return;
     setHi(Math.max(0, items.findIndex((i) => i.id === scope)));
+    const b = box.current?.getBoundingClientRect();
+    if (b) setAt({ top: b.bottom + 4, left: b.left, width: rail ? 260 : b.width });
     const close = (e: MouseEvent) => { if (!box.current?.contains(e.target as Node)) setOpen(false); };
     document.addEventListener("mousedown", close);
     return () => document.removeEventListener("mousedown", close);
@@ -135,8 +144,8 @@ function ScopeSwitch({ rail, scope, name, projects, onScope, onManage }: { rail:
           <Icon name="unfold-more-horizontal" />
         </button>
       )}
-      {open && (
-        <div class="f-menu" role="listbox" style={{ position: "absolute", top: "calc(100% + 4px)", left: 0, zIndex: 60, width: rail ? "260px" : "100%", maxHeight: "60vh", overflow: "auto" }}>
+      {open && at && (
+        <div class="f-menu" role="listbox" style={{ position: "fixed", top: `${at.top}px`, left: `${at.left}px`, zIndex: 60, width: `${at.width}px`, maxHeight: "60vh", overflow: "auto" }}>
           {items.map((it, i) => (
             <Fragment key={it.id}>
               {it.id === ALL_PROJECTS && <div class="f-menu__sep" />}

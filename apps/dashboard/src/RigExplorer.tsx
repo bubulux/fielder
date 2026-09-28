@@ -62,21 +62,21 @@ export function RigsStage({ photo, presets, mode, state, onState, onBack }: Prop
     <>
       <div class="f-stage__bar">
         <Seg label="Explorer" value={state.view} onChange={(view) => onState({ ...state, view })} options={[{ id: "one", label: "One rig" }, { id: "compare", label: "Compare A / B" }]} />
-        {state.view === "one" && <><Pickers photo={photo} presets={presets} choice={state.a} onChoice={setA} /><span class="meta num">{factsText(rigOf(state.a))}</span></>}
+        {state.view === "one" && <><Pickers photo={photo} presets={presets} choice={state.a} onChoice={setA} /><span class="meta num">{factsText(rigOf(state.a), frameFor(state.a))}</span></>}
         <span class="f-toolbar__sp" />
         {state.view === "one" && <span class="meta">←/→ step the lens · shots paused</span>}
         <button type="button" class="f-btn f-btn--ghost f-btn--sm" onClick={onBack}>Back to photo<span class="f-btn__kbd">Esc</span></button>
       </div>
       <div class="f-stage__view">
         {state.view === "one" ? (
-          <Reframed photo={photo} mode={mode} frame={frameFor(state.a)} tag={rigName(state.a) + ` · ${state.a.lensMm} mm`} />
+          <Reframed photo={photo} mode={mode} frame={frameFor(state.a)} />
         ) : (
           <div class="compare">
             {([["A", state.a, setA], ["B", state.b, setB]] as const).map(([tag, c, set]) => (
               <div key={tag} class="compare__pane">
                 <div class="compare__head"><span class="f-board-lbl">{tag}</span><Pickers photo={photo} presets={presets} choice={c} onChoice={set} /></div>
                 <div class="compare__photo"><Reframed photo={photo} mode={mode === "off" ? "mask" : mode} frame={frameFor(c)} /></div>
-                <span class="compare__facts num">{factsText(rigOf(c))}</span>
+                <span class="compare__facts num">{factsText(rigOf(c), frameFor(c))}</span>
               </div>
             ))}
           </div>
@@ -101,19 +101,15 @@ export function RigsStage({ photo, presets, mode, state, onState, onBack }: Prop
   );
 }
 
-function factsText(rig: RigLens): string {
+function factsText(rig: RigLens, frame: FrameGeometry): string {
   const f = computeFraming(rig.rig, rig.lensMm);
-  return `FF ${f.fullFrameEquivalentMm.toFixed(1)} mm · HFOV ${f.fov.horizontal.toFixed(1)}° · VFOV ${f.fov.vertical.toFixed(1)}°`;
+  const wider = frame.width_fraction > 1 || frame.height_fraction > 1;
+  return `FF ${f.fullFrameEquivalentMm.toFixed(1)} mm · HFOV ${f.fov.horizontal.toFixed(1)}° · VFOV ${f.fov.vertical.toFixed(1)}°${wider ? " · sees more than this photo" : ""}`;
 }
 
-function Reframed({ photo, mode, frame, tag }: { photo: Photo; mode: MaskMode; frame: FrameGeometry; tag?: string }) {
-  const wider = frame.width_fraction > 1 || frame.height_fraction > 1;
-  return (
-    <Framed photo={photo} mode={mode} frame={frame} maxHeight="calc(100vh - 290px)">
-      {wider && <span class="f-framed__more" style={{ left: "8px", top: "8px" }}><Icon name="arrow-expand-all" />Sees more than this photo</span>}
-      {tag && <span class="f-framed__tag"><Icon name="camera-control" />{tag}</span>}
-    </Framed>
-  );
+/** Nothing is drawn over the photo; "sees more than this photo" is in the facts line (and the frame is dashed). */
+function Reframed({ photo, mode, frame }: { photo: Photo; mode: MaskMode; frame: FrameGeometry }) {
+  return <Framed photo={photo} mode={mode} frame={frame} maxHeight="calc(100vh - 290px)" />;
 }
 
 function Pickers({ photo, presets, choice, onChoice }: { photo: Photo; presets: Preset[]; choice: RigChoice; onChoice: (c: RigChoice) => void }) {

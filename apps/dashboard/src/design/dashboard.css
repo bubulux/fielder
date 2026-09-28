@@ -8,7 +8,7 @@
 .f-scroll{flex:1;min-width:0;min-height:0;overflow:auto}
 
 /* ---------- Sidebar ---------- */
-.f-side{display:flex;flex-direction:column;gap:2px;padding:12px 10px;background:var(--surface);border-right:var(--bw) solid var(--border-subtle);min-height:0;overflow:auto}
+.f-side{display:flex;flex-direction:column;gap:2px;padding:12px 10px;background:var(--surface);border-right:var(--bw) solid var(--border-subtle);min-height:0;overflow-x:hidden;overflow-y:auto}
 .f-side__brand{display:flex;align-items:center;gap:8px;height:32px;padding:0 6px;font:var(--weight-heavy) 16px/1 var(--font-sans);margin-bottom:6px}
 .f-side__brand .mdi{font-size:22px}
 .f-side__label{white-space:nowrap;display:flex;align-items:center;justify-content:space-between;padding:14px 10px 4px;font:var(--weight-bold) var(--text-micro)/1 var(--font-sans);letter-spacing:var(--tracking-caps);text-transform:uppercase;color:var(--text-dim)}

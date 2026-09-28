@@ -17,14 +17,14 @@ The light model feeds the [schedule](schedule.md): phases are defined by sun ele
 
 ## Shot view and Review (dashboard)
 
-The shot view (`ShotView.tsx`) replaces the old dialog. It covers the main area (the sidebar becomes a rail) and keeps the list it was opened from, from Shots, the map, Plan or ⌘K. Review (`Review.tsx`) uses the same layout.
+The shot view (`ShotView.tsx`) replaces the old dialog. It covers the main area (the sidebar keeps its collapsed or expanded state) and keeps the list it was opened from, from Shots, the map, Plan or ⌘K. Review (`Review.tsx`) uses the same layout.
 
 - **Toolbar**:
   - Shot view: back (Esc) to where it was opened from, "7 of 212" with the list's description (state · view or project · sort), and ←/→.
   - Review: "3 of 14 · oldest first" with a progress bar, and ←/→.
   - Both: the **stage switch** Photo · Rigs (`R`) · Position, and the frame-mode switch. The frame mode starts from the global mode; a change sticks for ←/→ until the view closes (`viewMode`/`reviewMode` in `App.tsx`). `M` cycles it.
 - **Stage**:
-  - **Photo**: the photo as large as fits, with a rig · lens tag and prev/next buttons on the image. The foot has the photo strip for sequences (`,` `.`) and the actions Download crop (cropped in the browser), Original, Show on map, and Delete (confirm dialog, offering Archive instead).
+  - **Photo**: the photo as large as fits, with prev/next buttons beside it and nothing drawn over the picture (rig and lens are in the inspector). The foot has the photo strip for sequences (`,` `.`) and the actions Download crop (cropped in the browser), Original, Show on map, and Delete (confirm dialog, offering Archive instead).
   - **Rigs**: the [rig explorer](rig-explorer.md).
   - **Position**: the [position correction](positions.md) map.
 - **Inspector** (`Inspector.tsx`, 380 px, scrolls on its own):

@@ -27,7 +27,7 @@ function loadMask(): MaskMode { const v = readStorage("maskMode"); return isFram
 const nextMode = (m: MaskMode) => FRAME_MODES[(FRAME_MODES.indexOf(m) + 1) % FRAME_MODES.length];
 const sameFilter = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
 
-/** The sidebar collapses to a rail on narrow windows (and always in the shot view). */
+/** Without a choice of its own, the sidebar collapses to a rail on narrow windows. */
 function useNarrow(): boolean {
   const mq = () => window.matchMedia?.("(max-width: 1100px)");
   const [narrow, setNarrow] = useState(() => !!mq()?.matches);
@@ -39,6 +39,8 @@ export function App() {
   const [route, navigateRaw, replace] = useRoute();
   const [theme, setTheme] = useTheme();
   const narrow = useNarrow();
+  // The user's own collapse/expand (the sidebar button or [), remembered; null = follow the window width.
+  const [sideChoice, setSideChoice] = useState<"rail" | "full" | null>(() => { const v = readStorage("sidebar"); return v === "rail" || v === "full" ? v : null; });
   const [shots, setShots] = useState<Shot[] | null>(null);
   const [projects, setProjects] = useState<Project[] | null>(null);
   const [presets, setPresets] = useState<Preset[] | null>(null);
@@ -167,12 +169,18 @@ export function App() {
     setLayout(l);
     navigateRaw({ page: "shots", viewId: null });
   };
+  function toggleSidebar() {
+    const next = (sideChoice ? sideChoice === "rail" : narrow) ? "full" : "rail";
+    setSideChoice(next);
+    writeStorage("sidebar", next);
+  }
   const openPalette = () => { setPalette(true); if (scope && !isAll) void projectDays(scope).then(setPaletteDays); };
 
   // Global keys: palette, shortcut sheet, G-then-section, frame mode on Shots.
   useKeys({
     "Mod+k": openPalette,
     "?": () => setSheet(true),
+    "[": () => toggleSidebar(),
     s: () => { if (!afterG()) return false; void navigate({ page: "shots", viewId: null }); },
     r: () => { if (!afterG()) return false; void navigate({ page: "review" }); },
     p: () => { if (!afterG()) return false; void navigate({ page: "plan", dayId: null }); },
@@ -188,7 +196,7 @@ export function App() {
     return <><ProjectGate projects={projects!} onChange={setProjects} onActivate={setScope} /><ConfirmHost /><ToastHost /></>;
   }
 
-  const rail = narrow || route.page === "shot";
+  const rail = sideChoice ? sideChoice === "rail" : narrow;
   const unreviewed = scoped.filter((s) => s.state === "unreviewed").length;
   const openShotObj = route.page === "shot" ? (shots ?? []).find((s) => s.id === route.shotId) ?? null : null;
   const byId = new Map((shots ?? []).map((s) => [s.id, s]));
@@ -260,12 +268,13 @@ export function App() {
     { id: "a-rig", group: "Actions", icon: "camera-plus-outline", title: "New rig", sub: "Library › Rigs", run: () => navigateRaw({ page: "library", section: "rigs", id: null }) },
     { id: "a-theme", group: "Actions", icon: "theme-light-dark", title: "Toggle theme", sub: `Now ${theme === "auto" ? "Auto" : theme === "sun" ? "Sun" : "Set"}`, run: () => setTheme(theme === "set" ? "sun" : "set") },
     { id: "a-reload", group: "Actions", icon: "refresh", title: "Reload data", run: reload },
+    { id: "a-side", group: "Actions", icon: rail ? "chevron-double-right" : "chevron-double-left", title: rail ? "Expand the sidebar" : "Collapse the sidebar", keys: "[", run: toggleSidebar },
     { id: "a-keys", group: "Actions", icon: "keyboard-outline", title: "Keyboard shortcuts", keys: "?", run: () => setSheet(true) },
   ];
 
   return (
     <div class={cx("f-app", rail && "f-app--rail")}>
-      <Sidebar route={route} rail={rail} scope={scope ?? ALL_PROJECTS} projects={projects ?? []} views={views ?? []} editedViewId={edited ? loadedView?.id ?? null : null}
+      <Sidebar route={route} rail={rail} onToggle={toggleSidebar} scope={scope ?? ALL_PROJECTS} projects={projects ?? []} views={views ?? []} editedViewId={edited ? loadedView?.id ?? null : null}
         counts={{ shots: scoped.length, unreviewed, projects: projects?.length ?? 0, fields: fields?.length ?? 0, rigs: presets?.length ?? 0, locations: locations?.length ?? 0 }}
         theme={theme} onTheme={setTheme} onScope={setScope} onNavigate={(r) => void navigate(r)} onNewView={() => void newView()} onPalette={openPalette} onReload={reload} loadedAt={loadedAt} />
       <main class="f-app__main">{main}</main>
