@@ -10,6 +10,9 @@ function stored(): ThemeChoice {
 function apply(choice: ThemeChoice) {
   const t = choice === "auto" ? (mq()?.matches ? "set" : "sun") : choice;
   document.documentElement.setAttribute("data-theme", t);
+  // Title bar of the installed app follows the theme's surface colour.
+  const surface = getComputedStyle(document.documentElement).getPropertyValue("--surface").trim();
+  if (surface) document.querySelector('meta[name="theme-color"]')?.setAttribute("content", surface);
 }
 
 /** The inline script in index.html sets the theme before first paint; this keeps it in sync afterwards. */

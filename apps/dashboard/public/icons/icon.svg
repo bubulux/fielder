@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!-- Placeholder mark until the real icon arrives: viewfinder corners on the cobalt accent. -->
+  <rect width="512" height="512" fill="#0040D8"/>
+  <g fill="none" stroke="#FFFFFF" stroke-width="36" stroke-linecap="square">
+    <path d="M136 196V136h60M316 136h60v60M376 316v60h-60M196 376h-60v-60"/>
+  </g>
+  <circle cx="256" cy="256" r="26" fill="#FFFFFF"/>
+</svg>

@@ -5,6 +5,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="color-scheme" content="light dark" />
     <title>Fielder</title>
+    <link rel="icon" href="/icons/icon.svg" type="image/svg+xml" />
+    <!-- Behind Cloudflare Access: the manifest must be fetched with the session cookie. -->
+    <link rel="manifest" href="/manifest.webmanifest" crossorigin="use-credentials" />
+    <meta name="theme-color" content="#FFFFFF" />
     <script>
       // Theme before first paint: localStorage["theme"] = "sun" | "set" overrides, absent = follow the OS (see src/theme.ts).
       (function () {

@@ -12,6 +12,7 @@ Designed in Claude Design (2026-09-28): four sections plus a shot view, a sideba
 - **Hash routes**, so deep links survive a reload: `#/shots`, `#/shots?view=<id>`, `#/shots/<shotId>?stage=rigs|position`, `#/review`, `#/plan/<dayId>`, `#/library/projects|fields|rigs|locations/<id>`.
 - **Key hint bar** at the bottom: the shortcuts of the current screen; `?` opens all of them.
 - **First run** (no project chosen, or it was deleted): a full-window project picker with "New project" (`ProjectGate` in `Projects.tsx`).
+- **Installable (PWA)**: `public/manifest.webmanifest` (standalone, start `/`), icons in `public/icons/`, linked from `index.html` with `crossorigin="use-credentials"` so the manifest request carries the Access cookie. No service worker (nothing is cached offline; Chrome and Edge install without one). The `theme-color` meta follows the Sun/Set surface (`theme.ts`). The icon is a placeholder until the real one is designed.
 - **Dialogs** only for confirmations, name prompts, the command palette and the shortcut sheet (`confirmDialog`, `promptDialog`, `toast` in `ui.tsx`). There are no `window.confirm`/`alert` calls any more.
 
 ## Sections
