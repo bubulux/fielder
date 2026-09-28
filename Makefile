@@ -1,6 +1,9 @@
 # Thin wrappers around the pnpm scripts in package.json, which stay the source
 # of truth. Everything runs in the foreground; stop a server with Ctrl-C.
-.PHONY: help init dev worker dashboard mobile
+.PHONY: help init dev worker dashboard mobile login deploy apk-cloud apk-local
+
+# Wrangler's OAuth token lacks account:read, so commands that look up the account need the id.
+export CLOUDFLARE_ACCOUNT_ID ?= 3868cbc17be171c90972dd32e41e7783
 
 help: ## Show this list
 	@grep -hE '^[a-z-]+:.*?## ' $(MAKEFILE_LIST) \
@@ -20,3 +23,16 @@ dashboard: ## Dashboard only -> http://localhost:5173 (needs `make worker` for /
 
 mobile: ## Metro with the Expo Go tunnel -> exp://….exp.direct
 	pnpm dev:mobile
+
+login: ## Log wrangler in to Cloudflare (device code, works in WSL)
+	pnpm wrangler login --device
+
+deploy: ## Production: apply new D1 migrations, build the dashboard, deploy Worker + assets
+	pnpm -C apps/worker migrate:remote
+	pnpm -C apps/worker run deploy
+
+apk-cloud: ## APK on EAS (cloud build; counts against the monthly quota)
+	pnpm -C apps/mobile build:apk
+
+apk-local: ## APK built locally, copied to the Windows Downloads folder (~10 min)
+	bash scripts/apk-local.sh

@@ -48,6 +48,8 @@ pnpm dev:mobile     # expo start --go --tunnel; reads apps/mobile/.env.local
 
 ## Deploy and migrations
 
+Shortcuts (`make help` lists all): `make login` (wrangler, device code), `make deploy` (remote migrations, then the deploy below), `make apk-cloud` (EAS), `make apk-local` (`scripts/apk-local.sh`: the local build below, then copies `fielder-<commit>.apk` to the Windows Downloads folder; override with `DOWNLOADS=…` or `API_URL=…`).
+
 ```sh
 CLOUDFLARE_ACCOUNT_ID=3868cbc17be171c90972dd32e41e7783 pnpm -C apps/worker migrate:remote   # apply new migrations first
 pnpm -C apps/worker run deploy     # builds the dashboard, deploys Worker + assets
