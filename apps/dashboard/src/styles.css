@@ -61,7 +61,7 @@ button.f-row { width: 100%; }
 .combo .f-combo__hint { flex-wrap: wrap; row-gap: 4px; }
 .combo .f-combo__hint span { white-space: nowrap; }
 /* The value column is at the panel's right side: open towards the left. */
-.rule-value .combo .f-combo__list { left: auto; right: 0; }
+.rule-value .combo .f-combo__list, .combo .f-combo__list.is-end { left: auto; right: 0; }
 
 /* Overlays: dialogs, command palette, shortcut sheet */
 .overlay { position: fixed; inset: 0; z-index: 2000; display: flex; align-items: center; justify-content: center; padding: 24px; }

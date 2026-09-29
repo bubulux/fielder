@@ -330,8 +330,11 @@ export function Viewfinder({ active: tabActive }: { active: boolean }) {
   const gpsText = gpsAccuracy == null ? "No GPS fix yet" : `GPS ±${Math.round(gpsAccuracy)} m`;
   const n = sync.state === "stuck" ? sync.stuck : sync.pending;
 
+  // Keyed by state: Android does not redraw a dashed border back to solid, nor re-round a view whose
+  // background goes from transparent to a colour, so each state mounts fresh (else a square disc at start).
+  const shutterKey = busy ? "busy" : shutterOff ? "off" : sequence ? "seq" : "on";
   const shutter = (
-    <Pressable onPress={capture} disabled={shutterOff} accessibilityRole="button" accessibilityLabel={sequence ? `Capture into sequence, ${sequence.photos.length} so far` : "Capture"}
+    <Pressable key={shutterKey} onPress={capture} disabled={shutterOff} accessibilityRole="button" accessibilityLabel={sequence ? `Capture into sequence, ${sequence.photos.length} so far` : "Capture"}
       style={[s.shutter, sequence && s.shutterSeq, shutterOff && !busy && s.shutterOff]}>
       {({ pressed }) => busy
         ? <ActivityIndicator color={c.chromeText} size="large" />
