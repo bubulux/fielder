@@ -75,7 +75,8 @@ The **Review** tab (`screens/Review.tsx`) takes the same queue (unreviewed, olde
 ## Tag editing UI
 
 - **Dashboard**: the inspector (above). The combobox (`Combobox.tsx`):
-  - Type to filter; matches at the start rank first.
+  - Type to filter; matches at the start rank first. The typed text is marked in yellow in each match (also in ⌘K).
+  - The list takes the width of its options; when that would spill past the right edge of its panel, it opens from the input's right edge.
   - ↑/↓ move, Enter or Tab take the highlighted entry (Tab also moves on), Esc cancels.
   - "Create “…”" makes a new location.
   - The same combobox is used for the project box, rig and format pickers, and the filter builder's single values.

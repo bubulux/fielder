@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "preact/hooks";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "preact/hooks";
 
 export interface ComboOption { value: string; label: string; hint?: string }
 
@@ -34,6 +34,7 @@ export function Combobox({ options, value, onChange, placeholder, onCreate, clea
   const [query, setQuery] = useState<string | null>(null); // null = not typing: show the selected label
   const [open, setOpen] = useState(false);
   const [hi, setHi] = useState(0);
+  const [alignEnd, setAlignEnd] = useState(false);
   const input = useRef<HTMLInputElement>(null);
   const list = useRef<HTMLUListElement>(null);
 
@@ -54,6 +55,17 @@ export function Combobox({ options, value, onChange, placeholder, onCreate, clea
 
   useEffect(() => { setHi(0); }, [q, open]);
   useEffect(() => { list.current?.querySelector(".is-hi")?.scrollIntoView({ block: "nearest" }); }, [hi]);
+  // The list is wider than a narrow input; if it would spill past the right edge of its scroll
+  // container (inspector, panels), open it from the input's right edge instead.
+  useLayoutEffect(() => {
+    const el = list.current;
+    if (!open || !el) { setAlignEnd(false); return; }
+    if (alignEnd) return;
+    const box = el.getBoundingClientRect();
+    const { left, right } = clipBox(el);
+    const anchorRight = el.parentElement!.getBoundingClientRect().right;
+    if (box.right > right && anchorRight - box.width >= left) setAlignEnd(true);
+  }, [open, entries.length > 0]);
 
   const close = () => { setOpen(false); setQuery(null); };
   const cancel = () => { close(); onCancel?.(); };
@@ -95,7 +107,7 @@ export function Combobox({ options, value, onChange, placeholder, onCreate, clea
         <i class={`mdi f-combo__caret mdi-${open ? "chevron-up" : "chevron-down"}`} aria-hidden="true" />
       </div>
       {open && entries.length > 0 && (
-        <ul class="f-combo__list" ref={list} role="listbox">
+        <ul class={alignEnd ? "f-combo__list is-end" : "f-combo__list"} ref={list} role="listbox">
           {entries.map((e, i) => (
             <li
               key={e.kind === "option" ? e.option.value : e.kind}
@@ -106,7 +118,7 @@ export function Combobox({ options, value, onChange, placeholder, onCreate, clea
               role="option"
               aria-selected={e.kind === "option" && e.option.value === value}
             >
-              {e.kind === "option" ? <><i class={`mdi ${e.option.value === value ? "mdi-check" : ""}`} aria-hidden="true" />{highlight(e.option.label, q)}{e.option.hint && <span class="meta">{e.option.hint}</span>}</>
+              {e.kind === "option" ? <><i class={`mdi ${e.option.value === value ? "mdi-check" : ""}`} aria-hidden="true" /><span>{highlight(e.option.label, q)}</span>{e.option.hint && <span class="meta">{e.option.hint}</span>}</>
                 : e.kind === "create" ? <><i class="mdi mdi-plus" aria-hidden="true" />Create “{(query ?? "").trim()}”</>
                 : <><i class="mdi mdi-close" aria-hidden="true" /><span class="meta">None</span></>}
             </li>
@@ -118,7 +130,15 @@ export function Combobox({ options, value, onChange, placeholder, onCreate, clea
   );
 }
 
-/** Bold + underline the typed text inside a label. */
+/** Horizontal bounds the list must stay in: the nearest ancestor that clips, else the window. */
+function clipBox(el: HTMLElement) {
+  for (let p = el.parentElement; p; p = p.parentElement) {
+    if (getComputedStyle(p).overflowX !== "visible") { const r = p.getBoundingClientRect(); return { left: r.left, right: r.right }; }
+  }
+  return { left: 0, right: window.innerWidth };
+}
+
+/** Mark the typed text inside a label (one inline run, so the word keeps its spacing). */
 function highlight(label: string, q: string) {
   const i = q ? label.toLowerCase().indexOf(q) : -1;
   if (i < 0) return label;
