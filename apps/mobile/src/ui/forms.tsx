@@ -82,3 +82,15 @@ export function Checkbox({ checked }: { checked: boolean }) {
   const { c } = useTheme();
   return <View style={[s.check, checked && { backgroundColor: c.accent, borderColor: c.accent }]}>{checked && <Icon name="check-bold" size={18} color={c.onAccent} />}</View>;
 }
+
+/** Chips in a two-column grid whose cells fill their half (use `Chip block`). */
+export function ChipGrid({ children }: { children: ReactNode }) {
+  const s = useStyles();
+  return <View style={s.chipGrid}>{children}</View>;
+}
+
+/** One cell of a ChipGrid. */
+export function ChipCell({ children }: { children: ReactNode }) {
+  const s = useStyles();
+  return <View style={s.chipCell}>{children}</View>;
+}

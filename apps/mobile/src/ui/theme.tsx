@@ -99,9 +99,12 @@ export const type = (step: keyof typeof TYPE, weight: Weight = "regular"): TextS
 export const num: TextStyle = { fontVariant: ["tabular-nums"] };
 
 export const RADIUS = { xs: 3, sm: 8, md: 12, lg: 18, pill: 999 } as const;
-export const SIZE = { touchMin: 48, control: 52, controlLg: 60, shutter: 76, tabBar: 64, edgePad: 32, iconSm: 20, icon: 24, iconLg: 28 } as const;
-/** Control borders are 2 dp (never hairlines: they vanish in sunlight). */
-export const BORDER = { control: 2, selected: 3, frame: 2 } as const;
+/** Spacing scale of the design system (dp), the phone's counterpart of the dashboard's --space-*. */
+export const SPACE = { xxs: 2, xs: 4, sm: 8, md: 12, lg: 16, xl: 20, xxl: 24, xxxl: 32 } as const;
+/** header: AppHeader and the full-screen headers; actionColumn: the landscape action bar. */
+export const SIZE = { touchMin: 48, control: 52, controlLg: 60, shutter: 76, tabBar: 64, edgePad: 32, iconSm: 20, icon: 24, iconLg: 28, header: 64, actionColumn: 148 } as const;
+/** Control borders are 2 dp (never hairlines: they vanish in sunlight). `badge` (1.5 dp) is for tags and chrome over photos only. */
+export const BORDER = { control: 2, selected: 3, frame: 2, badge: 1.5 } as const;
 
 interface Theme { name: ThemeName; choice: ThemeChoice; c: Palette }
 const ThemeContext = createContext<Theme>({ name: "sun", choice: "auto", c: SUN });

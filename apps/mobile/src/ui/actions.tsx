@@ -1,5 +1,6 @@
 /** Actions from the design system: "rectangles act". Every button on the phone is one of these. */
-import { ActivityIndicator, Pressable, Text, type StyleProp, type ViewStyle } from "react-native";
+import type { ReactNode } from "react";
+import { ActivityIndicator, Pressable, Text, View, type StyleProp, type ViewStyle } from "react-native";
 import { Icon } from "./core";
 import { SIZE, useTheme } from "./theme";
 import { useStyles } from "./styles";
@@ -44,4 +45,10 @@ export function IconButton({ icon, label, onPress, onLongPress, disabled, color,
       <Icon name={icon} size={26} color={disabled ? c.textDisabled : color} />
     </Pressable>
   );
+}
+
+/** Buttons side by side, 8 dp apart; give them `style={{ flex: n }}` to share the width. */
+export function ButtonRow({ children }: { children: ReactNode }) {
+  const s = useStyles();
+  return <View style={s.buttonRow}>{children}</View>;
 }

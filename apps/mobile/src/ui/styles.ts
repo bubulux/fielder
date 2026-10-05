@@ -68,4 +68,10 @@ export const useStyles = makeStyles((c) => ({
   emptyIcon: { width: 56, height: 56, borderRadius: 28, borderWidth: BORDER.control, borderColor: c.border, alignItems: "center", justifyContent: "center", marginBottom: 4 },
   emptyTitle: { ...type("title", "bold"), color: c.text, textAlign: "center" },
   emptyBody: { ...type("small"), color: c.textDim, textAlign: "center", maxWidth: 340 },
+  sectionHeading: { ...type("overline", "bold"), color: c.textDim, paddingHorizontal: 16, paddingTop: 20, paddingBottom: 8 },
+  errorText: { ...type("small", "semibold"), color: c.danger },
+  chipGrid: { flexDirection: "row", flexWrap: "wrap", marginHorizontal: -4 },
+  chipCell: { width: "50%", padding: 4 },
+  sheetSearch: { paddingHorizontal: 16, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: c.borderSubtle },
+  buttonRow: { flexDirection: "row", gap: 8 },
 }));

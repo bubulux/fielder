@@ -1,6 +1,6 @@
 /** Feedback from the design system: banner, empty state, skeleton. Confirm sheets and toasts are in dialogs.tsx. */
 import { useEffect, useRef, type ReactNode } from "react";
-import { ActivityIndicator, Animated, Text, View, type StyleProp, type ViewStyle } from "react-native";
+import { ActivityIndicator, Animated, RefreshControl, Text, View, type StyleProp, type ViewStyle } from "react-native";
 import { Icon } from "./core";
 import { RADIUS, useTheme } from "./theme";
 import { useStyles } from "./styles";
@@ -58,4 +58,19 @@ export function Skeleton({ style }: { style?: StyleProp<ViewStyle> }) {
     return () => a.stop();
   }, [v]);
   return <Animated.View style={[{ backgroundColor: c.surfaceSunken, borderRadius: RADIUS.sm, opacity: v }, style]} />;
+}
+
+/** Inline error under a control: small, semibold, red. */
+export function ErrorText({ children }: { children: ReactNode }) {
+  const s = useStyles();
+  return <Text style={s.errorText}>{children}</Text>;
+}
+
+/**
+ * Pull-to-refresh in the accent colour. A hook that returns the element, because ScrollView and
+ * FlatList expect a RefreshControl itself in their `refreshControl` prop, not a wrapper.
+ */
+export function useRefreshControl(refreshing: boolean, onRefresh: () => void) {
+  const { c } = useTheme();
+  return <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={c.accent} colors={[c.accent]} progressBackgroundColor={c.surface} />;
 }

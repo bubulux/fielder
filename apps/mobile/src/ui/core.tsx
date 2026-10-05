@@ -51,3 +51,9 @@ export function Hint({ children }: { children: ReactNode }) {
   const s = useStyles();
   return <Text style={s.hint}>{children}</Text>;
 }
+
+/** Overline heading above a group of rows, padded to sit between full-width rows (16 / 20 / 8). */
+export function SectionHeading({ children }: { children: ReactNode }) {
+  const s = useStyles();
+  return <Text style={s.sectionHeading}>{children}</Text>;
+}

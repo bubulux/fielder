@@ -1,5 +1,7 @@
 /** Overlays from the design system: the bottom sheet every picker and confirmation is built on. */
 import type { ReactNode } from "react";
+import type { TextInputProps } from "react-native";
+import { Input } from "./forms";
 import { Modal, Pressable, ScrollView, Text, useWindowDimensions, View } from "react-native";
 import { useStyles } from "./styles";
 
@@ -61,4 +63,15 @@ export function Sheet({ visible, title, sub, onClose, children, doneLabel = "Don
       </View>
     </Modal>
   );
+}
+
+/** Rows that run edge to edge inside a Sheet (cancels the sheet body's padding; `flushTop` also its top gap). */
+export function SheetList({ flushTop = true, children }: { flushTop?: boolean; children: ReactNode }) {
+  return <View style={flushTop ? { marginHorizontal: -20, marginTop: -12 } : { marginHorizontal: -20 }}>{children}</View>;
+}
+
+/** The search field pinned above a sheet's list. */
+export function SheetSearch(props: TextInputProps) {
+  const s = useStyles();
+  return <View style={s.sheetSearch}><Input {...props} /></View>;
 }
