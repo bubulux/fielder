@@ -18,7 +18,7 @@ import { decodeView, emptyQuery, encodeView, runQuery, type Layout, type ShotsQu
 import { shotHints, ShotView } from "./ShotView";
 import { ALL_PROJECTS, Sidebar, type Scope } from "./Sidebar";
 import { useTheme } from "./theme";
-import { ConfirmHost, confirmDialog, cx, Empty, Kbd, Loading, promptDialog, toast, ToastHost } from "./ui";
+import { Button, ConfirmHost, confirmDialog, cx, Empty, Kbd, Loading, promptDialog, toast, ToastHost } from "./ui";
 
 function readStorage(key: string): string | null { try { return localStorage.getItem(key); } catch { return null; } }
 function writeStorage(key: string, value: string) { try { localStorage.setItem(key, value); } catch { /* ignore */ } }
@@ -209,7 +209,7 @@ export function App() {
   let main;
   let hints: { k: string; t: string }[] = [];
   if (!loaded) {
-    main = error ? <Empty icon="cloud-alert" title="Could not load" actions={<button type="button" class="f-btn" onClick={() => void load()}>Try again</button>}>{error}</Empty> : <Loading />;
+    main = error ? <Empty icon="cloud-alert" title="Could not load" actions={<Button onClick={() => void load()}>Try again</Button>}>{error}</Empty> : <Loading />;
   } else if (route.page === "shot") {
     main = openShotObj
       ? <ShotView shot={openShotObj} list={listForShot} onNavigate={(s) => replace({ page: "shot", shotId: s.id, stage: route.stage })}
@@ -218,7 +218,7 @@ export function App() {
           onUpdated={updated}
           onDeleted={(id) => { const i = listForShot.findIndex((s) => s.id === id); const n = listForShot[i + 1] ?? listForShot[i - 1]; deleted([id]); if (n) replace({ page: "shot", shotId: n.id, stage: "photo" }); else navigateRaw(returnTo); }}
           onShowOnMap={showOnMap} onOpenDay={openDay} />
-      : <Empty icon="image-off-outline" title="Shot not found" actions={<button type="button" class="f-btn f-btn--secondary" onClick={() => navigateRaw(returnTo)}>Back to {backLabel}</button>}>It may have been deleted.</Empty>;
+      : <Empty icon="image-off-outline" title="Shot not found" actions={<Button kind="secondary" onClick={() => navigateRaw(returnTo)}>Back to {backLabel}</Button>}>It may have been deleted.</Empty>;
     hints = shotHints(route.stage, false);
   } else if (route.page === "review") {
     main = <ReviewPage shots={scoped} scopeName={scopeName} stage={reviewStage} onStage={setReviewStage} mode={reviewMode} onMode={setReviewMode} projects={projects!} presets={presets!} fieldsOf={fieldsOf}

@@ -3,7 +3,7 @@ import { useEffect, useMemo, useRef, useState } from "preact/hooks";
 import type { Location, Project, SavedView, Shot, ShootingDay } from "./api";
 import { cover, placeLabel, shotTitle } from "./format";
 import { Framed } from "./Framed";
-import { cx, Icon, Kbd } from "./ui";
+import { cx, Icon, IconButton, Kbd } from "./ui";
 
 export interface Command { id: string; group: string; icon: string; title: string; sub?: string; shot?: Shot; keys?: string; run: () => void }
 
@@ -99,7 +99,7 @@ export function ShortcutSheet({ onClose }: { onClose: () => void }) {
     <div class="overlay" data-overlay onKeyDown={(e) => { if (e.key === "Escape" || e.key === "?") { e.stopPropagation(); onClose(); } }}>
       <div class="overlay__scrim" onClick={onClose} />
       <div class="f-modal" role="dialog" aria-modal="true" aria-label="Keyboard shortcuts" style={{ width: "720px" }} tabIndex={-1} ref={(el) => el?.focus()}>
-        <div class="f-modal__head"><h2 class="f-modal__title">Keyboard shortcuts</h2><button type="button" class="f-btn f-btn--ghost f-btn--icon" aria-label="Close (Esc)" onClick={onClose}><Icon name="close" /></button></div>
+        <div class="f-modal__head"><h2 class="f-modal__title">Keyboard shortcuts</h2><IconButton icon="close" label="Close (Esc)" size="md" onClick={onClose} /></div>
         <div class="f-modal__body shortcut-grid">
           {SHORTCUTS.map(([group, rows]) => (
             <section key={group}><h3 class="section-title">{group}</h3><dl class="f-facts">{rows.map(([k, t]) => <Fragment key={k}><dt><Kbd>{k}</Kbd></dt><dd>{t}</dd></Fragment>)}</dl></section>

@@ -1,7 +1,6 @@
 import { useEffect, useState } from "preact/hooks";
 import { deleteProject, existingIdOf, putProject, putProjectFields, type FieldDefinition, type Project } from "./api";
-import { Combobox } from "./ui";
-import { confirmDialog, cx, Empty, ErrorLine, Icon, Mark, promptDialog, SaveStatus, toast, type SaveState } from "./ui";
+import { Button, Combobox, confirmDialog, Empty, Field, Input, ListRow, Mark, MenuItem, Panel, PanelBody, PanelHead, ProjectTag, promptDialog, ReorderButtons, SaveStatus, toast, Toolbar, ToolbarSpacer, ToolbarTitle, type SaveState } from "./ui";
 
 const sortByName = (list: Project[]) => [...list].sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" }));
 
@@ -28,12 +27,12 @@ export function ProjectGate({ projects, onChange, onActivate }: { projects: Proj
         <h1>Which project are you working on?</h1>
         <p class="meta">Everything you see and every shot you edit belongs to the active project. Switch any time from the sidebar; the choice is remembered.</p>
         <div class="f-menu gate__list">
-          {projects.map((p) => <button key={p.id} type="button" class="f-menu__item" onClick={() => onActivate(p.id)}><Icon name="folder-outline" /><span class="ellipsis" style={{ flex: 1 }}>{p.name}</span><span class="f-nav__count">{p.shot_count} shots</span></button>)}
+          {projects.map((p) => <MenuItem key={p.id} icon="folder-outline" count={`${p.shot_count} shots`} onClick={() => onActivate(p.id)}>{p.name}</MenuItem>)}
           {projects.length > 0 && <div class="f-menu__sep" />}
-          {projects.length > 0 && <button type="button" class="f-menu__item" onClick={() => onActivate("all")}><Icon name="folder-multiple-outline" />Browse all projects</button>}
+          {projects.length > 0 && <MenuItem icon="folder-multiple-outline" onClick={() => onActivate("all")}>Browse all projects</MenuItem>}
           {projects.length === 0 && <span class="meta" style={{ padding: "10px" }}>No projects yet. Create the first one.</span>}
         </div>
-        <button type="button" class="f-btn" onClick={async () => { const p = await createProject(projects, onChange); if (p) onActivate(p.id); }}><Icon name="plus" />New project</button>
+        <Button icon="plus" onClick={async () => { const p = await createProject(projects, onChange); if (p) onActivate(p.id); }}>New project</Button>
       </div>
     </div>
   );
@@ -56,19 +55,19 @@ export function ProjectsPage({ projects, onChange, fields, scope, selectedId, on
   const selected = projects.find((p) => p.id === selectedId) ?? projects.find((p) => p.id === scope) ?? projects[0] ?? null;
   return (
     <div class="f-app__body">
-      <aside class="f-panel f-panel--left" style={{ "--panel-w": "300px" }} aria-label="Projects">
-        <div class="f-panel__head"><span class="f-panel__title">Projects</span><button type="button" class="f-btn f-btn--sm" onClick={async () => { const p = await createProject(projects, onChange); if (p) onSelect(p.id); }}><Icon name="plus" />New project</button></div>
-        <div class="f-panel__body f-panel__body--flush" role="listbox">
+      <Panel left width="300px" label="Projects">
+        <PanelHead title="Projects"><Button size="sm" icon="plus" onClick={async () => { const p = await createProject(projects, onChange); if (p) onSelect(p.id); }}>New project</Button></PanelHead>
+        <PanelBody flush role="listbox">
           {projects.map((p) => (
-            <button key={p.id} type="button" role="option" aria-selected={p.id === selected?.id} class={cx("f-row f-row--dense", p.id === selected?.id && "is-selected")} onClick={() => onSelect(p.id)}>
-              <div class="f-row__main"><span class="f-row__title">{p.name}</span><span class="f-row__meta">{p.shot_count} shot{p.shot_count === 1 ? "" : "s"} · {p.field_ids.length} field{p.field_ids.length === 1 ? "" : "s"}{p.shot_count === 0 ? " · can be deleted" : ""}</span></div>
-              {p.id === scope && <span class="f-ptag">Active</span>}
-            </button>
+            <ListRow key={p.id} role="option" aria-selected={p.id === selected?.id} selected={p.id === selected?.id} onClick={() => onSelect(p.id)}
+              title={p.name}
+              meta={`${p.shot_count} shot${p.shot_count === 1 ? "" : "s"} · ${p.field_ids.length} field${p.field_ids.length === 1 ? "" : "s"}${p.shot_count === 0 ? " · can be deleted" : ""}`}
+              trailing={p.id === scope && <ProjectTag>Active</ProjectTag>} />
           ))}
-        </div>
-      </aside>
+        </PanelBody>
+      </Panel>
       {selected ? <ProjectDetail key={selected.id} project={selected} projects={projects} onChange={onChange} fields={fields} active={selected.id === scope} onActivate={onActivate} onShowShots={onShowShots} onEditFields={onEditFields} onDeleted={() => onSelect(null)} />
-        : <Empty icon="folder-outline" title="No projects yet" actions={<button type="button" class="f-btn" onClick={() => void createProject(projects, onChange)}><Icon name="plus" />New project</button>} />}
+        : <Empty icon="folder-outline" title="No projects yet" actions={<Button icon="plus" onClick={() => void createProject(projects, onChange)}>New project</Button>} />}
     </div>
   );
 }
@@ -103,32 +102,25 @@ function ProjectDetail({ project, projects, onChange, fields, active, onActivate
 
   return (
     <div class="f-scroll">
-      <div class="f-toolbar">
-        <div class="f-toolbar__title"><span>{project.name}</span></div>
+      <Toolbar>
+        <ToolbarTitle>{project.name}</ToolbarTitle>
         <SaveStatus state={save} onRetry={() => void saveMeta()} />
-        <span class="f-toolbar__sp" />
-        <button type="button" class="f-btn f-btn--secondary f-btn--sm" onClick={() => onShowShots(project.id)}><Icon name="view-grid-outline" />Show {project.shot_count} shots</button>
-        {!active && <button type="button" class="f-btn f-btn--secondary f-btn--sm" onClick={() => onActivate(project.id)}><Icon name="swap-horizontal" />Make active</button>}
-      </div>
+        <ToolbarSpacer />
+        <Button kind="secondary" size="sm" icon="view-grid-outline" onClick={() => onShowShots(project.id)}>Show {project.shot_count} shots</Button>
+        {!active && <Button kind="secondary" size="sm" icon="swap-horizontal" onClick={() => onActivate(project.id)}>Make active</Button>}
+      </Toolbar>
       <div class="detail-form">
-        <label class="f-field"><span class="f-field__label">Name</span>
-          <span class={cx("f-input", nameError && "is-error")}><input value={name} maxLength={80} onInput={(e) => setName((e.target as HTMLInputElement).value)} onBlur={() => void saveMeta()} onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }} /></span>
-          {nameError && <ErrorLine>{nameError}</ErrorLine>}
-        </label>
-        <label class="f-field"><span class="f-field__label">Notes</span><textarea class="f-textarea" rows={3} value={notes} onInput={(e) => setNotes((e.target as HTMLTextAreaElement).value)} onBlur={() => void saveMeta()} /></label>
+        <Field label="Name" error={nameError}>
+          <Input invalid={!!nameError} value={name} maxLength={80} onInput={(e) => setName((e.target as HTMLInputElement).value)} onBlur={() => void saveMeta()} onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }} />
+        </Field>
+        <Field label="Notes"><textarea class="f-textarea" rows={3} value={notes} onInput={(e) => setNotes((e.target as HTMLTextAreaElement).value)} onBlur={() => void saveMeta()} /></Field>
         <div class="f-field" style={{ gap: "8px" }}>
           <div class="btn-row"><span class="f-field__label" style={{ flex: 1 }}>Extra fields, in order</span><a href="#" style={{ fontSize: "var(--text-caption)" }} onClick={(e) => { e.preventDefault(); onEditFields(); }}>Edit definitions</a></div>
           {chosen.length > 0 && (
             <div class="list-box">
               {chosen.map((f, i) => (
-                <div key={f.id} class="f-row f-row--dense" style={{ cursor: "default" }}>
-                  <div class="f-row__main"><span class="f-row__title">{f.definition.label}</span><span class="f-row__meta mono">{f.key} · {f.definition.type}</span></div>
-                  <div class="btn-row" style={{ gap: "2px" }}>
-                    <button type="button" class="f-btn f-btn--ghost f-btn--sm f-btn--icon" aria-label="Move up" disabled={i === 0} onClick={() => moveField(i, -1)}><Icon name="arrow-up" /></button>
-                    <button type="button" class="f-btn f-btn--ghost f-btn--sm f-btn--icon" aria-label="Move down" disabled={i === chosen.length - 1} onClick={() => moveField(i, 1)}><Icon name="arrow-down" /></button>
-                    <button type="button" class="f-btn f-btn--ghost f-btn--sm f-btn--icon" aria-label="Remove from project" onClick={() => void setFieldIds(project.field_ids.filter((x) => x !== f.id))}><Icon name="close" /></button>
-                  </div>
-                </div>
+                <ListRow key={f.id} as="div" style={{ cursor: "default" }} title={f.definition.label} meta={`${f.key} · ${f.definition.type}`} metaClass="mono"
+                  trailing={<div class="btn-row" style={{ gap: "2px" }}><ReorderButtons index={i} count={chosen.length} onMove={moveField} onRemove={() => void setFieldIds(project.field_ids.filter((x) => x !== f.id))} remove={{ label: "Remove from project" }} /></div>} />
               ))}
             </div>
           )}
@@ -137,7 +129,7 @@ function ProjectDetail({ project, projects, onChange, fields, active, onActivate
           )}
         </div>
         <div class="danger-zone">
-          <button type="button" class="f-btn f-btn--danger" disabled={project.shot_count > 0} onClick={() => void remove()}><Icon name="delete-outline" />Delete project</button>
+          <Button kind="danger" icon="delete-outline" disabled={project.shot_count > 0} onClick={() => void remove()}>Delete project</Button>
           {project.shot_count > 0 && <span class="meta">Only empty projects can be deleted. Move or delete its {project.shot_count} shots first.</span>}
         </div>
       </div>

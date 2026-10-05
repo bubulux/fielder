@@ -6,7 +6,7 @@ import type { Photo, Shot } from "./api";
 import { cover, frameLayout, frameOf, imageAspect, shotTitle } from "./format";
 import type { MaskMode } from "./Framed";
 import { shotSub } from "./ShotCard";
-import { cx, Icon, StateMarker } from "./ui";
+import { Button, cx, StateMarker } from "./ui";
 
 interface Props {
   shots: Shot[];
@@ -112,7 +112,7 @@ function LeafletMap({ shots, mask, selectedId, onSelect, onOpen }: Props) {
   return (
     <>
       <div ref={el} class="map" />
-      <button type="button" class="f-btn f-btn--secondary f-btn--sm map-fit" onClick={fit}><Icon name="fit-to-page-outline" />Fit all</button>
+      <Button kind="secondary" size="sm" class="map-fit" icon="fit-to-page-outline" onClick={fit}>Fit all</Button>
     </>
   );
 }

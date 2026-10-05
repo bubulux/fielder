@@ -39,9 +39,9 @@ export function ListRow({ as = "button", selected, thumb, title, meta, metaClass
  * An entry of an f-menu (popover, project list): icon, label, optional count on the right.
  * `selected` makes it bold; `danger` red. With `count` the label ellipsises to make room.
  */
-export function MenuItem({ icon, selected, danger, count, children, ...rest }: Omit<JSX.ButtonHTMLAttributes<HTMLButtonElement>, "icon"> & { icon?: string; selected?: boolean; danger?: boolean; count?: ComponentChildren; children: ComponentChildren }) {
+export function MenuItem({ icon, selected, highlighted, danger, count, children, ...rest }: Omit<JSX.ButtonHTMLAttributes<HTMLButtonElement>, "icon"> & { icon?: string; selected?: boolean; /** Keyboard highlight in a listbox (is-hi). */ highlighted?: boolean; danger?: boolean; count?: ComponentChildren; children: ComponentChildren }) {
   return (
-    <button type="button" class={cx("f-menu__item", selected && "is-sel", danger && "f-menu__item--danger")} {...rest}>
+    <button type="button" class={cx("f-menu__item", highlighted && "is-hi", selected && "is-sel", danger && "f-menu__item--danger")} {...rest}>
       {icon && <Icon name={icon} />}
       {count !== undefined ? <><span class="ellipsis" style={{ flex: 1 }}>{children}</span><span class="f-nav__count">{count}</span></> : children}
     </button>

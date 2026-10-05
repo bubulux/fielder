@@ -4,7 +4,7 @@ import type { Photo, Preset } from "./api";
 import { sourceRigOf, type FrameGeometry } from "./format";
 import { Framed, type MaskMode } from "./Framed";
 import { useKeys } from "./keys";
-import { cx, Empty, Icon, Seg, Select } from "./ui";
+import { Button, cx, Empty, Seg, Select, ToolbarSpacer } from "./ui";
 
 /** "as shot" = the rig the photo was framed with; otherwise a preset id. */
 export interface RigChoice { rig: string; lensMm: number }
@@ -42,7 +42,7 @@ export function RigsStage({ photo, presets, mode, state, onState, onBack }: Prop
   useKeys({ ArrowLeft: () => stepLens(-1), ArrowRight: () => stepLens(1), Escape: onBack }, state.view === "one");
   useKeys({ Escape: onBack }, state.view === "compare");
 
-  if (!source) return <><div class="f-stage__bar"><span class="grow" /><button type="button" class="f-btn f-btn--ghost f-btn--sm" onClick={onBack}>Back to photo<span class="f-btn__kbd">Esc</span></button></div><div class="f-stage__view" style={{ color: "#fff" }}><Empty icon="crop-free" title="No framing data">This photo cannot be re-framed.</Empty></div></>;
+  if (!source) return <><div class="f-stage__bar"><span class="grow" /><Button kind="ghost" size="sm" kbd="Esc" onClick={onBack}>Back to photo</Button></div><div class="f-stage__view" style={{ color: "#fff" }}><Empty icon="crop-free" title="No framing data">This photo cannot be re-framed.</Empty></div></>;
 
   const rigOf = (c: RigChoice): RigLens => {
     const p = presets.find((x) => x.id === c.rig);
@@ -63,9 +63,9 @@ export function RigsStage({ photo, presets, mode, state, onState, onBack }: Prop
       <div class="f-stage__bar">
         <Seg label="Explorer" value={state.view} onChange={(view) => onState({ ...state, view })} options={[{ id: "one", label: "One rig" }, { id: "compare", label: "Compare A / B" }]} />
         {state.view === "one" && <><Pickers photo={photo} presets={presets} choice={state.a} onChoice={setA} /><span class="meta num">{factsText(rigOf(state.a), frameFor(state.a))}</span></>}
-        <span class="f-toolbar__sp" />
+        <ToolbarSpacer />
         {state.view === "one" && <span class="meta">←/→ step the lens · shots paused</span>}
-        <button type="button" class="f-btn f-btn--ghost f-btn--sm" onClick={onBack}>Back to photo<span class="f-btn__kbd">Esc</span></button>
+        <Button kind="ghost" size="sm" kbd="Esc" onClick={onBack}>Back to photo</Button>
       </div>
       <div class="f-stage__view">
         {state.view === "one" ? (

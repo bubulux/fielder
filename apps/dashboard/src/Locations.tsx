@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "preact/hooks";
 import { ApiError, deleteLocation, putLocation, type Location } from "./api";
 import { useKeys } from "./keys";
-import { confirmDialog, cx, ErrorLine, Icon, Kbd, toast } from "./ui";
+import { confirmDialog, cx, ErrorLine, IconButton, Input, Kbd, SearchInput, toast, Toolbar, ToolbarSpacer, ToolbarTitle } from "./ui";
 
 interface Props {
   locations: Location[];
@@ -55,11 +55,11 @@ export function LocationsPage({ locations, onChange, onShotsChanged, onShowShots
 
   return (
     <>
-      <div class="f-toolbar">
-        <div class="f-toolbar__title"><span>Locations</span><span class="meta num" style={{ fontSize: "var(--text-body)" }}>{locations.length}</span></div>
-        <span class="f-toolbar__sp" />
-        <label class="f-input f-input--sm f-input--search"><i class="mdi mdi-magnify f-input__icon" aria-hidden="true" /><input ref={search} value={q} placeholder="Filter locations" aria-label="Filter locations" onInput={(e) => setQ((e.target as HTMLInputElement).value)} onKeyDown={(e) => { if (e.key === "Escape") (e.target as HTMLInputElement).blur(); }} /><Kbd>/</Kbd></label>
-      </div>
+      <Toolbar>
+        <ToolbarTitle count={locations.length}>Locations</ToolbarTitle>
+        <ToolbarSpacer />
+        <SearchInput inputRef={search} value={q} placeholder="Filter locations" aria-label="Filter locations" onInput={(e) => setQ((e.target as HTMLInputElement).value)} onKeyDown={(e) => { if (e.key === "Escape") (e.target as HTMLInputElement).blur(); }} />
+      </Toolbar>
       <div class="f-scroll">
         <table class="f-table">
           <thead><tr><th>Name</th><th class="is-num">Shots</th><th class="is-num">Approved</th><th style={{ width: "1%" }} /></tr></thead>
@@ -71,11 +71,9 @@ export function LocationsPage({ locations, onChange, onShotsChanged, onShowShots
                   <td class="is-strong is-wrap">
                     {editing ? (
                       <div class="f-field" style={{ maxWidth: "420px" }}>
-                        <span class={cx("f-input f-input--sm is-focus", edit.error && "is-error")}>
-                          <input autoFocus value={edit.name} aria-label="Location name" onInput={(e) => setEdit({ ...edit, name: (e.target as HTMLInputElement).value, error: null })}
-                            onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); void save(); } if (e.key === "Escape") { e.stopPropagation(); setEdit(null); } }} />
-                          <span style={{ marginRight: "6px" }}><Kbd>↵</Kbd></span>
-                        </span>
+                        <Input sm boxClass="is-focus" invalid={!!edit.error} autoFocus value={edit.name} aria-label="Location name" onInput={(e) => setEdit({ ...edit, name: (e.target as HTMLInputElement).value, error: null })}
+                          onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); void save(); } if (e.key === "Escape") { e.stopPropagation(); setEdit(null); } }}
+                          after={<span style={{ marginRight: "6px" }}><Kbd>↵</Kbd></span>} />
                         {edit.error && <ErrorLine>{edit.error}</ErrorLine>}
                       </div>
                     ) : l.name}
@@ -84,9 +82,9 @@ export function LocationsPage({ locations, onChange, onShotsChanged, onShowShots
                   <td class="is-num">{l.approved_count}</td>
                   <td>
                     <div class="btn-row" style={{ gap: "2px", flexWrap: "nowrap" }}>
-                      <button type="button" class="f-btn f-btn--ghost f-btn--sm f-btn--icon" aria-label="Rename (F2)" title="Rename (F2)" onClick={(e) => { e.stopPropagation(); setEdit({ id: l.id, name: l.name, error: null }); }}><Icon name="pencil-outline" /></button>
-                      <button type="button" class="f-btn f-btn--ghost f-btn--sm f-btn--icon" aria-label="Show on map" title="Show on map" disabled={l.shot_count === 0} onClick={(e) => { e.stopPropagation(); onShowShots(l.id, "map"); }}><Icon name="map-marker-outline" /></button>
-                      <button type="button" class="f-btn f-btn--ghost f-btn--sm f-btn--icon" aria-label="Delete…" title="Delete…" onClick={(e) => { e.stopPropagation(); void remove(l); }}><Icon name="delete-outline" /></button>
+                      <IconButton icon="pencil-outline" label="Rename (F2)" title="Rename (F2)" onClick={(e) => { e.stopPropagation(); setEdit({ id: l.id, name: l.name, error: null }); }} />
+                      <IconButton icon="map-marker-outline" label="Show on map" title="Show on map" disabled={l.shot_count === 0} onClick={(e) => { e.stopPropagation(); onShowShots(l.id, "map"); }} />
+                      <IconButton icon="delete-outline" label="Delete…" title="Delete…" onClick={(e) => { e.stopPropagation(); void remove(l); }} />
                     </div>
                   </td>
                 </tr>
