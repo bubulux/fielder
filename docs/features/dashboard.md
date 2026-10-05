@@ -49,7 +49,7 @@ Designed in Claude Design (2026-09-28): four sections plus a shot view, a sideba
 
 ## Shared pieces
 
-- `ui/` (component library, see [design](../design.md)): `Icon`, `Kbd`, `Seg`, `Chip`, `LightChips`, `StateMarker`, `SeqBadge`, `Empty`, `Loading`, `ErrorLine`, `SaveStatus`, `confirmDialog`/`promptDialog`/`toast` (+ their hosts).
-- `Framed.tsx`: a photo with its frame (optional frame override). `ui/Combobox.tsx`: the type-to-search select (sizes `small`, optional icon).
+- `ui/`: the component library; pages build from it instead of writing `f-*` markup ([design](../design.md#dashboard-component-library)).
+- `Framed.tsx`: a photo with its frame (optional frame override), also used in the map popup; `FramedThumb` is the map list's thumbnail.
 - `format.ts`: `cover`, labels, frame geometry, `filterable(shot)`. `api.ts`: types and calls; a `401` reloads the page (Access login).
-- Styles: design-system tokens and component classes in `ui/design/*.css` (the rework's additions, such as sidebar, toolbar, panels, tables, stage, plan grid, palette and JSON editor, are in `ui/design/dashboard.css`), page layouts in `styles.css`. See [design](../design.md).
+- Styles: design-system tokens and component classes in `ui/design/*.css` (the rework's additions, such as sidebar, toolbar, panels, tables, stage, plan grid, palette and JSON editor, are in `ui/design/dashboard.css`), the library's own additions in `ui/design/components.css`, page layouts in `styles.css`. See [design](../design.md).

@@ -17,7 +17,7 @@ import { useOutsideClick } from "./hooks";
 export function Overlay({ top, onClose, onKeyDown, children }: { top?: boolean; onClose: () => void; onKeyDown?: (e: KeyboardEvent) => void; children: ComponentChildren }) {
   return (
     <div class={cx("overlay", top && "overlay--top")} data-overlay onKeyDown={onKeyDown}>
-      <div class="overlay__scrim" onClick={onClose} />
+      <div class="f-scrim" onClick={onClose} />
       {children}
     </div>
   );
