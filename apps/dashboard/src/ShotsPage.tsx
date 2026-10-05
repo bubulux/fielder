@@ -1,4 +1,3 @@
-import type { ComponentChildren } from "preact";
 import { useEffect, useMemo, useRef, useState } from "preact/hooks";
 import { label, lightLabel, SHOT_STATES, STATE_ICONS } from "@fielder/vocab";
 import { deleteShot, type SavedView, type Shot } from "./api";
@@ -10,7 +9,7 @@ import { ShotsMap } from "./MapView";
 import { ModeSwitch } from "./ModeSwitch";
 import { ShotCard } from "./ShotCard";
 import { filterPills, ruleCount, runQuery, type Layout, type RefLists, type ShotsQuery, type Sort, type StateFilter } from "./shotsQuery";
-import { Banner, Button, Checkbox, ProjectTag, confirmDialog, cx, Empty, Icon, IconButton, LinkButton, MenuItem, SearchInput, Seg, SeqBadge, StateMarker, toast, Toolbar, ToolbarSpacer, ToolbarTitle } from "./ui";
+import { Banner, Button, Checkbox, confirmDialog, cx, Empty, Icon, IconButton, LinkButton, MenuItem, Popover, ProjectTag, SearchInput, Seg, SeqBadge, StateMarker, toast, Toolbar, ToolbarSpacer, ToolbarTitle } from "./ui";
 
 interface Props {
   shots: Shot[] | null;
@@ -154,19 +153,6 @@ export function ShotsPage(p: Props) {
 
 export function LoadError({ message, onRetry }: { message: string; onRetry: () => void }) {
   return <Banner role="alert" title="Couldn’t load shots" meta={message} action={<Button kind="secondary" size="sm" onClick={onRetry}>Retry</Button>} />;
-}
-
-/** A small menu anchored under its button; closes on outside click or Esc. */
-export function Popover({ children, onClose, right }: { children: ComponentChildren; onClose: () => void; right?: boolean }) {
-  const box = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    const close = (e: MouseEvent) => { if (!box.current?.parentElement?.contains(e.target as Node)) onClose(); };
-    const esc = (e: KeyboardEvent) => { if (e.key === "Escape") { e.stopPropagation(); onClose(); } };
-    document.addEventListener("mousedown", close);
-    window.addEventListener("keydown", esc, true);
-    return () => { document.removeEventListener("mousedown", close); window.removeEventListener("keydown", esc, true); };
-  }, []);
-  return <div ref={box} class="f-menu popover" style={right ? { right: 0 } : { left: 0 }}>{children}</div>;
 }
 
 function ShotsGrid({ shots, isAll, mask, onOpen }: { shots: Shot[]; isAll: boolean; mask: MaskMode; onOpen: (s: Shot) => void }) {

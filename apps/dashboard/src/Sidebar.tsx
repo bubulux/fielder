@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from "preact/hooks";
 import type { Project, SavedView } from "./api";
 import type { LibrarySection, Route } from "./router";
 import type { ThemeChoice } from "./theme";
-import { Button, cx, Icon, IconButton, Kbd, Mark, MenuItem } from "./ui";
+import { Button, cx, Icon, IconButton, Kbd, Mark, MenuItem, useOutsideClick } from "./ui";
 
 export const ALL_PROJECTS = "all";
 /** The project the dashboard works on, or every project at once. */
@@ -122,10 +122,8 @@ function ScopeSwitch({ rail, scope, name, projects, onScope, onManage }: { rail:
     setHi(Math.max(0, items.findIndex((i) => i.id === scope)));
     const b = box.current?.getBoundingClientRect();
     if (b) setAt({ top: b.bottom + 4, left: b.left, width: rail ? 260 : b.width });
-    const close = (e: MouseEvent) => { if (!box.current?.contains(e.target as Node)) setOpen(false); };
-    document.addEventListener("mousedown", close);
-    return () => document.removeEventListener("mousedown", close);
   }, [open]);
+  useOutsideClick(() => box.current, () => setOpen(false), open);
   const take = (id: string) => { setOpen(false); if (id === "__manage__") onManage(); else onScope(id); };
   const onKey = (e: KeyboardEvent) => {
     if (!open) { if (e.key === "ArrowDown" || e.key === "Enter" || e.key === " ") { e.preventDefault(); setOpen(true); } return; }

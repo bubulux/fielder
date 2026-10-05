@@ -1,12 +1,13 @@
+import { render } from "preact";
 import { useEffect, useRef } from "preact/hooks";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { label, STATE_ICONS } from "@fielder/vocab";
-import type { Photo, Shot } from "./api";
-import { cover, frameLayout, frameOf, imageAspect, shotTitle } from "./format";
-import type { MaskMode } from "./Framed";
+import type { Shot } from "./api";
+import { cover, shotTitle } from "./format";
+import { Framed, FramedThumb, type MaskMode } from "./Framed";
 import { shotSub } from "./ShotCard";
-import { Button, cx, StateMarker } from "./ui";
+import { Button, cx, SeqBadge, StateMarker } from "./ui";
 
 interface Props {
   shots: Shot[];
@@ -37,7 +38,7 @@ export function ShotsMap({ shots, mask, selectedId, onSelect, onOpen }: Props) {
         <div ref={list} class="f-panel__body f-panel__body--flush" role="listbox" aria-label="Shots on the map" tabIndex={0} onKeyDown={onKey}>
           {shots.map((s) => (
             <button key={s.id} type="button" role="option" aria-selected={s.id === selectedId} class={cx("f-row f-row--dense", s.id === selectedId && "is-selected")} onClick={() => onSelect(s.id)} onDblClick={() => onOpen(s)}>
-              <div class="f-row__thumb" style={{ width: "64px" }}><MiniFramed photo={cover(s)} mask={mask} /></div>
+              <div class="f-row__thumb" style={{ width: "64px" }}><FramedThumb photo={cover(s)} mode={mask} /></div>
               <div class="f-row__main"><span class="f-row__title">{shotTitle(s)}</span><span class="f-row__meta">{shotSub(s)}</span></div>
               <StateMarker state={s.state} iconOnly />
             </button>
@@ -48,17 +49,6 @@ export function ShotsMap({ shots, mask, selectedId, onSelect, onOpen }: Props) {
         <LeafletMap shots={shots} mask={mask} selectedId={selectedId} onSelect={onSelect} onOpen={onOpen} />
       </div>
     </>
-  );
-}
-
-function MiniFramed({ photo, mask }: { photo: Photo; mask: MaskMode }) {
-  const f = frameOf(photo);
-  const l = f && mask !== "off" && mask !== "fit" ? frameLayout(f, "frame", imageAspect(photo)) : null;
-  return (
-    <div class="framed" style={{ aspectRatio: "4 / 3" }}>
-      <img src={photo.image_url} alt="" loading="lazy" style={{ objectFit: "cover" }} />
-      {l?.frame && <div class={cx("f-framed__frame f-framed__frame--thin", mask === "mask" && "f-framed__frame--mask")} style={{ left: `${l.frame.left}%`, top: `${l.frame.top}%`, width: `${l.frame.width}%`, height: `${l.frame.height}%` }} />}
-    </div>
   );
 }
 
@@ -117,52 +107,23 @@ function LeafletMap({ shots, mask, selectedId, onSelect, onOpen }: Props) {
   );
 }
 
+/** Leaflet wants a DOM node for the popup: render the same components the rest of the dashboard uses into one. */
 function popupContent(s: Shot, mask: MaskMode, open: () => void): HTMLElement {
   const el = document.createElement("div");
   el.className = "map-popup";
-  const p = cover(s);
-  const box = document.createElement("div");
-  box.className = "framed";
-  const pf = popupFrameHtml(p, mask);
-  box.innerHTML = pf.html + (s.photos.length > 1 ? `<div class="f-card__tl"><span class="f-seq"><i class="mdi mdi-layers-triple-outline"></i>SEQ · ${s.photos.length}</span></div>` : "");
-  box.style.aspectRatio = String(pf.aspect ?? imageAspect(p));
-  const body = document.createElement("div");
-  body.className = "map-popup__body";
-  const head = document.createElement("div");
-  head.className = "map-popup__head";
-  const title = document.createElement("strong");
-  title.textContent = shotTitle(s);
-  const st = document.createElement("span");
-  st.className = `f-state f-state--${s.state}`;
-  st.innerHTML = `<i class="mdi mdi-${STATE_ICONS[s.state]}"></i>`;
-  st.append(label(s.state));
-  head.append(title, st);
-  const sub = document.createElement("span");
-  sub.className = "meta";
-  sub.textContent = [shotSub(s), s.project_name].filter(Boolean).join(" · ");
-  const btn = document.createElement("button");
-  btn.type = "button";
-  btn.className = "f-btn f-btn--sm";
-  btn.innerHTML = `Open details<span class="f-btn__kbd">↵</span>`;
-  btn.addEventListener("click", open);
-  body.append(head, sub, btn);
-  el.append(box, body);
+  render(<MapPopup shot={s} mask={mask} onOpen={open} />, el);
   return el;
 }
 
-/** The framed thumbnail as HTML for Leaflet popups (same geometry as `Framed`). */
-export function popupFrameHtml(s: Photo, mask: MaskMode): { html: string; aspect?: number } {
-  const f = frameOf(s);
-  const img = (style = "") => `<img src="${s.image_url}" alt="" loading="lazy" ${style} />`;
-  if (!f || mask === "off") return { html: img() };
-  const l = frameLayout(f, mask, imageAspect(s));
-  const r = (x: { left: number; top: number; width: number; height: number }) => `left:${x.left}%;top:${x.top}%;width:${x.width}%;height:${x.height}%`;
-  const fullImg = l.img.left === 0 && l.img.width === 100 && l.img.height === 100;
-  const imgHtml = img(fullImg ? "" : `style="inset:auto;${r(l.img)}"`);
-  if (!l.frame) return { html: imgHtml, aspect: l.aspect };
-  const fr = l.frame;
-  const tints = mask === "mask"
-    ? `<div class="tint" style="left:0;top:0;right:0;height:${fr.top}%"></div><div class="tint" style="left:0;bottom:0;right:0;height:${fr.top}%"></div><div class="tint" style="left:0;top:${fr.top}%;width:${fr.left}%;height:${fr.height}%"></div><div class="tint" style="right:0;top:${fr.top}%;width:${fr.left}%;height:${fr.height}%"></div>`
-    : "";
-  return { html: `${imgHtml}${tints}<div class="frame${l.shrunk ? " dashed" : ""}" style="${r(fr)}"></div>` };
+function MapPopup({ shot: s, mask, onOpen }: { shot: Shot; mask: MaskMode; onOpen: () => void }) {
+  return (
+    <>
+      <Framed photo={cover(s)} mode={mask}>{s.photos.length > 1 && <div class="f-card__tl"><SeqBadge count={s.photos.length} /></div>}</Framed>
+      <div class="map-popup__body">
+        <div class="map-popup__head"><strong>{shotTitle(s)}</strong><StateMarker state={s.state} /></div>
+        <span class="meta">{[shotSub(s), s.project_name].filter(Boolean).join(" · ")}</span>
+        <Button size="sm" kbd="↵" onClick={onOpen}>Open details</Button>
+      </div>
+    </>
+  );
 }

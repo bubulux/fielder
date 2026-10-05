@@ -1,6 +1,7 @@
 import type { ComponentChildren } from "preact";
 import type { Photo } from "./api";
 import { frameLayout, frameOf, imageAspect, type FrameGeometry, type FrameMode, type PctRect } from "./format";
+import { cx } from "./ui";
 
 export type MaskMode = FrameMode;
 
@@ -43,6 +44,21 @@ export function Framed({ photo, mode, className, maxHeight, frame, children }: {
       )}
       {l.frame && <div class={`frame ${l.shrunk ? "dashed" : ""}`} style={pct(l.frame)} />}
       {children}
+    </div>
+  );
+}
+
+/**
+ * Small list thumbnail (map list): the photo cropped to a 4:3 box with a thin frame line on top,
+ * no tints. Unlike Framed it never shrinks the photo, so rows stay one height.
+ */
+export function FramedThumb({ photo, mode }: { photo: Photo; mode: MaskMode }) {
+  const f = frameOf(photo);
+  const l = f && mode !== "off" && mode !== "fit" ? frameLayout(f, "frame", imageAspect(photo)) : null;
+  return (
+    <div class="framed" style={{ aspectRatio: "4 / 3" }}>
+      <img src={photo.image_url} alt="" loading="lazy" style={{ objectFit: "cover" }} />
+      {l?.frame && <div class={cx("f-framed__frame f-framed__frame--thin", mode === "mask" && "f-framed__frame--mask")} style={pct(l.frame)} />}
     </div>
   );
 }

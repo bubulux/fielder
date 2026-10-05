@@ -1,7 +1,7 @@
-import { useEffect, useRef, useState } from "preact/hooks";
+import { useRef, useState } from "preact/hooks";
 import { FILTER_FIELDS, filterField, isGroup, OP_LABELS, OPS_BY_KIND, type FilterGroup, type FilterOp, type FilterRule } from "@fielder/vocab";
 import { fieldOptions, type RefLists } from "./shotsQuery";
-import { Button, Checkbox, Combobox, cx, ErrorLine, Icon, IconButton, Input, Kbd, MenuItem, Panel, PanelBody, PanelFoot, PanelHead, Seg, Select } from "./ui";
+import { Button, Checkbox, Combobox, cx, ErrorLine, Icon, IconButton, Input, Kbd, MenuItem, Panel, PanelBody, PanelFoot, PanelHead, Seg, Select, useOutsideClick } from "./ui";
 
 const needsValue = (op: FilterOp) => op !== "empty" && op !== "not_empty";
 const isList = (op: FilterOp) => op === "in" || op === "not_in";
@@ -93,12 +93,7 @@ export function MultiPick({ options, value, onChange, placeholder = "Choose…" 
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState("");
   const box = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    if (!open) return;
-    const close = (e: MouseEvent) => { if (!box.current?.contains(e.target as Node)) setOpen(false); };
-    document.addEventListener("mousedown", close);
-    return () => document.removeEventListener("mousedown", close);
-  }, [open]);
+  useOutsideClick(() => box.current, () => setOpen(false), open);
   const names = value.map((v) => options.find((o) => o.value === v)?.label ?? v);
   const summary = names.length === 0 ? placeholder : names.length <= 2 ? names.join(", ") : `${names.slice(0, 2).join(", ")} +${names.length - 2}`;
   const shown = q ? options.filter((o) => o.label.toLowerCase().includes(q.toLowerCase())) : options;

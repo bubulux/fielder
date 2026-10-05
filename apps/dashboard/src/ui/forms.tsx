@@ -8,6 +8,7 @@ import { useEffect, useRef, useState } from "preact/hooks";
 import { LIGHT, PHASE_ICONS, label } from "@fielder/vocab";
 import { cx, Icon, Kbd } from "./core";
 import { ErrorLine } from "./feedback";
+import { useOutsideClick } from "./hooks";
 
 export interface SelectOption { value: string; label: string; /** Heading shown above the first option of a group. */ group?: string }
 
@@ -24,13 +25,8 @@ export function Select({ value, options, onChange, label: aria, prefix, icon, wi
   const list = useRef<HTMLDivElement>(null);
   const sel = Math.max(0, options.findIndex((o) => o.value === value));
   const current = options.find((o) => o.value === value);
-  useEffect(() => {
-    if (!open) return;
-    setHi(sel);
-    const close = (e: MouseEvent) => { if (!box.current?.contains(e.target as Node)) setOpen(false); };
-    document.addEventListener("mousedown", close);
-    return () => document.removeEventListener("mousedown", close);
-  }, [open]);
+  useEffect(() => { if (open) setHi(sel); }, [open]);
+  useOutsideClick(() => box.current, () => setOpen(false), open);
   useEffect(() => { if (open) list.current?.querySelector(".is-hi")?.scrollIntoView({ block: "nearest" }); }, [hi, open]);
   const pick = (i: number) => { const o = options[i]; if (o) onChange(o.value); setOpen(false); };
   const onKey = (e: KeyboardEvent) => {

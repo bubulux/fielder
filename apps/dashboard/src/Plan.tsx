@@ -5,8 +5,7 @@ import { cover, shotTitle } from "./format";
 import { Framed, type MaskMode } from "./Framed";
 import { invalidateDays } from "./Inspector";
 import { useKeys } from "./keys";
-import { Popover } from "./ShotsPage";
-import { Banner, Button, Checkbox, confirmDialog, cx, Empty, EmptyNote, Field, Icon, IconButton, Input, Kbd, ListRow, MenuItem, Panel, PanelBody, PanelHead, ReorderButtons, SaveStatus, Select, Spinner, toast, Toolbar, ToolbarTitle, type SaveState } from "./ui";
+import { Banner, Button, Checkbox, confirmDialog, cx, Empty, EmptyNote, Field, Icon, IconButton, Input, Kbd, ListRow, MenuItem, Panel, PanelBody, PanelHead, Popover, ReorderButtons, SaveStatus, Select, Spinner, toast, Toolbar, ToolbarTitle, type SaveState } from "./ui";
 import { fetchForecast, weatherText, type HourForecast } from "./weather";
 
 interface Props {

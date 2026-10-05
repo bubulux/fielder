@@ -22,3 +22,10 @@ export function Mark({ size = 22 }: { size?: number }) {
 }
 
 export const Kbd = ({ children }: { children: ComponentChildren }) => <span class="f-kbd">{children}</span>;
+
+/** Marks the first match of `q` (already lower-case) inside `text`, as one inline run so the word keeps its spacing. */
+export function Highlight({ text, q }: { text: string; q: string }) {
+  const i = q ? text.toLowerCase().indexOf(q) : -1;
+  if (i < 0) return <>{text}</>;
+  return <>{text.slice(0, i)}<mark>{text.slice(i, i + q.length)}</mark>{text.slice(i + q.length)}</>;
+}

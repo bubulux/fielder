@@ -1,6 +1,6 @@
 /** Feedback from the design system (feedback.css): banners, empty and loading states, spinners, errors, save status, toasts. */
 import type { ComponentChildren, JSX } from "preact";
-import { useEffect, useRef, useState } from "preact/hooks";
+import { useEffect, useState } from "preact/hooks";
 import { cx, Icon } from "./core";
 
 /** Centred empty/loading/error message for a whole panel. */
@@ -38,29 +38,6 @@ export function SaveStatus({ state, onRetry, savedLabel = "Saved" }: { state: Sa
   );
 }
 
-/**
- * Saves `value` a short while after the last change and reports the state. Callers pass the
- * persisted value as `saved`, so an external change resets the state instead of re-saving it.
- */
-export function useAutosave<T>(value: T, save: (v: T) => Promise<unknown>, { delay = 600, equal = (a: T, b: T) => JSON.stringify(a) === JSON.stringify(b), saved }: { delay?: number; equal?: (a: T, b: T) => boolean; saved: T }): [SaveState, () => void] {
-  const [state, setState] = useState<SaveState>("idle");
-  const latest = useRef(value);
-  latest.current = value;
-  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const run = () => {
-    const v = latest.current;
-    setState("saving");
-    save(v).then(() => setState((s) => (s === "saving" ? "saved" : s))).catch(() => setState("error"));
-  };
-  useEffect(() => {
-    if (equal(value, saved)) return;
-    setState("dirty");
-    if (timer.current) clearTimeout(timer.current);
-    timer.current = setTimeout(run, delay);
-    return () => { if (timer.current) clearTimeout(timer.current); };
-  }, [value]);
-  return [state, run];
-}
 
 interface ToastReq { id: number; text: string; kind: "ok" | "danger" | "info"; action?: { label: string; run: () => void } }
 let pushToast: ((t: ToastReq) => void) | null = null;

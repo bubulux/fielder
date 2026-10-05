@@ -3,8 +3,7 @@ import { FIELD_PROMPT, validateFieldDef, type Extra, type FieldDef } from "@fiel
 import { deleteField, importFields, putField, type FieldDefinition, type Project } from "./api";
 import { ExtraEditor } from "./ExtraEditor";
 import { useKeys } from "./keys";
-import { Popover } from "./ShotsPage";
-import { Banner, Button, confirmDialog, cx, Empty, EmptyNote, Icon, ListRow, MenuItem, Panel, PanelBody, PanelHead, SaveStatus, toast, Toolbar, ToolbarSpacer, ToolbarTitle, type SaveState } from "./ui";
+import { Banner, Button, confirmDialog, cx, Empty, EmptyNote, Icon, ListRow, MenuItem, Panel, PanelBody, PanelHead, Popover, SaveStatus, toast, Toolbar, ToolbarSpacer, ToolbarTitle, type SaveState } from "./ui";
 
 interface Props { fields: FieldDefinition[]; onChange: (f: FieldDefinition[]) => void; projects: Project[]; selectedId: string | null; onSelect: (id: string | null) => void }
 
