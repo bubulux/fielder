@@ -112,3 +112,8 @@ export function Banner({ kind = "danger", icon = "alert-circle", title, meta, me
 
 /** The indeterminate spinner (f-spinner); `style` for the small inline variant inside a button. */
 export const Spinner = ({ style }: { style?: JSX.CSSProperties }) => <span class="f-spinner" style={style} />;
+
+/** Determinate progress bar (f-progress); `value` is 0..1. */
+export function ProgressBar({ value, height }: { value: number; height?: string }) {
+  return <div class="f-progress" style={height ? { height } : undefined}><div class="f-progress__bar" style={{ width: `${value * 100}%` }} /></div>;
+}

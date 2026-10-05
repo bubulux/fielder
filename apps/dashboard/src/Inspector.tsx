@@ -2,10 +2,9 @@ import { Fragment } from "preact";
 import { useEffect, useRef, useState } from "preact/hooks";
 import { INT_EXT, label, lightLabel, WEATHER, type Extra, type FieldDef } from "@fielder/vocab";
 import { existingIdOf, fetchDays, patchShot, putLocation, type Location, type Photo, type Project, type Shot, type ShootingDay, type ShotState } from "./api";
-import { Combobox } from "./ui";
 import { ExtraEditor } from "./ExtraEditor";
 import { coords, fovLabel, placeLabel, rigDescription, shotTitle } from "./format";
-import { Icon, LightChips, SaveStatus, Seg, StateMarker, type SaveState } from "./ui";
+import { Button, Combobox, Icon, Input, LightChips, SaveStatus, Seg, StateMarker, type SaveState } from "./ui";
 
 // Shooting days per project, fetched on demand for the "Days" fact and the move warning.
 const daysCache = new Map<string, Promise<ShootingDay[]>>();
@@ -99,15 +98,15 @@ export function Inspector({ shot, photo, projects, fields, locations, onLocation
           <div class="btn-row" style={{ flexWrap: "nowrap" }}>
             {unrev ? (
               <>
-                <button type="button" class="f-btn f-btn--approve" style={{ flex: 1 }} disabled={stateBusy} onClick={() => onState("approved")}><Icon name="check-circle" />Approve<span class="f-btn__kbd">A</span></button>
-                <button type="button" class="f-btn f-btn--archive" style={{ flex: 1 }} disabled={stateBusy} onClick={() => onState("archived")}><Icon name="archive" />Archive<span class="f-btn__kbd">E</span></button>
+                <Button kind="approve" icon="check-circle" kbd="A" style={{ flex: 1 }} disabled={stateBusy} onClick={() => onState("approved")}>Approve</Button>
+                <Button kind="archive" icon="archive" kbd="E" style={{ flex: 1 }} disabled={stateBusy} onClick={() => onState("archived")}>Archive</Button>
               </>
             ) : (
               <>
-                <button type="button" class="f-btn f-btn--archive" style={{ flex: 1 }} disabled={stateBusy} onClick={() => onState("unreviewed")}><Icon name="undo-variant" />Back to review{shot.state === "archived" && <span class="f-btn__kbd">E</span>}</button>
+                <Button kind="archive" icon="undo-variant" kbd={shot.state === "archived" && "E"} style={{ flex: 1 }} disabled={stateBusy} onClick={() => onState("unreviewed")}>Back to review</Button>
                 {shot.state === "approved"
-                  ? <button type="button" class="f-btn f-btn--archive" style={{ flex: 1 }} disabled={stateBusy} onClick={() => onState("archived")}><Icon name="archive" />Archive<span class="f-btn__kbd">E</span></button>
-                  : <button type="button" class="f-btn f-btn--approve" style={{ flex: 1 }} disabled={stateBusy} onClick={() => onState("approved")}><Icon name="check-circle" />Approve<span class="f-btn__kbd">A</span></button>}
+                  ? <Button kind="archive" icon="archive" kbd="E" style={{ flex: 1 }} disabled={stateBusy} onClick={() => onState("archived")}>Archive</Button>
+                  : <Button kind="approve" icon="check-circle" kbd="A" style={{ flex: 1 }} disabled={stateBusy} onClick={() => onState("approved")}>Approve</Button>}
               </>
             )}
           </div>
@@ -123,14 +122,14 @@ export function Inspector({ shot, photo, projects, fields, locations, onLocation
                 <div class="move-warn">
                   <span class="f-field__help" style={{ color: "var(--warn-ink)", fontWeight: 600, display: "flex", gap: "4px" }}><Icon name="alert" />Leaves {days.length} shooting day{days.length === 1 ? "" : "s"} in {projectName}.</span>
                   <div class="btn-row" style={{ gap: "6px" }}>
-                    <button type="button" class="f-btn f-btn--sm" onClick={() => { const v = moveTo; setMoveTo(null); void patch({ project_id: v }); }}>Move</button>
-                    <button type="button" class="f-btn f-btn--ghost f-btn--sm" onClick={() => setMoveTo(null)}>Cancel</button>
+                    <Button size="sm" onClick={() => { const v = moveTo; setMoveTo(null); void patch({ project_id: v }); }}>Move</Button>
+                    <Button kind="ghost" size="sm" onClick={() => setMoveTo(null)}>Cancel</Button>
                   </div>
                 </div>
               )}
             </div>
             <label for="ins-name">Name</label>
-            <span class="f-input f-input--sm"><input id="ins-name" value={name} maxLength={120} placeholder="e.g. Bridge from the east bank" onInput={(e) => setName((e.target as HTMLInputElement).value)} onBlur={commitName} onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); if (e.key === "Escape") { setName(shot.name ?? ""); (e.target as HTMLInputElement).blur(); } }} /></span>
+            <Input sm id="ins-name" value={name} maxLength={120} placeholder="e.g. Bridge from the east bank" onInput={(e) => setName((e.target as HTMLInputElement).value)} onBlur={commitName} onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); if (e.key === "Escape") { setName(shot.name ?? ""); (e.target as HTMLInputElement).blur(); } }} />
             <label>Location</label>
             <Combobox small icon="map-marker-outline" options={locationOptions} value={shot.location_id} placeholder="Search or create…" onChange={(v) => void setLocation(v)} onCreate={(t) => void setLocation(null, t)} />
             <label>INT/EXT</label>
@@ -149,7 +148,7 @@ export function Inspector({ shot, photo, projects, fields, locations, onLocation
         </div>
 
         <div class="f-sec">
-          <div class="f-sec__head"><Icon name="crosshairs-gps" />Position<span class="f-sec__aside"><button type="button" class="f-btn f-btn--secondary f-btn--sm" style={{ height: "26px" }} onClick={onCorrect}>Correct</button></span></div>
+          <div class="f-sec__head"><Icon name="crosshairs-gps" />Position<span class="f-sec__aside"><Button kind="secondary" size="sm" style={{ height: "26px" }} onClick={onCorrect}>Correct</Button></span></div>
           <dl class="f-facts">
             <dt>{shot.photos.length > 1 ? `Photo ${photo.ordinal + 1}` : "Photo"}</dt>
             <dd><a href={`https://www.openstreetmap.org/?mlat=${photo.lat}&mlon=${photo.lon}#map=17/${photo.lat}/${photo.lon}`} target="_blank" rel="noreferrer">{coords(photo)}</a></dd>
@@ -186,7 +185,7 @@ export function Inspector({ shot, photo, projects, fields, locations, onLocation
           {raw && (
             <>
               <pre class="raw">{JSON.stringify({ id: shot.id, photo: photo.id, framing: photo.framing, device: photo.device }, null, 2)}</pre>
-              <button type="button" class="f-btn f-btn--secondary f-btn--sm" style={{ alignSelf: "flex-start" }} onClick={() => void navigator.clipboard.writeText(JSON.stringify({ framing: photo.framing, device: photo.device }, null, 2))}><Icon name="content-copy" />Copy</button>
+              <Button kind="secondary" size="sm" icon="content-copy" style={{ alignSelf: "flex-start" }} onClick={() => void navigator.clipboard.writeText(JSON.stringify({ framing: photo.framing, device: photo.device }, null, 2))}>Copy</Button>
             </>
           )}
         </div>

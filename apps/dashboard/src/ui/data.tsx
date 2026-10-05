@@ -47,3 +47,8 @@ export function MenuItem({ icon, selected, danger, count, children, ...rest }: O
     </button>
   );
 }
+
+/** Project tag (f-ptag): a small outlined label with the project name, or "Active". */
+export function ProjectTag({ icon, title, style, children }: { icon?: string; title?: string; style?: JSX.CSSProperties; children: ComponentChildren }) {
+  return <span class="f-ptag" style={style} title={title}>{icon && <Icon name={icon} />}{children}</span>;
+}

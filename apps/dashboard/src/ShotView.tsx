@@ -1,3 +1,4 @@
+import type { ComponentChildren } from "preact";
 import { useEffect, useState } from "preact/hooks";
 import { label, type FieldDef } from "@fielder/vocab";
 import { deleteShot, patchShot, type Location, type Preset, type Project, type Shot, type ShotState } from "./api";
@@ -9,7 +10,7 @@ import { ModeSwitch } from "./ModeSwitch";
 import { PositionStage } from "./PositionEditor";
 import { initialRigs, RigsStage, type RigsState } from "./RigExplorer";
 import type { Stage } from "./router";
-import { confirmDialog, cx, Icon, Kbd, Seg, toast } from "./ui";
+import { Button, confirmDialog, cx, Icon, IconButton, Kbd, ProgressBar, Seg, toast, Toolbar, ToolbarSpacer, ToolbarTitle } from "./ui";
 
 export type ShotContext =
   | { kind: "shot"; line: string; onBack: () => void; backLabel: string }
@@ -89,33 +90,30 @@ export function ShotView(p: Props) {
   const pos = index >= 0 ? `${index + 1} of ${list.length}` : "";
   return (
     <>
-      <div class="f-toolbar">
+      <Toolbar>
         {p.context.kind === "shot" ? (
           <>
-            <button type="button" class="f-btn f-btn--secondary f-btn--sm" onClick={p.context.onBack}><Icon name="arrow-left" />{p.context.backLabel}<span class="f-btn__kbd">Esc</span></button>
+            <Button kind="secondary" size="sm" icon="arrow-left" kbd="Esc" onClick={p.context.onBack}>{p.context.backLabel}</Button>
             <div class="toolbar-pos"><strong class="num">{pos}</strong><span class="meta">{p.context.line}</span></div>
           </>
         ) : (
           <>
-            <div class="f-toolbar__title"><span>Review</span></div>
-            <div class="review-progress">
-              <span class="num" style={{ fontSize: "var(--text-caption)" }}><strong>{index + 1} of {p.context.total}</strong> · oldest first</span>
-              <div class="f-progress" style={{ height: "6px" }}><div class="f-progress__bar" style={{ width: `${((index + 1) / Math.max(1, p.context.total)) * 100}%` }} /></div>
-            </div>
+            <ToolbarTitle>Review</ToolbarTitle>
+            <ReviewProgress value={(index + 1) / Math.max(1, p.context.total)}><strong>{index + 1} of {p.context.total}</strong> · oldest first</ReviewProgress>
           </>
         )}
         <div class="btn-row" style={{ gap: "4px" }}>
-          <button type="button" class="f-btn f-btn--secondary f-btn--sm f-btn--icon" aria-label="Previous shot (←)" title="Previous (←)" disabled={!prev || stage !== "photo"} onClick={() => prev && p.onNavigate(prev)}><Icon name="chevron-left" /></button>
-          <button type="button" class="f-btn f-btn--secondary f-btn--sm f-btn--icon" aria-label="Next shot (→)" title="Next (→)" disabled={!next || stage !== "photo"} onClick={() => next && p.onNavigate(next)}><Icon name="chevron-right" /></button>
+          <IconButton kind="secondary" icon="chevron-left" label="Previous shot (←)" title="Previous (←)" disabled={!prev || stage !== "photo"} onClick={() => prev && p.onNavigate(prev)} />
+          <IconButton kind="secondary" icon="chevron-right" label="Next shot (→)" title="Next (→)" disabled={!next || stage !== "photo"} onClick={() => next && p.onNavigate(next)} />
         </div>
-        <span class="f-toolbar__sp" />
+        <ToolbarSpacer />
         <Seg label="Stage" value={stage} onChange={p.onStage} options={[
           { id: "photo", icon: "image-outline", label: "Photo" },
           { id: "rigs", icon: "camera-control", label: <>Rigs <Kbd>R</Kbd></> },
           { id: "position", icon: "crosshairs-gps", label: "Position" },
         ]} />
         <ModeSwitch value={p.mode} onChange={p.onMode} />
-      </div>
+      </Toolbar>
       <div class="f-app__body">
         <section class="f-stage" aria-label="Stage">
           {stage === "rigs" ? (
@@ -144,12 +142,12 @@ export function ShotView(p: Props) {
                   </>
                 )}
                 {shot.photos.length === 1 && <span class="meta num">{when(shot.captured_at)}</span>}
-                <span class="f-toolbar__sp" />
+                <ToolbarSpacer />
                 <div class="btn-row" style={{ gap: "6px", justifyContent: "flex-end" }}>
-                  <button type="button" class="f-btn f-btn--secondary f-btn--sm" title="Download the photo cropped to the rig frame" onClick={() => void downloadCrop(photo)}><Icon name="crop" />Download crop</button>
+                  <Button kind="secondary" size="sm" icon="crop" title="Download the photo cropped to the rig frame" onClick={() => void downloadCrop(photo)}>Download crop</Button>
                   <a class="f-btn f-btn--secondary f-btn--sm" href={photo.image_url} download target="_blank" rel="noreferrer"><Icon name="download-outline" />Original</a>
-                  <button type="button" class="f-btn f-btn--secondary f-btn--sm" onClick={() => p.onShowOnMap(shot)}><Icon name="map-marker-outline" />Show on map</button>
-                  <button type="button" class="f-btn f-btn--danger f-btn--sm f-btn--icon" aria-label="Delete shot…" title="Delete shot…" onClick={() => void remove()}><Icon name="delete-outline" /></button>
+                  <Button kind="secondary" size="sm" icon="map-marker-outline" onClick={() => p.onShowOnMap(shot)}>Show on map</Button>
+                  <IconButton kind="danger" icon="delete-outline" label="Delete shot…" title="Delete shot…" onClick={() => void remove()} />
                 </div>
               </div>
             </>
@@ -159,6 +157,16 @@ export function ShotView(p: Props) {
           onUpdated={p.onUpdated} onState={(s) => void setState(s)} stateBusy={busy} onCorrect={() => p.onStage("position")} onOpenDay={p.onOpenDay} />
       </div>
     </>
+  );
+}
+
+/** The review queue's position in the toolbar: a caption over a thin progress bar. */
+export function ReviewProgress({ value, children }: { value: number; children: ComponentChildren }) {
+  return (
+    <div class="review-progress">
+      <span class="num" style={{ fontSize: "var(--text-caption)" }}>{children}</span>
+      <ProgressBar value={value} height="6px" />
+    </div>
   );
 }
 
