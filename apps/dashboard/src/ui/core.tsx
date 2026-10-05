@@ -3,9 +3,9 @@ import type { ComponentChildren } from "preact";
 
 export const cx = (...a: (string | false | null | undefined)[]) => a.filter(Boolean).join(" ");
 
-/** Material Design Icons glyph (webfont loaded in index.html). Decorative unless `label` is given. */
-export function Icon({ name, label: aria, size }: { name: string; label?: string; size?: number }) {
-  return <i class={`mdi mdi-${name}`} style={size ? { fontSize: `${size}px` } : undefined} role={aria ? "img" : undefined} aria-label={aria} aria-hidden={aria ? undefined : true} />;
+/** Material Design Icons glyph (webfont loaded in index.html). Decorative unless `label` is given; `class` adds a slot class such as f-input__icon. */
+export function Icon({ name, label: aria, size, class: extra }: { name: string; label?: string; size?: number; class?: string }) {
+  return <i class={extra ? `mdi mdi-${name} ${extra}` : `mdi mdi-${name}`} style={size ? { fontSize: `${size}px` } : undefined} role={aria ? "img" : undefined} aria-label={aria} aria-hidden={aria ? undefined : true} />;
 }
 
 /**

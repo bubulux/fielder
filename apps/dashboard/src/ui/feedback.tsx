@@ -1,5 +1,5 @@
-/** Feedback from the design system (feedback.css): empty and loading states, errors, save status, toasts. */
-import type { ComponentChildren } from "preact";
+/** Feedback from the design system (feedback.css): banners, empty and loading states, spinners, errors, save status, toasts. */
+import type { ComponentChildren, JSX } from "preact";
 import { useEffect, useRef, useState } from "preact/hooks";
 import { cx, Icon } from "./core";
 
@@ -93,3 +93,22 @@ export function ToastHost() {
     </div>
   );
 }
+
+/**
+ * Banner (f-banner): icon, a bold title, a meta line, then an optional action (Retry).
+ * Pass `role="alert"` when it reports something that just went wrong.
+ */
+export function Banner({ kind = "danger", icon = "alert-circle", title, meta, metaClass, action, role }: {
+  kind?: "danger" | "warn" | "ok" | "info"; icon?: string; title: ComponentChildren; meta?: ComponentChildren; metaClass?: string; action?: ComponentChildren; role?: "alert" | "status";
+}) {
+  return (
+    <div class={`f-banner f-banner--${kind}`} role={role}>
+      <Icon name={icon} />
+      <div class="f-banner__text"><span class="f-banner__title">{title}</span>{meta !== undefined && <span class={cx("f-banner__meta", metaClass)}>{meta}</span>}</div>
+      {action}
+    </div>
+  );
+}
+
+/** The indeterminate spinner (f-spinner); `style` for the small inline variant inside a button. */
+export const Spinner = ({ style }: { style?: JSX.CSSProperties }) => <span class="f-spinner" style={style} />;

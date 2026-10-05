@@ -1,9 +1,13 @@
-/** Form controls from the design system (forms.css): select, chips, light chips. The combobox lives in Combobox.tsx. */
+/**
+ * Form controls from the design system (forms.css): field, input, search, checkbox, switch,
+ * select, chips, light chips. The combobox lives in Combobox.tsx.
+ */
 import { Fragment } from "preact";
-import type { ComponentChildren } from "preact";
+import type { ComponentChildren, JSX, Ref } from "preact";
 import { useEffect, useRef, useState } from "preact/hooks";
 import { LIGHT, PHASE_ICONS, label } from "@fielder/vocab";
-import { cx, Icon } from "./core";
+import { cx, Icon, Kbd } from "./core";
+import { ErrorLine } from "./feedback";
 
 export interface SelectOption { value: string; label: string; /** Heading shown above the first option of a group. */ group?: string }
 
@@ -89,5 +93,87 @@ export function LightChips({ light, artificial, onChange }: { light: readonly st
       ))}
       <Chip icon={artificial ? undefined : PHASE_ICONS.artificial} selected={artificial} onClick={() => onChange([...light], !artificial)}>Artificial</Chip>
     </div>
+  );
+}
+
+/**
+ * A labelled form field (f-field): label, the control(s), then an error line and a help text.
+ * Renders a <label> so a click on the label focuses the control; use `as="div"` when the
+ * children hold more than one control or a component that is not a plain input.
+ */
+export function Field({ label: text, help, error, as = "label", labelStyle, class: extra, style, children }: {
+  label: ComponentChildren; help?: ComponentChildren; error?: ComponentChildren | null; as?: "label" | "div";
+  labelStyle?: JSX.CSSProperties; class?: string; style?: JSX.CSSProperties; children: ComponentChildren;
+}) {
+  const Tag = as;
+  return (
+    <Tag class={cx("f-field", extra)} style={style}>
+      <span class="f-field__label" style={labelStyle}>{text}</span>
+      {children}
+      {error && <ErrorLine>{error}</ErrorLine>}
+      {help && <span class="f-field__help">{help}</span>}
+    </Tag>
+  );
+}
+
+export interface InputProps extends Omit<JSX.InputHTMLAttributes<HTMLInputElement>, "size" | "ref"> {
+  /** 32 px high (toolbars, panels, rule builder). */
+  sm?: boolean;
+  /** Red border; pair it with an ErrorLine that says what is wrong. */
+  invalid?: boolean;
+  /** Unit after the value, e.g. "mm". */
+  unit?: string;
+  /** Anything else inside the box after the input (a key hint, a clear button). */
+  after?: ComponentChildren;
+  /** Wrapper element: span (default, inside a Field) or label (stand-alone, so the box focuses the input). */
+  box?: "span" | "label";
+  boxClass?: string;
+  boxStyle?: JSX.CSSProperties;
+  inputRef?: Ref<HTMLInputElement>;
+}
+
+/** Text or number input in the f-input box. Disabled also dashes the box. */
+export function Input({ sm, invalid, unit, after, box = "span", boxClass, boxStyle, inputRef, disabled, ...rest }: InputProps) {
+  const Box = box;
+  return (
+    <Box class={cx("f-input", sm && "f-input--sm", boxClass, invalid && "is-error", disabled && "is-disabled")} style={boxStyle}>
+      <input ref={inputRef} disabled={disabled} {...rest} />
+      {unit && <span class="f-input__unit">{unit}</span>}
+      {after}
+    </Box>
+  );
+}
+
+/** The toolbar search box: magnifier, input, and the "/" key hint unless `after` replaces it (e.g. a clear button). */
+export function SearchInput({ after, inputRef, ...rest }: Omit<JSX.InputHTMLAttributes<HTMLInputElement>, "ref"> & { after?: ComponentChildren; inputRef?: Ref<HTMLInputElement> }) {
+  return (
+    <label class="f-input f-input--sm f-input--search">
+      <Icon name="magnify" class="f-input__icon" />
+      <input ref={inputRef} {...rest} />
+      {after === undefined ? <Kbd>/</Kbd> : after}
+    </label>
+  );
+}
+
+/**
+ * Checkbox (f-check): checked = accent box + check icon, indeterminate = a minus. A <button> by
+ * default; `as="span"` when a surrounding element (a table cell, a menu item) handles the click.
+ */
+export function Checkbox({ checked, indeterminate, as = "button", children, class: extra, ...rest }: Omit<JSX.HTMLAttributes<HTMLDivElement>, "as" | "ref"> & { checked: boolean; indeterminate?: boolean; as?: "button" | "span"; children?: ComponentChildren }) {
+  // One element type for TypeScript; the runtime tag is a button or a span.
+  const Tag = as as "div";
+  return (
+    <Tag {...(as === "button" ? { type: "button" } : {})} class={cx("f-check", checked && "is-checked", indeterminate && "is-indeterminate", extra as string | undefined)} {...rest}>
+      <span class="f-check__box">{checked ? <Icon name="check" /> : indeterminate ? <Icon name="minus" /> : null}</span>{children}
+    </Tag>
+  );
+}
+
+/** On/off switch (f-switch) with its label; on = accent track + check in the knob. */
+export function Switch({ on, onClick, children }: { on: boolean; onClick: () => void; children: ComponentChildren }) {
+  return (
+    <button type="button" class={cx("f-switch", on && "is-on")} role="switch" aria-checked={on} onClick={onClick}>
+      <span class="f-switch__track"><span class="f-switch__knob">{on && <Icon name="check" />}</span></span>{children}
+    </button>
   );
 }
