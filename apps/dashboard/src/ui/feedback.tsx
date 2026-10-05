@@ -117,3 +117,13 @@ export const Spinner = ({ style }: { style?: JSX.CSSProperties }) => <span class
 export function ProgressBar({ value, height }: { value: number; height?: string }) {
   return <div class="f-progress" style={height ? { height } : undefined}><div class="f-progress__bar" style={{ width: `${value * 100}%` }} /></div>;
 }
+
+/** Small empty message inside a list or panel (Empty is for a whole page): optional title, one meta line; `dashed` frames it. */
+export function EmptyNote({ title, dashed, children }: { title?: ComponentChildren; dashed?: boolean; children: ComponentChildren }) {
+  return (
+    <div class={cx("f-empty", dashed && "dashed")}>
+      {title && <div class="f-empty__title" style={{ fontSize: "var(--text-body-lg)" }}>{title}</div>}
+      <div class="meta">{children}</div>
+    </div>
+  );
+}
