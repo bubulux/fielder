@@ -19,7 +19,7 @@ The owner talks to you in English.
 | --- | --- |
 | `apps/worker/src` | API routes (`shots.ts`, `projects.ts`, `fields.ts`, `days.ts`, …), `http.ts` router + `assert*` helpers |
 | `apps/worker/migrations` | D1 schema, numbered, additive |
-| `apps/dashboard/src` | `App.tsx` (state, routes), `Sidebar.tsx`, one file per page (`ShotsPage`, `ShotView` + `Inspector`, `Review`, `Plan`, library pages), `keys.ts` (shortcuts), `ui.tsx` (design-system components), `design/` (tokens + component CSS), `styles.css` (layouts) |
+| `apps/dashboard/src` | `App.tsx` (state, routes), `Sidebar.tsx`, one file per page (`ShotsPage`, `ShotView` + `Inspector`, `Review`, `Plan`, library pages), `keys.ts` (shortcuts), `ui/` (component library: design-system components by group, `ui/design/` tokens + component CSS), `styles.css` (layouts) |
 | `apps/mobile` | `App.tsx` (tabs, gates, pushed-screen stack), `src/screens/` (Viewfinder + Tag, Review, Shots + ShotDetails, Day + StepThrough, Setup hub + sub-screens, Uploads, Gates), `src/components/` (`ui.tsx` primitives, `chrome.tsx` header/rows/bars, `TagEditor.tsx`, `feedback.tsx` confirm + toast), `uploads.ts` (queue), `sync.ts`, `rigs.ts`, `storage.ts` (kv), `api.ts` |
 | `packages/vocab` | Shared vocabularies, filters, extra-field definitions, daylight math: anything both the Worker and a client must agree on |
 | `packages/fov-math` | Camera/lens/FOV/overlay/reframe math |

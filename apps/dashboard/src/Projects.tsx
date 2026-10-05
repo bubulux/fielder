@@ -1,6 +1,6 @@
 import { useEffect, useState } from "preact/hooks";
 import { deleteProject, existingIdOf, putProject, putProjectFields, type FieldDefinition, type Project } from "./api";
-import { Combobox } from "./Combobox";
+import { Combobox } from "./ui";
 import { confirmDialog, cx, Empty, ErrorLine, Icon, Mark, promptDialog, SaveStatus, toast, type SaveState } from "./ui";
 
 const sortByName = (list: Project[]) => [...list].sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" }));

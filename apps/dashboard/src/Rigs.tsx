@@ -1,7 +1,7 @@
 import { useEffect, useState } from "preact/hooks";
 import { CAMERAS, CUSTOM_CAMERA_ID, findFormat } from "@fielder/fov-math";
 import { deletePreset, putPreset, type Preset, type Shot } from "./api";
-import { Combobox } from "./Combobox";
+import { Combobox } from "./ui";
 import { useKeys } from "./keys";
 import { confirmDialog, cx, ErrorLine, Icon, toast } from "./ui";
 

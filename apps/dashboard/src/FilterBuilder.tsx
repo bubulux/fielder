@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "preact/hooks";
 import { FILTER_FIELDS, filterField, isGroup, OP_LABELS, OPS_BY_KIND, type FilterGroup, type FilterOp, type FilterRule } from "@fielder/vocab";
-import { Combobox } from "./Combobox";
+import { Combobox } from "./ui";
 import { fieldOptions, type RefLists } from "./shotsQuery";
 import { cx, ErrorLine, Icon, Kbd, Select } from "./ui";
 

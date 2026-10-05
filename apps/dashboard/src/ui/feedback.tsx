@@ -1,0 +1,95 @@
+/** Feedback from the design system (feedback.css): empty and loading states, errors, save status, toasts. */
+import type { ComponentChildren } from "preact";
+import { useEffect, useRef, useState } from "preact/hooks";
+import { cx, Icon } from "./core";
+
+/** Centred empty/loading/error message for a whole panel. */
+export function Empty({ icon = "image-off-outline", title, children, actions, tone }: { icon?: string; title: string; children?: ComponentChildren; actions?: ComponentChildren; tone?: "ok" }) {
+  return (
+    <div class="f-empty" style={{ flex: 1, justifyContent: "center" }}>
+      <div class="f-empty__icon" style={tone === "ok" ? { borderColor: "var(--ok)", color: "var(--ok)" } : undefined}><Icon name={icon} /></div>
+      <div class="f-empty__title">{title}</div>
+      {children && <div class="f-empty__body">{children}</div>}
+      {actions && <div class="f-empty__actions">{actions}</div>}
+    </div>
+  );
+}
+
+export function Loading({ children = "Loading…" }: { children?: ComponentChildren }) {
+  return <div class="status"><span class="f-loading"><span class="f-spinner" />{children}</span></div>;
+}
+
+/** Inline error line: red, with an icon, never colour alone. */
+export function ErrorLine({ children }: { children: ComponentChildren }) {
+  return <div class="f-field__error" role="alert"><Icon name="alert-circle" />{children}</div>;
+}
+
+export type SaveState = "idle" | "dirty" | "saving" | "saved" | "error";
+
+/** Inline save status: Saving… / Saved / Not saved (+ Retry) / Unsaved changes. */
+export function SaveStatus({ state, onRetry, savedLabel = "Saved" }: { state: SaveState; onRetry?: () => void; savedLabel?: string }) {
+  if (state === "idle") return null;
+  return (
+    <span class={cx("f-save", state === "saving" && "f-save--saving", state === "saved" && "f-save--saved", state === "error" && "f-save--error", state === "dirty" && "f-save--dirty")} role="status">
+      {state === "saving" ? <span class="f-spinner" /> : <Icon name={state === "saved" ? "check" : state === "error" ? "alert-circle" : "circle-edit-outline"} />}
+      {state === "saving" ? "Saving…" : state === "saved" ? savedLabel : state === "error" ? "Not saved" : "Unsaved changes"}
+      {state === "error" && onRetry && <button type="button" class="f-linkbtn" style={{ fontSize: "var(--text-caption)" }} onClick={onRetry}>Retry</button>}
+    </span>
+  );
+}
+
+/**
+ * Saves `value` a short while after the last change and reports the state. Callers pass the
+ * persisted value as `saved`, so an external change resets the state instead of re-saving it.
+ */
+export function useAutosave<T>(value: T, save: (v: T) => Promise<unknown>, { delay = 600, equal = (a: T, b: T) => JSON.stringify(a) === JSON.stringify(b), saved }: { delay?: number; equal?: (a: T, b: T) => boolean; saved: T }): [SaveState, () => void] {
+  const [state, setState] = useState<SaveState>("idle");
+  const latest = useRef(value);
+  latest.current = value;
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const run = () => {
+    const v = latest.current;
+    setState("saving");
+    save(v).then(() => setState((s) => (s === "saving" ? "saved" : s))).catch(() => setState("error"));
+  };
+  useEffect(() => {
+    if (equal(value, saved)) return;
+    setState("dirty");
+    if (timer.current) clearTimeout(timer.current);
+    timer.current = setTimeout(run, delay);
+    return () => { if (timer.current) clearTimeout(timer.current); };
+  }, [value]);
+  return [state, run];
+}
+
+interface ToastReq { id: number; text: string; kind: "ok" | "danger" | "info"; action?: { label: string; run: () => void } }
+let pushToast: ((t: ToastReq) => void) | null = null;
+let toastId = 0;
+
+/** A short opaque message bottom-centre; an optional action (e.g. Undo) keeps it 4 s. */
+export function toast(text: string, kind: ToastReq["kind"] = "ok", action?: ToastReq["action"]) {
+  pushToast?.({ id: ++toastId, text, kind, action });
+}
+
+export function ToastHost() {
+  const [items, setItems] = useState<ToastReq[]>([]);
+  useEffect(() => {
+    pushToast = (t) => {
+      setItems((cur) => [...cur.slice(-2), t]);
+      setTimeout(() => setItems((cur) => cur.filter((x) => x.id !== t.id)), t.action ? 4000 : 2500);
+    };
+    return () => { pushToast = null; };
+  }, []);
+  if (items.length === 0) return null;
+  return (
+    <div class="toasts" role="status">
+      {items.map((t) => (
+        <div key={t.id} class={cx("f-toast", t.kind === "danger" && "f-toast--danger", t.kind === "ok" && "f-toast--ok")}>
+          <Icon name={t.kind === "danger" ? "alert-circle" : t.kind === "ok" ? "check-circle" : "information-outline"} />
+          <span class="f-toast__text">{t.text}</span>
+          {t.action && <button type="button" class="f-btn f-btn--secondary f-btn--sm" onClick={() => { t.action!.run(); setItems((cur) => cur.filter((x) => x.id !== t.id)); }}>{t.action.label}</button>}
+        </div>
+      ))}
+    </div>
+  );
+}

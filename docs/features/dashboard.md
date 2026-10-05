@@ -13,7 +13,7 @@ Designed in Claude Design (2026-09-28): four sections plus a shot view, a sideba
 - **Key hint bar** at the bottom: the shortcuts of the current screen; `?` opens all of them.
 - **First run** (no project chosen, or it was deleted): a full-window project picker with "New project" (`ProjectGate` in `Projects.tsx`).
 - **Installable (PWA)**: `public/manifest.webmanifest` (standalone, start `/`), icons in `public/icons/`, linked from `index.html` with `crossorigin="use-credentials"` so the manifest request carries the Access cookie. No service worker (nothing is cached offline; Chrome and Edge install without one). The `theme-color` meta follows the Sun/Set surface (`theme.ts`). Icons: `favicon.svg` (pixel-snapped for 16 px), `icon-192/512.png`, `icon-maskable-512.png`.
-- **Dialogs** only for confirmations, name prompts, the command palette and the shortcut sheet (`confirmDialog`, `promptDialog`, `toast` in `ui.tsx`). There are no `window.confirm`/`alert` calls any more.
+- **Dialogs** only for confirmations, name prompts, the command palette and the shortcut sheet (`confirmDialog`, `promptDialog`, `toast` in `ui/`). There are no `window.confirm`/`alert` calls any more.
 
 ## Sections
 
@@ -49,7 +49,7 @@ Designed in Claude Design (2026-09-28): four sections plus a shot view, a sideba
 
 ## Shared pieces
 
-- `ui.tsx`: `Icon`, `Kbd`, `Seg`, `Chip`, `LightChips`, `StateMarker`, `SeqBadge`, `Empty`, `Loading`, `ErrorLine`, `SaveStatus`, `confirmDialog`/`promptDialog`/`toast` (+ their hosts).
-- `Framed.tsx`: a photo with its frame (optional frame override). `Combobox.tsx`: the type-to-search select (sizes `small`, optional icon).
+- `ui/` (component library, see [design](../design.md)): `Icon`, `Kbd`, `Seg`, `Chip`, `LightChips`, `StateMarker`, `SeqBadge`, `Empty`, `Loading`, `ErrorLine`, `SaveStatus`, `confirmDialog`/`promptDialog`/`toast` (+ their hosts).
+- `Framed.tsx`: a photo with its frame (optional frame override). `ui/Combobox.tsx`: the type-to-search select (sizes `small`, optional icon).
 - `format.ts`: `cover`, labels, frame geometry, `filterable(shot)`. `api.ts`: types and calls; a `401` reloads the page (Access login).
-- Styles: design-system tokens and component classes in `design/*.css` (the rework's additions, such as sidebar, toolbar, panels, tables, stage, plan grid, palette and JSON editor, are in `design/dashboard.css`), page layouts in `styles.css`. See [design](../design.md).
+- Styles: design-system tokens and component classes in `ui/design/*.css` (the rework's additions, such as sidebar, toolbar, panels, tables, stage, plan grid, palette and JSON editor, are in `ui/design/dashboard.css`), page layouts in `styles.css`. See [design](../design.md).

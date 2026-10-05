@@ -2,7 +2,7 @@ import { Fragment } from "preact";
 import { useEffect, useRef, useState } from "preact/hooks";
 import { INT_EXT, label, lightLabel, WEATHER, type Extra, type FieldDef } from "@fielder/vocab";
 import { existingIdOf, fetchDays, patchShot, putLocation, type Location, type Photo, type Project, type Shot, type ShootingDay, type ShotState } from "./api";
-import { Combobox } from "./Combobox";
+import { Combobox } from "./ui";
 import { ExtraEditor } from "./ExtraEditor";
 import { coords, fovLabel, placeLabel, rigDescription, shotTitle } from "./format";
 import { Icon, LightChips, SaveStatus, Seg, StateMarker, type SaveState } from "./ui";

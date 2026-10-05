@@ -1,5 +1,5 @@
 /*
- * Dashboard layouts. Colours, type and spacing come from the design tokens in design/*.css
+ * Dashboard layouts. Colours, type and spacing come from the design tokens in ui/design/*.css
  * (Sun = light, Set = dark, switched by [data-theme] on <html>); primitives are the f-* classes there,
  * the app shell, panels, tables, stage and plan grid are in design/dashboard.css.
  * Never hard-code a colour here except for things drawn over photos (black letterbox, white frame).
