@@ -7,11 +7,8 @@ import { store } from "../storage";
 import { useSync } from "../sync";
 import type { PendingUpload } from "../types";
 import { discardPending, flush } from "../uploads";
-import { PushScreen } from "../components/chrome";
-import { confirm, toast } from "../components/feedback";
+import { Button, confirm, Empty, FIXED, Icon, makeStyles, num, PushScreen, RADIUS, SectionLabel, toast, type, useTheme } from "../ui";
 import { FramedImage } from "../components/FramedImage";
-import { Button, Empty, Icon, SectionLabel } from "../components/ui";
-import { FIXED, makeStyles, num, RADIUS, type, useTheme } from "../theme";
 import type { Settings } from "../types";
 
 const photoWord = (n: number) => `${n} photo${n === 1 ? "" : "s"}`;

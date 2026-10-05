@@ -10,8 +10,7 @@ import { useOnline } from "../net";
 import { extraLine, hhmm, placeLabel, rigLabel, shotTitle, tagsLabel } from "../shots";
 import { FRAME_MODES, FrameModeSeg, type FrameMode } from "../components/ShotFrame";
 import { ShotPhoto } from "../components/ShotParts";
-import { Button, Icon, PhotoTag, Sheet, useLayoutSize } from "../components/ui";
-import { FIXED, makeStyles, num, RADIUS, type, useTheme } from "../theme";
+import { Button, FIXED, Icon, makeStyles, num, PhotoTag, RADIUS, Sheet, type, useLayoutSize, useTheme } from "../ui";
 import { store } from "../storage";
 import { plannedAt, useDayLight, windowFit, windowsText } from "./Day";
 

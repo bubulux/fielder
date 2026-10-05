@@ -6,16 +6,13 @@ import { useApp } from "../appState";
 import { useOnline } from "../net";
 import { fovLabel, placeLabel, rigLabel, shortTime, shotTitle } from "../shots";
 import { store } from "../storage";
-import { ActionBar, AppHeader, PushScreen } from "../components/chrome";
+import { ActionBar, AppHeader, Button, Empty, FONT, IconButton, makeStyles, notice, num, PushScreen, SectionLabel, toast, Toggle, type, useLayoutSize, useTheme } from "../ui";
 import { EditTagsSheet } from "../components/EditTagsSheet";
-import { notice, toast } from "../components/feedback";
 import { LeafletView } from "../components/LeafletView";
 import { focusScript, positionScript } from "../components/mapHtml";
 import { PhotoStrip } from "../components/PhotoStrip";
 import { FRAME_MODES, FrameModeSeg, type FrameMode } from "../components/ShotFrame";
 import { FullPhoto, MoreSheet, ShotPhoto, ShotSummary, useShotActions } from "../components/ShotParts";
-import { Button, Empty, IconButton, SectionLabel, Toggle, useLayoutSize } from "../components/ui";
-import { FONT, makeStyles, num, type, useTheme } from "../theme";
 
 const time = (iso: string) => new Date(iso).toLocaleString([], { weekday: "short", day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit", second: "2-digit" });
 

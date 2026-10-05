@@ -1,7 +1,6 @@
 import type { ReactNode } from "react";
 import { Pressable, Text } from "react-native";
-import { FIXED, makeStyles, num, type, useTheme } from "../theme";
-import { Icon } from "./ui";
+import { FIXED, Icon, makeStyles, num, type, useTheme } from "../ui";
 
 /** Solid chip over the camera image (chrome colours, or warn / danger fills), never translucent text. */
 export function HudChip({ icon, kind, iconColor, onPress, label, children }: { icon: string; kind?: "warn" | "danger"; iconColor?: string; onPress?: () => void; label?: string; children: ReactNode }) {

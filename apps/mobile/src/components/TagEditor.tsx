@@ -3,10 +3,8 @@ import { FlatList, Pressable, Text, View } from "react-native";
 import * as Crypto from "expo-crypto";
 import { extraSummary, label, LIGHT, PHASE_ICONS, selectOptions, WEATHER, type Extra, type ExtraValue, type FieldDef } from "@fielder/vocab";
 import type { LocationEntry, ShotTags } from "../types";
-import { makeStyles, type, useTheme } from "../theme";
-import { FieldRow } from "./chrome";
+import { Button, Chip, FieldRow, Hint, Icon, Input, makeStyles, Seg, Sheet, Switch, type, useTheme } from "../ui";
 import { OptionSheet, rankMatches } from "./OptionSheet";
-import { Button, Chip, Hint, Icon, Input, Seg, Sheet, Switch } from "./ui";
 
 /** The tags being edited, plus a location typed in the sheet that does not exist yet (created on save). */
 export interface TagDraft { tags: ShotTags; newLocation: LocationEntry | null }

@@ -1,7 +1,7 @@
 import { useEffect, useRef } from "react";
 import { Pressable, ScrollView, Text, View } from "react-native";
 import { lensList } from "../lens";
-import { makeStyles, num, RADIUS, type, useTheme } from "../theme";
+import { makeStyles, num, RADIUS, type, useTheme } from "../ui";
 import type { LensRange } from "../types";
 
 interface Props {

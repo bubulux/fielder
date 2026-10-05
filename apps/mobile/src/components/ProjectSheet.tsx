@@ -2,8 +2,7 @@ import { useState } from "react";
 import { Text, View } from "react-native";
 import * as Crypto from "expo-crypto";
 import type { ProjectEntry } from "../types";
-import { makeStyles, type } from "../theme";
-import { Button, Hint, Input, ListRow, Sheet } from "./ui";
+import { Button, Hint, Input, ListRow, makeStyles, Sheet, type } from "../ui";
 
 /** Picked an existing project, or created one (`created` is then the new entry, not yet synced). */
 export type PickProject = (id: string, created: ProjectEntry | null) => void;

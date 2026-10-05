@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { FlatList, Pressable, Text, View } from "react-native";
-import { makeStyles, type, useTheme } from "../theme";
-import { Button, Checkbox, Chip, Hint, Icon, Input, Sheet } from "./ui";
+import { Button, Checkbox, Chip, Hint, Icon, Input, makeStyles, Sheet, type, useTheme } from "../ui";
 
 export interface Option { id: string; label: string; meta?: string; icon?: string }
 

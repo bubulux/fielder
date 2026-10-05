@@ -5,11 +5,8 @@ import { CAMERAS, computeFraming, CUSTOM_CAMERA_ID, describeRig, findFormat, SPE
 import { useApp } from "../appState";
 import { deleteRig, getRigs, pickRig, saveRig, useRigs } from "../rigs";
 import type { Preset } from "../types";
-import { Block, FieldRow, PushScreen } from "../components/chrome";
-import { confirm, toast } from "../components/feedback";
+import { Block, Button, confirm, Empty, FieldRow, Hint, Input, ListRow, makeStyles, num, PushScreen, SectionLabel, Seg, toast, Toggle, type } from "../ui";
 import { OptionSheet } from "../components/OptionSheet";
-import { Button, Empty, Hint, Input, ListRow, SectionLabel, Seg, Toggle } from "../components/ui";
-import { makeStyles, num, type } from "../theme";
 
 export function rigMeta(p: Preset): string {
   if (!p.synced) return "Not synced yet · saved on the phone";

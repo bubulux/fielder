@@ -6,11 +6,9 @@ import { api, type Photo, type Shot } from "../api";
 import { useApp } from "../appState";
 import type { Settings } from "../types";
 import { extraLine, placeLabel, rigLabel, shortTime, shotTitle, tagsLabel } from "../shots";
-import { FIXED, makeStyles, num, RADIUS, type, useTheme } from "../theme";
-import { confirm, notice, toast } from "./feedback";
+import { confirm, FIXED, IconButton, ListRow, makeStyles, notice, num, PhotoTag, RADIUS, SeqBadge, Sheet, StateMarker, toast, type, useTheme } from "../ui";
 import { useSwipe } from "./gestures";
 import { fitWidth, FrameModeSeg, ShotFrame, type FrameMode } from "./ShotFrame";
-import { IconButton, ListRow, PhotoTag, SeqBadge, Sheet, StateMarker } from "./ui";
 
 const PAST: Record<Shot["state"], string> = { approved: "Approved", archived: "Archived", unreviewed: "Back to review" };
 

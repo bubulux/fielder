@@ -4,14 +4,11 @@ import type { Shot } from "../api";
 import { useApp } from "../appState";
 import { useOnline } from "../net";
 import { store, usePref } from "../storage";
-import { ActionBar, AppHeader } from "../components/chrome";
+import { ActionBar, AppHeader, Button, Empty, IconButton, makeStyles, num, Skeleton, type, useLayoutSize, useTheme, useToastOffset } from "../ui";
 import { EditTagsSheet } from "../components/EditTagsSheet";
-import { useToastOffset } from "../components/feedback";
 import { PhotoStrip } from "../components/PhotoStrip";
 import { FRAME_MODES, FrameModeSeg, type FrameMode } from "../components/ShotFrame";
 import { FullPhoto, MoreSheet, ShotPhoto, ShotSummary, useShotActions } from "../components/ShotParts";
-import { Button, Empty, IconButton, Skeleton, useLayoutSize } from "../components/ui";
-import { makeStyles, num, type, useTheme } from "../theme";
 
 /** Portrait decision bar: Prev · n of m · Next, then Archive | Approve. */
 const BAR_H = 10 + 52 + 8 + 52 + 12 + 2;

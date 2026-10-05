@@ -1,7 +1,7 @@
 import { Pressable, ScrollView, Text } from "react-native";
 import { Image } from "expo-image";
 import { imageHeaders, imageUri, type Shot } from "../api";
-import { FIXED, makeStyles, RADIUS, type, useTheme } from "../theme";
+import { FIXED, makeStyles, RADIUS, type, useTheme } from "../ui";
 
 /** Thumbnails of a sequence; renders nothing for single-photo shots. The current one has an accent ring and number. */
 export function PhotoStrip({ shot, index, onPick }: { shot: Shot; index: number; onPick: (i: number) => void }) {

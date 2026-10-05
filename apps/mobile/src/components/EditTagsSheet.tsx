@@ -5,9 +5,8 @@ import { api, type Shot } from "../api";
 import { useApp } from "../appState";
 import { ensureLocation } from "../namedSync";
 import { store } from "../storage";
-import { toast } from "./feedback";
+import { Banner, Button, Sheet, toast } from "../ui";
 import { TagEditor, type TagDraft } from "./TagEditor";
-import { Banner, Button, Sheet } from "./ui";
 
 const draftOf = (s: Shot): TagDraft => ({
   tags: { name: s.name, light: s.light, artificial: s.artificial, weather: s.weather, int_ext: s.int_ext, location_id: s.location_id, extra: s.extra ?? {} },

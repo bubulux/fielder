@@ -2,8 +2,7 @@ import { useEffect, useState } from "react";
 import { Text, View } from "react-native";
 import type { LensRange } from "../types";
 import { lensList } from "../lens";
-import { makeStyles, type } from "../theme";
-import { Button, Chip, Hint, Input, Sheet } from "./ui";
+import { Button, Chip, Hint, Input, makeStyles, Sheet, type } from "../ui";
 
 interface Props { visible: boolean; onClose: () => void; lensMm: number; onChange: (mm: number) => void; range: LensRange | null }
 

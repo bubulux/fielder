@@ -7,13 +7,11 @@ import { useOnline } from "../net";
 import { offlineDays } from "../offline";
 import { applyFilter, placeLabel, rigLabel, shortTime, shotTitle, STATE_FILTERS, type StateFilter } from "../shots";
 import { usePref } from "../storage";
-import { AppHeader, OfflineBanner } from "../components/chrome";
+import { AppHeader, Banner, Button, Chip, Empty, FIXED, IconButton, makeStyles, num, OfflineBanner, RADIUS, Seg, SeqBadge, Skeleton, StateMarker, type, useLayoutSize, useTheme } from "../ui";
 import { LeafletView, type MapHandle } from "../components/LeafletView";
 import { shotsScript, type MapPin } from "../components/mapHtml";
 import { OptionSheet } from "../components/OptionSheet";
 import { FRAME_MODES, frameModeLabel, ShotFrame, type FrameMode } from "../components/ShotFrame";
-import { Banner, Button, Chip, Empty, IconButton, Seg, SeqBadge, Skeleton, StateMarker, useLayoutSize } from "../components/ui";
-import { FIXED, makeStyles, num, RADIUS, type, useTheme } from "../theme";
 
 /** The shots shown when the server can't be reached: those saved with offline days of this project. */
 function offlineShots(projectId: string | null): Shot[] {

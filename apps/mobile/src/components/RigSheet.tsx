@@ -1,7 +1,7 @@
 import { View } from "react-native";
 import { pickRig, useRigs } from "../rigs";
 import { rigMeta } from "../screens/Rigs";
-import { Hint, ListRow, Sheet } from "./ui";
+import { Hint, ListRow, Sheet } from "../ui";
 
 /** Shoot → Rig: pick the rig to shoot with (tap = use + close); editing and new rigs open the Rig editor. */
 export function RigSheet({ visible, onClose, onEdit }: { visible: boolean; onClose: () => void; onEdit: (rigId: string | null) => void }) {

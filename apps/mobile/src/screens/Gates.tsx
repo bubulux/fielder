@@ -3,10 +3,8 @@ import { ActivityIndicator, ScrollView, Text, View } from "react-native";
 import { WebView as RNWebView, type WebViewMessageEvent, type WebViewProps } from "react-native-webview";
 import { setToken } from "../auth";
 import { API_URL } from "../config";
-import { ActionBar } from "../components/chrome";
+import { ActionBar, Banner, Button, Empty, Hint, IconButton, ListRow, makeStyles, Mark, type, useTheme } from "../ui";
 import { NewProjectSheet, projectMeta, type PickProject } from "../components/ProjectSheet";
-import { Banner, Button, Empty, Hint, IconButton, ListRow, Mark } from "../components/ui";
-import { makeStyles, type, useTheme } from "../theme";
 import type { ProjectEntry } from "../types";
 
 // react-native-webview's class typings collapse to `never` under this TS/React combination; use the props type directly.

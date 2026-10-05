@@ -10,13 +10,10 @@ import { PHONE } from "../phone";
 import { useRigs } from "../rigs";
 import { store } from "../storage";
 import type { HudChips, Settings } from "../types";
-import { Block, PushScreen } from "../components/chrome";
-import { confirm, toast } from "../components/feedback";
+import { Block, Button, Chip, confirm, FIXED, Hint, Input, makeStyles, num, PushScreen, SectionLabel, Seg, toast, Toggle, type } from "../ui";
 import { HudChip } from "../components/Hud";
 import { Overlay } from "../components/Overlay";
 import { ShotFrame } from "../components/ShotFrame";
-import { Button, Chip, Hint, Input, SectionLabel, Seg, Toggle } from "../components/ui";
-import { FIXED, makeStyles, num, type } from "../theme";
 
 /** Frame colours on offer (values stored in settings; they draw over the camera image, not the UI). */
 export const BORDER_COLORS: { value: string; label: string }[] = [

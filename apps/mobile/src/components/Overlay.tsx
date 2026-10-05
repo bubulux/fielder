@@ -1,6 +1,6 @@
 import { StyleSheet, Text, View } from "react-native";
 import type { Box, Rect } from "../framing";
-import { FIXED, FONT } from "../theme";
+import { FIXED, FONT } from "../ui";
 import type { Settings } from "../types";
 
 interface Props {

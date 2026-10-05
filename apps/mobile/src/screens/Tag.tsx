@@ -6,12 +6,9 @@ import { pruneExtra, type FieldDef } from "@fielder/vocab";
 import { hhmm } from "../shots";
 import { store } from "../storage";
 import type { CaptureDraft, LocationEntry, ProjectEntry, Settings, ShotTags } from "../types";
-import { ActionBar } from "../components/chrome";
-import { confirm } from "../components/feedback";
+import { ActionBar, Button, confirm, FIXED, makeStyles, num, RADIUS, SeqBadge, SIZE, type } from "../ui";
 import { FramedImage } from "../components/FramedImage";
 import { EMPTY_TAGS, TagEditor, type TagDraft } from "../components/TagEditor";
-import { Button, SeqBadge } from "../components/ui";
-import { FIXED, makeStyles, num, RADIUS, SIZE, type } from "../theme";
 
 interface Props {
   draft: CaptureDraft;

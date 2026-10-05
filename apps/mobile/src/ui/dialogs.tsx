@@ -1,7 +1,9 @@
 import { useEffect, useState } from "react";
 import { Text, View } from "react-native";
-import { makeStyles, RADIUS, type, useTheme } from "../theme";
-import { Button, Icon, Sheet } from "./ui";
+import { makeStyles, RADIUS, type, useTheme } from "./theme";
+import { Button } from "./actions";
+import { Icon } from "./core";
+import { Sheet } from "./overlays";
 
 /**
  * In-app confirm sheets and toasts (they replace Android alerts everywhere). Both are called as

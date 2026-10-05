@@ -21,18 +21,15 @@ import { store } from "../storage";
 import { useSync } from "../sync";
 import { lensRangeOf, type CaptureDraft, type DraftPhoto, type LocationEntry, type PhotoMetadata, type ShotMetadata, type ShotTags } from "../types";
 import { enqueue, flush } from "../uploads";
-import { Badge } from "../components/chrome";
-import { notice, toast, useToastOffset } from "../components/feedback";
+import { Badge, Button, Empty, FIXED, Icon, makeStyles, notice, num, RADIUS, SeqBadge, SIZE, toast, type, useTheme, useToastOffset } from "../ui";
 import { HudChip } from "../components/Hud";
 import { LensSheet } from "../components/LensSheet";
 import { LensStrip } from "../components/LensStrip";
 import { HUMAN_COLOR, Overlay } from "../components/Overlay";
 import { RigSheet } from "../components/RigSheet";
 import { EMPTY_TAGS } from "../components/TagEditor";
-import { Button, Empty, Icon, SeqBadge } from "../components/ui";
 import { retryAll } from "./Uploads";
 import { Tag } from "./Tag";
-import { FIXED, makeStyles, num, RADIUS, SIZE, type, useTheme } from "../theme";
 
 /** Portrait chrome block: 10 pad · lens strip 56 · 10 gap · control row 76 · 12 pad, plus the 2 dp top edge. */
 const CHROME_H = 10 + 56 + 10 + SIZE.shutter + 12 + 2;

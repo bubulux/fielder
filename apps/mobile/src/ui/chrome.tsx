@@ -2,8 +2,9 @@ import type { ReactNode } from "react";
 import { Pressable, ScrollView, Text, View, type StyleProp, type ViewStyle } from "react-native";
 import { useApp } from "../appState";
 import { useSync, type Sync, type SyncState } from "../sync";
-import { BORDER, FIXED, makeStyles, num, RADIUS, SIZE, type, useTheme, type Palette } from "../theme";
-import { Icon, IconButton } from "./ui";
+import { BORDER, FIXED, makeStyles, num, RADIUS, SIZE, type, useTheme, type Palette } from "./theme";
+import { IconButton } from "./actions";
+import { Icon } from "./core";
 
 interface HeadAction { icon: string; label: string; onPress: () => void }
 

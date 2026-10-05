@@ -6,11 +6,8 @@ import { useApp } from "../appState";
 import { useOnline } from "../net";
 import { offlineDays, removeOfflineDay, saveDayOffline, type OfflineDay } from "../offline";
 import { hhmm, placeLabel, shotTitle } from "../shots";
-import { ActionBar, AppHeader } from "../components/chrome";
-import { confirm, toast, useToastOffset } from "../components/feedback";
+import { ActionBar, AppHeader, Button, confirm, Empty, Icon, makeStyles, num, type Palette, RADIUS, SeqBadge, toast, type, useTheme, useToastOffset } from "../ui";
 import { ShotFrame } from "../components/ShotFrame";
-import { Button, Empty, Icon, SeqBadge } from "../components/ui";
-import { makeStyles, num, RADIUS, type, useTheme, type Palette } from "../theme";
 
 const BERLIN = { lat: 52.52, lon: 13.405 };
 export const phaseFill = (c: Palette, phase: string) => (phase === "dawn" ? c.phaseDawn : phase === "day" ? c.phaseDay : phase === "dusk" ? c.phaseDusk : c.phaseNight);
