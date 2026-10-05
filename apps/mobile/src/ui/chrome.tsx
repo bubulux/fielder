@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 import { Pressable, ScrollView, Text, View, type StyleProp, type ViewStyle } from "react-native";
 import { useApp } from "../appState";
 import { useSync, type Sync, type SyncState } from "../sync";
-import { BORDER, FIXED, makeStyles, num, RADIUS, SIZE, type, useTheme, type Palette } from "./theme";
+import { BORDER, FIXED, makeStyles, num, type Palette, RADIUS, SIZE, type, useTheme } from "./theme";
 import { IconButton } from "./actions";
 import { Icon } from "./core";
 
@@ -190,13 +190,13 @@ export function ActionBar({ children, edge, column, style }: { children: ReactNo
 
 const useStyles = makeStyles((c) => ({
   screen: { flex: 1, backgroundColor: c.bg },
-  header: { height: 64, flexDirection: "row", alignItems: "center", gap: 8, paddingHorizontal: 12, backgroundColor: c.surface, borderBottomWidth: BORDER.control, borderBottomColor: c.borderSubtle },
+  header: { height: SIZE.header, flexDirection: "row", alignItems: "center", gap: 8, paddingHorizontal: 12, backgroundColor: c.surface, borderBottomWidth: BORDER.control, borderBottomColor: c.borderSubtle },
   title: { ...type("title", "bold"), color: c.text },
   sub: { ...type("small"), color: c.textDim, ...num },
   pill: { maxWidth: "100%", height: 48, flexDirection: "row", alignItems: "center", gap: 8, paddingLeft: 14, paddingRight: 12, borderRadius: RADIUS.pill, borderWidth: BORDER.control, borderColor: c.border, backgroundColor: c.surface },
   pillText: { ...type("body", "bold"), color: c.text, flexShrink: 1 },
   syncBtn: { width: 48, height: 48, borderRadius: RADIUS.sm, borderWidth: BORDER.control, borderColor: c.border, backgroundColor: c.surface, alignItems: "center", justifyContent: "center" },
-  badge: { position: "absolute", top: -8, right: -8, minWidth: 22, height: 22, paddingHorizontal: 5, borderRadius: 11, overflow: "hidden", backgroundColor: c.warn, color: c.onWarn, textAlign: "center", ...type("caption", "heavy"), fontSize: 12, lineHeight: 22, borderWidth: 2, borderColor: c.surface },
+  badge: { position: "absolute", top: -8, right: -8, minWidth: 22, height: 22, paddingHorizontal: 5, borderRadius: 11, overflow: "hidden", backgroundColor: c.warn, color: c.onWarn, textAlign: "center", ...type("caption", "heavy"), fontSize: 12, lineHeight: 22, borderWidth: BORDER.control, borderColor: c.surface },
   offline: { flexDirection: "row", alignItems: "center", gap: 10, minHeight: 52, paddingHorizontal: 16, paddingVertical: 6, backgroundColor: c.archive, borderBottomWidth: BORDER.control, borderBottomColor: c.borderStrong },
   offlineTitle: { ...type("small", "bold"), color: c.text },
   offlineMeta: { ...type("caption"), color: c.text },
@@ -209,8 +209,8 @@ const useStyles = makeStyles((c) => ({
   fieldValue: { ...type("body", "bold"), color: c.text },
   fieldEmpty: { fontFamily: type("body").fontFamily, color: c.textDim },
   fieldError: { ...type("small", "semibold"), fontSize: 14, color: c.danger, flexShrink: 1 },
-  last: { flexDirection: "row", alignItems: "center", gap: 4, height: 26, paddingHorizontal: 8, borderRadius: RADIUS.xs, borderWidth: 1.5, borderColor: c.border },
+  last: { flexDirection: "row", alignItems: "center", gap: 4, height: 26, paddingHorizontal: 8, borderRadius: RADIUS.xs, borderWidth: BORDER.badge, borderColor: c.border },
   lastText: { ...type("caption", "bold"), fontSize: 12, letterSpacing: 0.7, color: c.textDim },
   actionBar: { flexDirection: "row", gap: 8, paddingTop: 12, paddingHorizontal: 16, paddingBottom: 12, backgroundColor: c.surface, borderTopWidth: BORDER.control, borderTopColor: c.border },
-  actionColumn: { width: 148, gap: 8, paddingVertical: 16, paddingHorizontal: 12, backgroundColor: c.surface, borderLeftWidth: BORDER.control, borderLeftColor: c.border },
+  actionColumn: { width: SIZE.actionColumn, gap: 8, paddingVertical: 16, paddingHorizontal: 12, backgroundColor: c.surface, borderLeftWidth: BORDER.control, borderLeftColor: c.border },
 }));

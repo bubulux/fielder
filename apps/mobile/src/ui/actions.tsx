@@ -47,8 +47,8 @@ export function IconButton({ icon, label, onPress, onLongPress, disabled, color,
   );
 }
 
-/** Buttons side by side, 8 dp apart; give them `style={{ flex: n }}` to share the width. */
-export function ButtonRow({ children }: { children: ReactNode }) {
+/** Controls side by side, 8 dp apart (button pairs, two inputs); give them `style={{ flex: n }}` to share the width. */
+export function SideBySide({ children }: { children: ReactNode }) {
   const s = useStyles();
-  return <View style={s.buttonRow}>{children}</View>;
+  return <View style={s.sideBySide}>{children}</View>;
 }

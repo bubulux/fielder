@@ -7,6 +7,7 @@ import { ImageManipulator, SaveFormat } from "expo-image-manipulator";
 import { File } from "expo-file-system";
 import { StatusBar } from "expo-status-bar";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { HUMAN_STEPS } from "../defaults";
 import { api } from "../api";
 import { useApp } from "../appState";
 import { isSignedIn, onAuthChange, signedInEmail } from "../auth";
@@ -21,7 +22,7 @@ import { store } from "../storage";
 import { useSync } from "../sync";
 import { lensRangeOf, type CaptureDraft, type DraftPhoto, type LocationEntry, type PhotoMetadata, type ShotMetadata, type ShotTags } from "../types";
 import { enqueue, flush } from "../uploads";
-import { Badge, Button, Empty, FIXED, Icon, makeStyles, notice, num, RADIUS, SeqBadge, SIZE, toast, type, useTheme, useToastOffset } from "../ui";
+import { Badge, BORDER, Button, Empty, FIXED, Icon, makeStyles, notice, num, RADIUS, SeqBadge, SIZE, toast, type, useTheme, useToastOffset } from "../ui";
 import { HudChip } from "../components/Hud";
 import { LensSheet } from "../components/LensSheet";
 import { LensStrip } from "../components/LensStrip";
@@ -37,7 +38,6 @@ const CHROME_H = 10 + 56 + 10 + SIZE.shutter + 12 + 2;
 const LENS_COL = 80;
 const CONTROL_COL = 80;
 const MAX_UPLOAD_EDGE = 1280;
-const HUMAN_STEPS = [35, 43, 50];
 /** A watched GPS fix younger than this is used as is; otherwise the capture waits briefly for a fresh one. */
 const FIX_MAX_AGE_MS = 15_000;
 /** GPS worse than this is a warning. */
@@ -465,17 +465,17 @@ const useStyles = makeStyles((c) => ({
   hud: { position: "absolute", top: 8, left: 8, right: 8, flexDirection: "row", flexWrap: "wrap", gap: 6 },
   seqBadge: { position: "absolute", bottom: 12, left: 12 },
   cardWrap: { position: "absolute", left: 12, right: 12, top: 0, bottom: 0, justifyContent: "center" },
-  card: { flexDirection: "row", alignItems: "center", gap: 12, padding: 14, borderRadius: RADIUS.md, backgroundColor: c.surfaceRaised, borderWidth: 2, borderColor: c.borderStrong },
+  card: { flexDirection: "row", alignItems: "center", gap: 12, padding: 14, borderRadius: RADIUS.md, backgroundColor: c.surfaceRaised, borderWidth: BORDER.control, borderColor: c.borderStrong },
   cardTitle: { ...type("body", "bold"), color: c.text },
   cardBody: { ...type("small"), color: c.textDim },
-  chrome: { backgroundColor: c.chromeBg, borderColor: c.chromeBorder, borderTopWidth: 2, paddingTop: 10, paddingHorizontal: 8, paddingBottom: 12, gap: 10 },
-  column: { width: CONTROL_COL, borderTopWidth: 0, borderLeftWidth: 2, paddingHorizontal: 0, paddingVertical: 8, gap: 0 },
-  lensCol: { backgroundColor: c.chromeBg, borderRightWidth: 2, borderRightColor: c.chromeBorder },
+  chrome: { backgroundColor: c.chromeBg, borderColor: c.chromeBorder, borderTopWidth: BORDER.control, paddingTop: 10, paddingHorizontal: 8, paddingBottom: 12, gap: 10 },
+  column: { width: CONTROL_COL, borderTopWidth: 0, borderLeftWidth: BORDER.control, paddingHorizontal: 0, paddingVertical: 8, gap: 0 },
+  lensCol: { backgroundColor: c.chromeBg, borderRightWidth: BORDER.control, borderRightColor: c.chromeBorder },
   row: { flexDirection: "row", alignItems: "center", height: SIZE.shutter },
   cell: { flex: 1, alignSelf: "stretch" },
   hit: { flex: 1, alignItems: "center", justifyContent: "center" },
   shutterCell: { padding: 4, alignItems: "center", justifyContent: "center" },
-  ctl: { alignItems: "center", justifyContent: "center", borderRadius: 10, borderWidth: 2, borderColor: c.chromeBorder, backgroundColor: c.chromeBg },
+  ctl: { alignItems: "center", justifyContent: "center", borderRadius: 10, borderWidth: BORDER.control, borderColor: c.chromeBorder, backgroundColor: c.chromeBg },
   ctlPressed: { transform: [{ translateY: 1 }], borderColor: c.chromeText },
   ctlOff: { borderStyle: "dashed", borderColor: c.textDisabled },
   shutter: { width: SIZE.shutter, height: SIZE.shutter, borderRadius: SIZE.shutter / 2, borderWidth: 4, borderColor: c.chromeText, backgroundColor: c.chromeBg, alignItems: "center", justifyContent: "center" },

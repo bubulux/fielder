@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Text, View } from "react-native";
-import { makeStyles, RADIUS, type, useTheme } from "./theme";
+import { BORDER, makeStyles, RADIUS, type, useTheme } from "./theme";
 import { Button } from "./actions";
 import { Icon } from "./core";
 import { Sheet } from "./overlays";
@@ -114,7 +114,7 @@ const useStyles = makeStyles((c) => ({
   body: { ...type("body"), color: c.text },
   buttons: { flexDirection: "row", gap: 8 },
   toastWrap: { position: "absolute", left: 16, right: 16, alignItems: "center" },
-  toast: { flexDirection: "row", alignItems: "center", gap: 10, minHeight: 52, maxWidth: 520, paddingLeft: 14, paddingRight: 6, paddingVertical: 6, borderRadius: RADIUS.md, backgroundColor: c.surfaceRaised, borderWidth: 2, borderColor: c.borderStrong, elevation: 8 },
+  toast: { flexDirection: "row", alignItems: "center", gap: 10, minHeight: 52, maxWidth: 520, paddingLeft: 14, paddingRight: 6, paddingVertical: 6, borderRadius: RADIUS.md, backgroundColor: c.surfaceRaised, borderWidth: BORDER.control, borderColor: c.borderStrong, elevation: 8 },
   toastText: { ...type("small", "semibold"), color: c.text, flexShrink: 1, paddingRight: 8 },
   toastAction: { ...type("body", "heavy"), color: c.accent, minHeight: 44, lineHeight: 44, paddingHorizontal: 12 },
 }));

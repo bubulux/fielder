@@ -59,4 +59,24 @@ Switching:
 
 Domain pieces that draw photos (`Framed`, `FramedThumb`, `ShotCard`) stay next to the pages because they depend on the frame math in `format.ts`.
 
+## Phone component library
+
+`apps/mobile/src/ui/`, imported as `../ui` (`./src/ui` from `App.tsx`). Screens and sheets build from these; numbers come from the tokens, not literals.
+
+| File | Contents |
+| --- | --- |
+| `theme.tsx` | Palettes, `FIXED`, `FONT`, `type(step, weight)`, `num`, `SPACE`, `RADIUS`, `SIZE` (incl. `header` 64, `actionColumn` 148), `BORDER` (`control` 2, `badge` 1.5), `ThemeProvider`, `useTheme`, `makeStyles` |
+| `core.tsx` | `useLayoutSize`, `Icon`, `Mark`, `SectionLabel`, `SectionHeading` (padded, between full-width rows), `Hint` |
+| `actions.tsx` | `Button`, `IconButton`, `SideBySide` (two controls 8 dp apart) |
+| `forms.tsx` | `Chip`, `ChipRow`, `ChipGrid`/`ChipCell`, `Input`, `Switch`, `Toggle`, `Checkbox`, `Row` |
+| `navigation.tsx` | `Seg` |
+| `data.tsx` | `StateMarker`, `SeqBadge`, `PhotoTag`, `ListRow` |
+| `feedback.tsx` | `Banner`, `Empty`, `Skeleton`, `ErrorText`, `useRefreshControl` |
+| `overlays.tsx` | `Sheet`, `SheetList` (edge-to-edge rows), `SheetSearch` |
+| `dialogs.tsx` | `confirm`, `notice`, `ConfirmHost`, `toast`, `ToastHost`, `useToastOffset` |
+| `chrome.tsx` | `AppHeader`, `PushScreen`, `Block`, `OfflineBanner`, `SyncIcon`, `SyncCard`, `Badge`, `FieldRow`, `ActionBar` |
+| `styles.ts` | The one style sheet behind the primitives |
+
+Some look-alikes are kept apart on purpose because they differ by a few dp or a weight: the two "LAST" tags (field row and tag editor), the header count badge and the tab badge, the option-sheet and location-sheet rows, and the full-screen headers of Tag and Gates versus `AppHeader`. Unifying them is a visual change.
+
 To update the design system: re-export from Claude Design, copy the changed CSS over `apps/dashboard/src/ui/design/`, carry colour changes into the palettes in `apps/mobile/src/ui/theme.tsx`, and check the screens that use them.

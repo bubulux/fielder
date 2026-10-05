@@ -53,12 +53,7 @@ Designed in Claude Design (2026-09-28). The IA is organised around what happens 
 
 ## Shared pieces
 
-- `ui/` (component library, imported as `../ui`; see [design](../design.md)):
-  - `Icon`, `Button` (primary, approve, archive, secondary/ghost, danger, dangerSolid; `big` for landscape action columns)
-  - `IconButton`, `Chip`, `Seg` (`size="lg"`, `block`), `Input`
-  - `Sheet` (fixed `height`, lead/done labels, pinned `footer`)
-  - `Toggle` (64 dp row, whole row toggles), `Switch`, `Checkbox`, `ListRow`
-  - `StateMarker` (`lg`), `SeqBadge`, `PhotoTag`, `Banner`, `Empty`, `Skeleton`, `SectionLabel`, `useLayoutSize`
+- `ui/` (component library, imported as `../ui`; files and components are listed in [design](../design.md#phone-component-library)). Screens build from it; a style that two screens copy belongs there.
 - `ui/chrome.tsx`: `AppHeader`, `PushScreen`, `Block`, `OfflineBanner`, `SyncIcon`, `SyncCard`, `Badge`, `FieldRow`, `ActionBar`.
 - `components/TagEditor.tsx`: the one tag editor (Tag, Review edit, Shot details edit), see [review and tagging](review-and-tagging.md). `components/OptionSheet.tsx`: chips up to 12 options, a search list above, checkboxes for multiple.
 - `components/gestures.ts`: `useSwipe` (PanResponder: horizontal swipe, double-tap).

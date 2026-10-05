@@ -2,6 +2,9 @@ import { OVERLAY_DEFAULTS } from "@fielder/fov-math";
 import { PHONE } from "./phone.ts";
 import type { Settings } from "./types.ts";
 
+/** Human-view focal lengths (FF-equivalent mm) the Human button cycles through and Setup offers. */
+export const HUMAN_STEPS = [35, 43, 50];
+
 export const DEFAULT_SETTINGS: Settings = {
   phoneEquivalentFocalMm: PHONE.mainCameraEquivalentFocalMm,
   borderColor: OVERLAY_DEFAULTS.borderColor,

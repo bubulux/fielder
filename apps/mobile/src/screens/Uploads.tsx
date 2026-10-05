@@ -7,7 +7,7 @@ import { store } from "../storage";
 import { useSync } from "../sync";
 import type { PendingUpload } from "../types";
 import { discardPending, flush } from "../uploads";
-import { Button, confirm, Empty, FIXED, Icon, makeStyles, num, PushScreen, RADIUS, SectionLabel, toast, type, useTheme } from "../ui";
+import { Button, confirm, Empty, FIXED, Icon, makeStyles, num, PushScreen, RADIUS, SectionLabel, SideBySide, toast, type, useTheme } from "../ui";
 import { FramedImage } from "../components/FramedImage";
 import type { Settings } from "../types";
 
@@ -107,10 +107,10 @@ function UploadRow({ entry, settings, location, uploading, onRetry, onDiscard, r
       {entry.stuck && (
         <>
           <Text style={s.error}>{entry.lastError ?? "The server rejected this shot."} Kept on the phone.</Text>
-          <View style={{ flexDirection: "row", gap: 8 }}>
+          <SideBySide>
             <Button style={{ flex: 1 }} kind="secondary" icon="refresh" label="Retry" onPress={onRetry} disabled={retryDisabled} />
             <Button style={{ flex: 1 }} kind="danger" icon="delete-outline" label="Discard" onPress={onDiscard} />
-          </View>
+          </SideBySide>
         </>
       )}
     </View>

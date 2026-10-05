@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState, type ReactNode } from "react";
-import { FlatList, Pressable, RefreshControl, ScrollView, Text, useWindowDimensions, View } from "react-native";
+import { FlatList, Pressable, ScrollView, Text, useWindowDimensions, View } from "react-native";
 import { label, STATE_ICONS } from "@fielder/vocab";
 import { cover, type Shot } from "../api";
 import { useApp } from "../appState";
@@ -7,7 +7,7 @@ import { useOnline } from "../net";
 import { offlineDays } from "../offline";
 import { applyFilter, placeLabel, rigLabel, shortTime, shotTitle, STATE_FILTERS, type StateFilter } from "../shots";
 import { usePref } from "../storage";
-import { AppHeader, Banner, Button, Chip, Empty, FIXED, IconButton, makeStyles, num, OfflineBanner, RADIUS, Seg, SeqBadge, Skeleton, StateMarker, type, useLayoutSize, useTheme } from "../ui";
+import { AppHeader, Banner, BORDER, Button, Chip, Empty, FIXED, IconButton, makeStyles, num, OfflineBanner, RADIUS, Seg, SeqBadge, Skeleton, StateMarker, type, useLayoutSize, useRefreshControl } from "../ui";
 import { LeafletView, type MapHandle } from "../components/LeafletView";
 import { shotsScript, type MapPin } from "../components/mapHtml";
 import { OptionSheet } from "../components/OptionSheet";
@@ -26,7 +26,6 @@ function offlineShots(projectId: string | null): Shot[] {
  */
 export function Shots() {
   const s = useStyles();
-  const { c } = useTheme();
   const app = useApp();
   const online = useOnline();
   const { width, height } = useWindowDimensions();
@@ -38,6 +37,7 @@ export function Shots() {
   const map = useRef<MapHandle | null>(null);
   const [box, onBox] = useLayoutSize();
   const { shots: loaded, error, refreshing, load } = app.shots;
+  const refresh = useRefreshControl(refreshing, () => void load());
   const fallback = !loaded && !!error;
   const shots = useMemo(() => (loaded ?? (error ? offlineShots(app.project?.id ?? null) : null)), [loaded, error, app.project?.id]);
   const visible = useMemo(() => applyFilter(shots, filter), [shots, filter]);
@@ -93,7 +93,7 @@ export function Shots() {
         keyExtractor={(x) => x.id}
         contentContainerStyle={{ paddingHorizontal: 16, paddingVertical: 12, gap }}
         columnWrapperStyle={{ gap }}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => void load()} tintColor={c.accent} colors={[c.accent]} progressBackgroundColor={c.surface} />}
+        refreshControl={refresh}
         ListHeaderComponent={fallback ? <View style={{ marginBottom: 4 }}><Banner kind="offline" title="Showing shots saved offline" meta={`${shots.length} shot${shots.length === 1 ? "" : "s"} from days made available offline`} /></View> : null}
         ListEmptyComponent={
           (shots.length === 0
@@ -162,7 +162,7 @@ function PreviewCard({ shot, mode, onOpen, onClose }: { shot: Shot; mode: FrameM
 
 const useStyles = makeStyles((c) => ({
   root: { flex: 1, backgroundColor: c.bg },
-  bar: { gap: 8, paddingVertical: 10, backgroundColor: c.surface, borderBottomWidth: 2, borderBottomColor: c.borderSubtle },
+  bar: { gap: 8, paddingVertical: 10, backgroundColor: c.surface, borderBottomWidth: BORDER.control, borderBottomColor: c.borderSubtle },
   barRow: { flexDirection: "row", alignItems: "center", gap: 8, paddingHorizontal: 16 },
   skeletons: { flexDirection: "row", flexWrap: "wrap", gap: 10, padding: 16 },
   card: { backgroundColor: c.surface, borderRadius: RADIUS.md, overflow: "hidden", borderWidth: 1, borderColor: c.border },
@@ -171,6 +171,6 @@ const useStyles = makeStyles((c) => ({
   tr: { position: "absolute", top: 8, right: 8 },
   cardTitle: { ...type("small", "bold"), color: c.text },
   cardSub: { ...type("caption"), color: c.textDim },
-  preview: { position: "absolute", left: 12, right: 12, bottom: 12, flexDirection: "row", alignItems: "center", gap: 12, padding: 10, borderRadius: RADIUS.md, backgroundColor: c.surfaceRaised, borderWidth: 2, borderColor: c.borderStrong, elevation: 8 },
+  preview: { position: "absolute", left: 12, right: 12, bottom: 12, flexDirection: "row", alignItems: "center", gap: 12, padding: 10, borderRadius: RADIUS.md, backgroundColor: c.surfaceRaised, borderWidth: BORDER.control, borderColor: c.borderStrong, elevation: 8 },
   previewThumb: { width: 96, height: 72, borderRadius: RADIUS.sm, overflow: "hidden", alignItems: "center", justifyContent: "center", backgroundColor: FIXED.photoBg },
 }));

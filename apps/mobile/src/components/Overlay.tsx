@@ -1,6 +1,6 @@
 import { StyleSheet, Text, View } from "react-native";
 import type { Box, Rect } from "../framing";
-import { FIXED, FONT } from "../ui";
+import { BORDER, FIXED, FONT } from "../ui";
 import type { Settings } from "../types";
 
 interface Props {
@@ -49,7 +49,7 @@ export function Overlay({ preview, rect, settings, exceedsPreview, human, neutra
             top: human.rect.top,
             width: human.rect.width,
             height: human.rect.height,
-            borderWidth: 1.5,
+            borderWidth: BORDER.badge,
             borderColor: HUMAN_COLOR,
             borderStyle: human.fits ? "solid" : "dashed",
           }}

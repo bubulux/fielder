@@ -73,5 +73,5 @@ export const useStyles = makeStyles((c) => ({
   chipGrid: { flexDirection: "row", flexWrap: "wrap", marginHorizontal: -4 },
   chipCell: { width: "50%", padding: 4 },
   sheetSearch: { paddingHorizontal: 16, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: c.borderSubtle },
-  buttonRow: { flexDirection: "row", gap: 8 },
+  sideBySide: { flexDirection: "row", gap: 8 },
 }));

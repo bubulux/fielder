@@ -3,7 +3,7 @@ import { FlatList, Pressable, Text, View } from "react-native";
 import * as Crypto from "expo-crypto";
 import { extraSummary, label, LIGHT, PHASE_ICONS, selectOptions, WEATHER, type Extra, type ExtraValue, type FieldDef } from "@fielder/vocab";
 import type { LocationEntry, ShotTags } from "../types";
-import { Button, Chip, FieldRow, Hint, Icon, Input, makeStyles, Seg, Sheet, Switch, type, useTheme } from "../ui";
+import { BORDER, Button, Chip, ChipRow, ErrorText, FieldRow, Hint, Icon, Input, makeStyles, SectionHeading, Seg, Sheet, SheetSearch, Switch, type, useTheme } from "../ui";
 import { OptionSheet, rankMatches } from "./OptionSheet";
 
 /** The tags being edited, plus a location typed in the sheet that does not exist yet (created on save). */
@@ -141,16 +141,16 @@ export function TagEditor({ value, onChange, locations, countAt, fields, project
         <LabelWithLast text="INT / EXT" last={last("int_ext") && !!tags.int_ext} />
         <Seg size="lg" block accessibilityLabel="Interior or exterior" value={tags.int_ext} onChange={(v) => set({ int_ext: tags.int_ext === v ? null : v }, "int_ext")} options={INT_EXT_OPTIONS} />
         <LabelWithLast text="Light · every phase the shot works in" last={last("light") && (tags.light.length > 0 || tags.artificial)} />
-        <View style={s.chips}>
+        <ChipRow>
           {LIGHT.map((l) => <Chip key={l} icon={PHASE_ICONS[l]} label={label(l)} selected={tags.light.includes(l)} onPress={() => toggleLight(l)} />)}
           <Chip icon={PHASE_ICONS.artificial} label="Artificial" selected={tags.artificial} onPress={() => set({ artificial: !tags.artificial }, "light")} />
-        </View>
+        </ChipRow>
       </View>
       <FieldRow icon="map-marker-outline" label="Location" value={locationText} remembered={last("location_id")} onPress={() => setOpen({ kind: "location" })} />
       <FieldRow icon={WEATHER_ICONS[tags.weather ?? ""] ?? "weather-partly-cloudy"} label="Weather" value={tags.weather ? label(tags.weather) : null} remembered={last("weather")} onPress={() => setOpen({ kind: "weather" })} />
       {fields.length > 0 && (
         <>
-          <Text style={s.section}>{projectName ? `${projectName} fields` : "Project fields"}</Text>
+          <SectionHeading>{projectName ? `${projectName} fields` : "Project fields"}</SectionHeading>
           {rows(fields, tags.extra, [], 0)}
         </>
       )}
@@ -202,7 +202,7 @@ function LocationSheet({ visible, onClose, locations, countAt, lastId, selectedI
   const create = () => pick({ id: Crypto.randomUUID(), name, createdAt: new Date().toISOString(), synced: false }, true);
   return (
     <Sheet visible={visible} title="Location" onClose={close} height={0.86} scroll={false}>
-      <View style={s.search}><Input value={q} onChangeText={setQ} placeholder="Search or type a new location" autoFocus autoCapitalize="words" maxLength={80} onSubmitEditing={() => { if (exact) pick(exact); else if (name) create(); }} /></View>
+      <SheetSearch value={q} onChangeText={setQ} placeholder="Search or type a new location" autoFocus autoCapitalize="words" maxLength={80} onSubmitEditing={() => { if (exact) pick(exact); else if (name) create(); }} />
       <FlatList
         data={list}
         keyExtractor={(l) => l.id}
@@ -233,7 +233,6 @@ function LocationSheet({ visible, onClose, locations, countAt, lastId, selectedI
 
 /** A number or text extra field in its own sheet; Done applies, Clear empties. */
 function ValueSheet({ def, value, onSave, onClose }: { def: FieldDef; value: ExtraValue | undefined; onSave: (v: ExtraValue) => void; onClose: () => void }) {
-  const s = useStyles();
   const [text, setText] = useState(value == null ? "" : String(value));
   const numeric = def.type === "number";
   const n = Number(text.replace(",", "."));
@@ -242,7 +241,7 @@ function ValueSheet({ def, value, onSave, onClose }: { def: FieldDef; value: Ext
   return (
     <Sheet visible title={def.label} onClose={onClose} leadLabel="Cancel" doneLabel="Done" onDone={done}>
       <Input value={text} onChangeText={setText} autoFocus keyboardType={numeric ? "decimal-pad" : "default"} multiline={!numeric} style={!numeric ? { minHeight: 96, textAlignVertical: "top" } : undefined} onSubmitEditing={numeric ? done : undefined} />
-      {bad && <Text style={s.error}>Enter a number.</Text>}
+      {bad && <ErrorText>Enter a number.</ErrorText>}
       {!!def.help && <Hint>{def.help}</Hint>}
       {value != null && <Button kind="secondary" icon="close" label="Clear" onPress={() => { onSave(null); onClose(); }} />}
     </Sheet>
@@ -252,15 +251,11 @@ function ValueSheet({ def, value, onSave, onClose }: { def: FieldDef; value: Ext
 const useStyles = makeStyles((c) => ({
   block: { paddingHorizontal: 16, paddingTop: 14, paddingBottom: 16, gap: 8, backgroundColor: c.surface, borderBottomWidth: 1, borderBottomColor: c.borderSubtle },
   label: { ...type("small", "semibold"), fontSize: 14, color: c.textDim },
-  chips: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
-  section: { ...type("overline", "bold"), color: c.textDim, paddingHorizontal: 16, paddingTop: 20, paddingBottom: 8 },
-  last: { flexDirection: "row", alignItems: "center", gap: 4, height: 24, paddingHorizontal: 7, borderRadius: 3, borderWidth: 1.5, borderColor: c.border },
+  last: { flexDirection: "row", alignItems: "center", gap: 4, height: 24, paddingHorizontal: 7, borderRadius: 3, borderWidth: BORDER.badge, borderColor: c.border },
   lastText: { ...type("caption", "bold"), fontSize: 12, letterSpacing: 0.7, color: c.textDim },
-  search: { paddingHorizontal: 16, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: c.borderSubtle },
   item: { flexDirection: "row", alignItems: "center", gap: 12, minHeight: 56, paddingHorizontal: 16, paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: c.borderSubtle },
   itemOn: { backgroundColor: c.accentTint },
   itemName: { ...type("body", "semibold"), color: c.text, flex: 1 },
   itemNameOn: { fontFamily: type("body", "heavy").fontFamily },
   itemMeta: { ...type("small"), color: c.textDim },
-  error: { ...type("small", "semibold"), color: c.danger },
 }));

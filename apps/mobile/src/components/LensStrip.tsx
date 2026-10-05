@@ -1,7 +1,7 @@
 import { useEffect, useRef } from "react";
 import { Pressable, ScrollView, Text, View } from "react-native";
 import { lensList } from "../lens";
-import { makeStyles, num, RADIUS, type, useTheme } from "../ui";
+import { BORDER, makeStyles, num, RADIUS, type, useTheme } from "../ui";
 import type { LensRange } from "../types";
 
 interface Props {
@@ -64,7 +64,7 @@ const useStyles = makeStyles((c) => ({
   strip: { alignItems: "center", gap: 6 },
   row: { flexDirection: "row", paddingHorizontal: 8, justifyContent: "center", flexGrow: 1 },
   col: { flexDirection: "column", paddingVertical: 8, justifyContent: "center", flexGrow: 1 },
-  val: { minWidth: 52, height: 52, paddingHorizontal: 10, borderRadius: RADIUS.pill, alignItems: "center", justifyContent: "center", borderWidth: 2, borderColor: c.chromeBorder },
+  val: { minWidth: 52, height: 52, paddingHorizontal: 10, borderRadius: RADIUS.pill, alignItems: "center", justifyContent: "center", borderWidth: BORDER.control, borderColor: c.chromeBorder },
   valCol: { width: 64, minWidth: 64, height: 52 },
   valOn: { backgroundColor: c.accent, borderColor: c.accent, height: 56, paddingHorizontal: 14 },
   mm: { ...type("title", "bold"), color: c.chromeText, ...num },

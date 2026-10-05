@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
-import { RefreshControl, ScrollView, Text, useWindowDimensions, View } from "react-native";
+import { ScrollView, Text, useWindowDimensions, View } from "react-native";
 import type { Shot } from "../api";
 import { useApp } from "../appState";
 import { useOnline } from "../net";
 import { store, usePref } from "../storage";
-import { ActionBar, AppHeader, Button, Empty, IconButton, makeStyles, num, Skeleton, type, useLayoutSize, useTheme, useToastOffset } from "../ui";
+import { ActionBar, AppHeader, BORDER, Button, Empty, IconButton, makeStyles, num, RADIUS, SideBySide, Skeleton, type, useLayoutSize, useRefreshControl, useToastOffset } from "../ui";
 import { EditTagsSheet } from "../components/EditTagsSheet";
 import { PhotoStrip } from "../components/PhotoStrip";
 import { FRAME_MODES, FrameModeSeg, type FrameMode } from "../components/ShotFrame";
@@ -20,7 +20,6 @@ const BAR_H = 10 + 52 + 8 + 52 + 12 + 2;
  */
 export function Review() {
   const s = useStyles();
-  const { c } = useTheme();
   const app = useApp();
   const online = useOnline();
   const { width, height } = useWindowDimensions();
@@ -52,7 +51,7 @@ export function Review() {
   };
 
   const header = <AppHeader offlineMeta="Decisions need the server. The loaded queue stays browsable." />;
-  const refresh = <RefreshControl refreshing={refreshing} onRefresh={() => void load()} tintColor={c.accent} colors={[c.accent]} progressBackgroundColor={c.surface} />;
+  const refresh = useRefreshControl(refreshing, () => void load());
 
   if (error && !shots) {
     return (
@@ -70,7 +69,7 @@ export function Review() {
       <View style={s.root}>{header}
         <View style={{ padding: 16, gap: 12 }}>
           <Skeleton style={{ height: Math.min(width * 0.75, 262), marginHorizontal: -16, borderRadius: 0 }} />
-          <Skeleton style={{ height: 48, borderRadius: 999 }} />
+          <Skeleton style={{ height: 48, borderRadius: RADIUS.pill }} />
           <Skeleton style={{ height: 24, width: "70%" }} />
           <Skeleton style={{ height: 18, width: "50%" }} />
           <Skeleton style={{ height: 18, width: "60%" }} />
@@ -104,16 +103,16 @@ export function Review() {
     </View>
   );
   const decisions = (
-    <View style={{ flexDirection: "row", gap: 8 }}>
+    <SideBySide>
       <Button style={{ flex: 1 }} kind="archive" icon="archive-outline" label="Archive" onPress={() => void decide("archived")} disabled={disabled} />
       <Button style={{ flex: 1 }} kind="approve" icon="check" label="Approve" onPress={() => void decide("approved")} disabled={disabled} />
-    </View>
+    </SideBySide>
   );
   const tools = (
-    <View style={{ flexDirection: "row", gap: 8 }}>
+    <SideBySide>
       <IconButton icon="pencil-outline" label="Edit details" size={52} onPress={() => setSheet("edit")} disabled={!online} />
       <IconButton icon="dots-horizontal" label="More" size={52} onPress={() => setSheet("more")} />
-    </View>
+    </SideBySide>
   );
   const summary = (
     <View style={{ flexDirection: "row", gap: 12, alignItems: "flex-start" }}>
@@ -167,7 +166,7 @@ const useStyles = makeStyles((c) => ({
   body: { padding: 16, gap: 16 },
   navRow: { flexDirection: "row", alignItems: "center", gap: 8 },
   pos: { ...type("body", "bold"), color: c.text, ...num, minWidth: 72, textAlign: "center" },
-  floatMode: { position: "absolute", left: 8, bottom: 8, padding: 4, borderRadius: 999, backgroundColor: c.chromeBg, borderWidth: 1.5, borderColor: c.chromeBorder },
-  side: { width: 292, backgroundColor: c.surface, borderLeftWidth: 2, borderLeftColor: c.border },
-  sideBar: { gap: 8, padding: 12, borderTopWidth: 2, borderTopColor: c.border },
+  floatMode: { position: "absolute", left: 8, bottom: 8, padding: 4, borderRadius: RADIUS.pill, backgroundColor: c.chromeBg, borderWidth: BORDER.badge, borderColor: c.chromeBorder },
+  side: { width: 292, backgroundColor: c.surface, borderLeftWidth: BORDER.control, borderLeftColor: c.border },
+  sideBar: { gap: 8, padding: 12, borderTopWidth: BORDER.control, borderTopColor: c.border },
 }));
