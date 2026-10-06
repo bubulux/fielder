@@ -21,7 +21,7 @@ Project-specific details of a shot (nearest U-Bahn station, access notes, parkin
 
 `shots.extra` is keyed by the top-level field key; a group is a nested object: `{ "ubahn": { "line": "U4", "station": "Nollendorfplatz" } }`.
 
-- `validateValues(defs, extra)` does a strict check: only fields of the project, right types, options that are valid for the sibling's value. It is used by `PATCH /api/shots/:id`.
+- `validateValues(defs, extra)` does a strict check: only fields of the project, right types, options that are valid for the sibling's value. It is used by `PATCH /api/shots/:id`. The bulk `PATCH /api/shots` merges its values with `patchExtra(defs, extra, patch)` (per key, groups child by child) and checks only the edited keys (`validateValues(defs, extra, path, only)`), so stale values a bulk edit leaves alone don't block it.
 - Uploads only run `pruneExtra` (drop empty values and groups), so a phone with stale definitions never gets a capture rejected.
 - `extraSummary(defs, extra)` gives display text ("U-Bahn › Line: U4 · …"); `extraLabel` is the fallback without definitions.
 - Changing the parent select clears a dependent value that no longer fits (both editors).

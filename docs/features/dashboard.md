@@ -38,13 +38,18 @@ Designed in Claude Design (2026-09-28): four sections plus a shot view, a sideba
 - **Sub-toolbar**: the state switch (All · Unreviewed · Approved · Archived) with counts **inside the current filter**, the active top-level rules as removable pills, the result count and the sort (newest, oldest, name).
 - **Saved views** store the rule filter plus the state switch (as a leading "state is …" rule, `encodeView`/`decodeView` in `shotsQuery.ts`). Leaving a view with unsaved edits asks first. "Save view…" appears as soon as a filter has rules.
 - **Grid**: cards with the framed cover, SEQ badge (top left), state marker (top right), title, "place · INT/EXT · light", and the project tag in "All projects". Arrow keys move, Enter opens.
-- **List**: a table with checkboxes (click, Shift-click for a range, `X`/`⇧X`), `J`/`K` to move, Enter to open; a selection bar offers "Select all", Clear (Esc) and "Delete n shots…" (with confirmation).
+- **List**: a table with checkboxes (click, Shift-click for a range, `X`/`⇧X`), `J`/`K` to move, Enter to open; a selection bar offers "Select all", Clear (Esc), "Move to project…" (`⇧M`), "Edit…" (`E`) and "Delete n shots…" (with confirmation). Bulk edits go through `PATCH /api/shots` in one transaction and offer Undo in the toast (`BulkEdit.tsx`).
+  - **Move to project…**: a dialog with the project picker, where the shots are now, how many are already in the target, and a warning when shots leave shooting days of their project.
+  - **Edit…**: a side panel "Edit n shots" with every field of the inspector: project, name, review state, location (search or create), INT/EXT, light phases, artificial light, weather, and the extra fields that every target project uses (the others are counted as hidden). Nothing changes until touched; a field where the shots differ says "Mixed · n values", and "Clear all" empties a field for every shot. An edited field gets an accent bar, a bold label, "Edited", a reset button and an "n of m change" button that opens the before/after dialog: each selected shot with its current value struck through and the value after apply (shots that already have the value are folded away, "Show unchanged shots" lists them). "Review" in the panel foot shows that dialog for all edited fields; "Apply to n shots" sends only the edited fields, for only the shots that change. The panel stays open on the selection afterwards, showing the new values.
+  - While the panel is open, a row click selects instead of opening, so the selection can be adjusted with the diffs updating live. Esc (or the close button) closes it and asks before discarding edits.
+  - Patch semantics: Light phases and Artificial are separate fields. An extra field is set per key; a group merges child by child (editing "Parking" keeps each shot's "Power"), and a changed parent drops dependent selects that no longer fit (`patchExtra` in `packages/vocab`).
 - **Map**: the result list on the left and one state pin per shot; selecting a row focuses its pin and opens the popup (framed thumbnail, state, "Open details"). "Fit all" fits the pins. "Show on map" from a shot switches to this layout with the pin focused and the filter kept (cleared when the shot is outside it).
 - States: skeleton cards while loading, "No shots in <project> yet" (switch scope), "No shots match" (edit or clear the filter), a load-error banner with Retry.
 
 ## Keyboard (all shortcuts in `?`)
 
 - Everywhere: ⌘K / Ctrl K palette (shots, locations, views, days, projects, actions), `?`, `G` then `S`/`R`/`P`/`L`/`M` for Shots, Review, Plan, Library, Map, `/` search, `M` frame mode, Esc backs out one level.
+- Shots list: `X`/`⇧X` select, `E` edit the selection, `⇧M` move it, Del delete it.
 - Kept from before: ←/→ shots, `,`/`.` photos, the combobox keys. Single keys never fire while typing in a field (`keys.ts`).
 
 ## Shared pieces

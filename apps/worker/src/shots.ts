@@ -1,4 +1,4 @@
-import { INT_EXT, LIGHT, pruneExtra, SHOT_STATES, validateExtra, validateValues, WEATHER, type Extra } from "@fielder/vocab";
+import { INT_EXT, LIGHT, patchExtra, pruneExtra, SHOT_STATES, validateExtra, validateValues, WEATHER, type Extra, type FieldDef } from "@fielder/vocab";
 import { projectFieldDefs } from "./fields.ts";
 import { assertEnum, assertIsoTimestamp, assertNumber, assertString, assertUuid, HttpError, json, readJson, type Router } from "./http.ts";
 import type { Ctx } from "./index.ts";
@@ -45,6 +45,7 @@ interface PhotoRow {
 const MAX_IMAGE_BYTES = 3 * 1024 * 1024; // "low-res reference" — generous ceiling
 const MAX_PHOTOS_PER_UPLOAD = 60;
 const MAX_JSON_BYTES = 16 * 1024;
+const MAX_BULK = 500;
 const ALLOWED_IMAGE_TYPES = new Set(["image/jpeg", "image/webp", "image/png"]);
 
 function objectKey(photoId: string, contentType: string): string {
@@ -359,6 +360,69 @@ export function registerShotRoutes(r: Router<Ctx>) {
     // A shot moved to another project leaves the shooting days of its old project.
     if (movedTo) await env.DB.prepare("DELETE FROM day_shots WHERE shot_id = ?1 AND day_id IN (SELECT id FROM shooting_days WHERE project_id != ?2)").bind(sid, movedTo).run();
     return json({ shot: await loadShot(env, sid) });
+  });
+
+  /**
+   * Bulk edit: JSON { ids: uuid[] (max 500), set?: { any single-PATCH field except extra }, extra?: { key: value | null } }.
+   * Only the given fields change. `extra` is per top-level key (a group as a whole; null clears it), merged
+   * into each shot's own values and checked against its (new) project's fields. One transaction: all or nothing.
+   */
+  r.on("PATCH", "/api/shots", async ({ env, request }) => {
+    const b = await readJson<Record<string, unknown>>(request);
+    if (!Array.isArray(b.ids) || b.ids.length === 0) throw new HttpError(400, "ids must be a non-empty array");
+    if (b.ids.length > MAX_BULK) throw new HttpError(413, `at most ${MAX_BULK} shots per request`);
+    const ids = [...new Set(b.ids.map((x, i) => assertUuid(x, `ids[${i}]`)))];
+    const set = (b.set ?? {}) as Record<string, unknown>;
+    if (typeof set !== "object" || Array.isArray(set)) throw new HttpError(400, "set must be an object");
+    if (set.extra !== undefined) throw new HttpError(400, "send extra fields in extra, not set");
+    const tags = parseTags(set, false);
+    const sets: string[] = [];
+    const args: unknown[] = [];
+    for (const [k, v] of Object.entries(tags)) { args.push(v); sets.push(`${k} = ?${args.length}`); }
+    if (set.state !== undefined) { args.push(assertEnum(set.state, "state", SHOT_STATES)); sets.push(`state = ?${args.length}`); }
+    let movedTo: string | null = null;
+    if (set.project_id !== undefined) {
+      movedTo = assertUuid(set.project_id, "project_id");
+      await assertProjectExists(env, movedTo);
+      args.push(movedTo); sets.push(`project_id = ?${args.length}`);
+    }
+    const extraPatch = b.extra ?? {};
+    const err = validateExtra(extraPatch);
+    if (err) throw new HttpError(400, err);
+    const keys = Object.keys(extraPatch as Extra);
+    if (sets.length === 0 && keys.length === 0) throw new HttpError(400, "nothing to update");
+    if (tags.location_id) await assertLocationExists(env, tags.location_id);
+
+    const list = JSON.stringify(ids);
+    const { results: rows } = await env.DB.prepare("SELECT id, project_id, extra FROM shots WHERE id IN (SELECT value FROM json_each(?1))")
+      .bind(list).all<{ id: string; project_id: string; extra: string }>();
+    if (rows.length !== ids.length) throw new HttpError(404, `${ids.length - rows.length} of the shots not found`);
+    const now = new Date().toISOString();
+    const stmts: D1PreparedStatement[] = [];
+    if (sets.length) {
+      stmts.push(env.DB.prepare(`UPDATE shots SET ${sets.join(", ")}, updated_at = ?${args.length + 1} WHERE id IN (SELECT value FROM json_each(?${args.length + 2}))`)
+        .bind(...args, now, list));
+    }
+    if (keys.length) {
+      // Interactive, so strict like the single PATCH, but only for the keys edited here.
+      const defsOf = new Map<string, FieldDef[]>();
+      for (const row of rows) {
+        const projectId = movedTo ?? row.project_id;
+        let defs = defsOf.get(projectId);
+        if (!defs) { defs = await projectFieldDefs(env, projectId); defsOf.set(projectId, defs); }
+        const extra = patchExtra(defs, JSON.parse(row.extra) as Extra, extraPatch as Extra);
+        const bad = validateValues(defs, extra, "extra", keys);
+        if (bad) throw new HttpError(400, bad);
+        stmts.push(env.DB.prepare("UPDATE shots SET extra = ?1, updated_at = ?2 WHERE id = ?3").bind(JSON.stringify(extra), now, row.id));
+      }
+    }
+    // Shots moved to another project leave the shooting days of their old project.
+    if (movedTo) stmts.push(env.DB.prepare("DELETE FROM day_shots WHERE shot_id IN (SELECT value FROM json_each(?1)) AND day_id IN (SELECT id FROM shooting_days WHERE project_id != ?2)").bind(list, movedTo));
+    await env.DB.batch(stmts);
+
+    const { results } = await env.DB.prepare(`${SHOT_SQL} WHERE s.id IN (SELECT value FROM json_each(?1))`).bind(list).all<ShotRow>();
+    const photos = await photosFor(env, ids);
+    return json({ shots: results.map((s) => shotToApi(s, photos.get(s.id) ?? [])) });
   });
 
   /** Correct a position by hand: JSON { lat, lon, all_in_shot? }. all_in_shot moves every photo of the shot (a sequence taken on one spot). */

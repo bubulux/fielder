@@ -143,6 +143,13 @@ export const deletePreset = (id: string) => send<{ deleted: string }>("DELETE", 
 
 export const deleteShot = (id: string) => send<{ deleted: string }>("DELETE", `/api/shots/${id}`).then(() => undefined);
 export const patchShot = (id: string, patch: Partial<ShotTags> & { state?: ShotState; project_id?: string }) => send<{ shot: Shot }>("PATCH", `/api/shots/${id}`, patch).then((r) => r.shot);
+export type BulkSet = Partial<Omit<ShotTags, "extra">> & { state?: ShotState; project_id?: string };
+/** Bulk edit: only the given fields change; `extra` is per top-level key (null clears). Sent 500 shots per request. */
+export async function patchShots(ids: string[], set: BulkSet, extra: Extra = {}): Promise<Shot[]> {
+  const out: Shot[] = [];
+  for (let i = 0; i < ids.length; i += 500) out.push(...(await send<{ shots: Shot[] }>("PATCH", "/api/shots", { ids: ids.slice(i, i + 500), set, extra })).shots);
+  return out;
+}
 
 /** Correct a photo's position by hand; `allInShot` moves every photo of its shot. Returns the updated shot. */
 export const patchPhotoPosition = (id: string, lat: number, lon: number, allInShot: boolean) =>

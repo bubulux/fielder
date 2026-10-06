@@ -19,6 +19,7 @@ All routes live in `apps/worker/src/` and are registered in `index.ts`. Every re
 | GET | `/api/shots/:id` | |
 | POST | `/api/shots` | Multipart: `metadata` (JSON) + one `photo.<photoId>` file per photo not yet stored. See below. |
 | PATCH | `/api/shots/:id` | Any of `name, light, artificial, weather, int_ext, location_id, extra, state, project_id`. `extra` is validated against the project's fields. Moving to another project removes the shot from the old project's shooting days. |
+| PATCH | `/api/shots` | Bulk edit: `{ ids: uuid[] (≤ 500), set?: { any single-PATCH field except extra }, extra?: { key: value \| null } }`. Only the given fields change. `extra` is per key and merged into each shot's values (groups child by child, null clears, dependent selects that no longer fit are dropped), then the edited keys are checked against each shot's (new) project. Unknown ids → 404, any error → nothing written (one transaction). Moving removes the shots from the old project's shooting days. Returns `{ shots }`. |
 | DELETE | `/api/shots/:id` | Deletes photos (cascade) and their R2 objects |
 | GET | `/api/photos/:id/image` | Image from R2, immutable caching, supports conditional requests |
 | PATCH | `/api/photos/:id` | `{ lat, lon, all_in_shot? }` position correction; sets `position_corrected` |

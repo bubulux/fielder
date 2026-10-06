@@ -115,7 +115,7 @@ export function App() {
     navigateRaw(r);
   };
 
-  const updated = (s: Shot) => { setShots((cur) => (cur ?? []).map((x) => (x.id === s.id ? s : x))); refreshCounts(); };
+  const updated = (s: Shot | Shot[]) => { const m = new Map((Array.isArray(s) ? s : [s]).map((x) => [x.id, x])); setShots((cur) => (cur ?? []).map((x) => m.get(x.id) ?? x)); refreshCounts(); };
   const deleted = (ids: string[]) => { const gone = new Set(ids); setShots((cur) => (cur ?? []).filter((x) => !gone.has(x.id))); refreshCounts(); };
 
   const result = useMemo(() => runQuery(scoped, query, extra), [scoped, query, extra]);
@@ -250,8 +250,8 @@ export function App() {
     main = <ShotsPage shots={scoped} error={error} scopeName={scopeName} isAll={isAll} query={query} onQuery={setQuery} view={loadedView} edited={edited}
       onSaveView={() => void saveView()} onSaveAsNew={() => void saveAsNew()} onRevert={() => loadedView && setQuery({ ...query, ...decodeView(loadedView.filter) })} onViewMenu={(a) => void viewMenu(a)}
       panel={panel} onPanel={setPanel} layout={layout} onLayout={setLayout} mask={mask} onMask={setMask} ctx={ctx} onOpen={openShot}
-      mapSelected={mapSelected} onMapSelected={setMapSelected} onDeleted={deleted} onReload={() => void load()} onSwitchScope={openPalette} />;
-    hints = layout === "list" ? [{ k: "J/K", t: "Move" }, { k: "X", t: "Select" }, { k: "⇧X", t: "Select range" }, { k: "↵", t: "Open" }, { k: "Del", t: "Delete selected" }, { k: "F", t: "Filter" }]
+      mapSelected={mapSelected} onMapSelected={setMapSelected} onDeleted={deleted} onUpdated={updated} onLocations={setLocations} fieldsOf={fieldsOf} onReload={() => void load()} onSwitchScope={openPalette} />;
+    hints = layout === "list" ? [{ k: "J/K", t: "Move" }, { k: "X", t: "Select" }, { k: "⇧X", t: "Select range" }, { k: "↵", t: "Open" }, { k: "E", t: "Edit selected" }, { k: "⇧M", t: "Move selected" }, { k: "Del", t: "Delete selected" }, { k: "F", t: "Filter" }]
       : layout === "map" ? [{ k: "↑/↓", t: "Move in list" }, { k: "↵", t: "Open" }, { k: "F", t: "Filter" }, { k: "M", t: "Frame mode" }]
       : [{ k: "←↑→↓", t: "Move" }, { k: "↵", t: "Open" }, { k: "F", t: "Filter" }, { k: "M", t: "Frame mode" }, { k: "/", t: "Search" }, { k: "⌘K", t: "Go to" }];
   }
