@@ -52,3 +52,15 @@ button.f-row { width: 100%; }
 
 /* Checkbox. */
 button.f-check.is-indeterminate .f-check__box { background: var(--accent); border-color: var(--accent); }
+
+/* Glass backdrop behind every dialog, palette and sheet (Overlay): the page stays visible but blurred
+   under a veil of the page colour, frosted in Sun, smoked in Set. The dialog itself stays opaque, so
+   contrast inside it is unchanged. Without backdrop-filter the plain scrim from overlays.css remains. */
+@supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .f-scrim {
+    opacity: 1;
+    background: color-mix(in srgb, var(--bg) 55%, transparent);
+    -webkit-backdrop-filter: blur(14px) saturate(150%);
+    backdrop-filter: blur(14px) saturate(150%);
+  }
+}

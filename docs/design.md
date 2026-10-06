@@ -27,6 +27,7 @@ Switching:
 - **Pills choose, rectangles act.** Tabs, segmented switches and chips are pills. Action buttons are rounded rectangles.
 - **Photos never take the theme**: black letterbox, neutral mask (`rgba(0,0,0,.62)`), white frame line with a black outline, dashed when the rig sees more than the photo. Anything over a photo is opaque (black badges, solid chrome), never translucent text.
 - **Semantic tokens only.** Use `--bg`, `--surface`, `--text`, `--text-dim`, `--border`, `--accent`, `--ok`, `--danger`, `--warn`, `--phase-*` and so on; never a hex value in a component. The only fixed colours are those drawn over photos or maps: photo black, frame white/black, the human-view cyan, recording red, and map pins.
+- **Dialog backdrop is glass**: every `Overlay` (dialogs, palette, shortcut sheet) blurs the page under a veil of `--bg` (frosted in Sun, smoked in Set; `components.css`). The dialog itself stays opaque. Browsers without `backdrop-filter` keep the plain `--scrim`.
 - **Accent is cobalt.** Amber (`--warn`) means only "warning / unreviewed".
 - **Icons**: Material Design Icons, with the same names on both clients. Shared names (review states, light phases) are `STATE_ICONS` and `PHASE_ICONS` in `packages/vocab`.
 - **Font**: Atkinson Hyperlegible Next, chosen for legibility under glare (1/l/I and 0/O are distinct). Readouts use tabular figures (`.num`).
