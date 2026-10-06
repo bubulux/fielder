@@ -50,7 +50,7 @@ The shot view (`ShotView.tsx`) replaces the old dialog. It covers the main area 
 
 ## Review on the phone
 
-The **Review** tab (`screens/Review.tsx`) takes the same queue (unreviewed, oldest first, no skip), photo first, with the decision at the thumb:
+The **Review** tab (`screens/Review.tsx`) takes the same queue (unreviewed, queued shots included, newest first; the header button switches to oldest first, remembered in `reviewOrder.v1`; no skip), photo first, with the decision at the thumb:
 - The photo spans the width (up to 262 dp), with the SEQ badge and "Photo i / n" for sequences and the photo strip under it. **Swipe** on the photo = next/prev shot; the strip moves between photos. **Double-tap** opens the photo full screen (mode switch on an opaque card; swipe = photos).
 - The frame-view switch (remembered in `reviewMode.v1`).
 - The summary:
@@ -59,14 +59,14 @@ The **Review** tab (`screens/Review.tsx`) takes the same queue (unreviewed, olde
   - rig · lens · capture time
   - **Edit** (pencil) opens the edit sheet: the same tag editor as after a capture, Save pinned; a failure keeps the sheet open with the error.
   - **⋯** opens Shot details, Show on map, Correct position and Delete (a confirm with **Archive** as the safe alternative).
-- **Pinned**: Prev · "n of m" · Next, then **Archive | Approve**. A decision shows "Approved · Undo" (4 s); the next shot takes the same position.
-- States: skeleton while loading; "Nothing to review" with the project's totals and **Browse shots**; a load error with Try again (pull to refresh too). Offline: the banner, and the decisions are disabled (they need the server); the loaded queue stays browsable.
+- **Pinned**: Prev · "n of m" (with the order under it) · Next, then **Archive | Approve**. A decision shows "Approved · Undo" (4 s); the next shot takes the same position.
+- States: skeleton while loading; "Nothing to review" with the project's totals and **Browse shots**; a load error with Try again (pull to refresh too). Offline: the banner; decisions and edits still work and are kept on the phone until they can be sent ([offline](day-mode-offline.md)).
 - Landscape: the photo fills the left with the mode switch floating on it; a 292 dp side panel holds the strip, the summary and the decisions at the bottom.
 
 **Shot details** (Shots → a shot, or ⋯ → Shot details; `screens/ShotDetails.tsx`) is a full screen:
 - the photo (swipe = the neighbours in the list it was opened from), strip and frame view
 - the summary, **Tags** with Edit, **Position** per photo (coordinates, ±accuracy or "corrected") with Show on map and Correct, **Camera** per photo, and **Raw metadata** (expands)
-- ⋯ holds Delete
+- ⋯ holds Delete (Discard for a queued shot; deleting an uploaded shot needs a connection)
 - Pinned: the two states that aren't the current one (unreviewed → Archive | Approve; approved → Back to review | Archive; archived → Back to review | Approve)
 
 ## Buttons ([design](../design.md))
@@ -86,6 +86,7 @@ The **Review** tab (`screens/Review.tsx`) takes the same queue (unreviewed, olde
   - The same combobox is used for the project box, rig and format pickers, and the filter builder's single values.
 - **Phone** (`components/TagEditor.tsx`, one editor for Tag, the Review edit sheet and the Shot-details edit):
   - Name, INT/EXT (segmented) and light (chips + Artificial) are edited in place.
+  - A **Camera** section: Shot size and Camera support are rows that open a sheet (support carries LAST: it usually stays for a while; size and movement are not remembered), Movement is chips (any number).
   - Location, weather and every extra field are 64 dp rows (`FieldRow`) showing the value, the LAST tag (kept from the last capture) and a chevron; a tap opens a focused sheet:
     - **Location**: search auto-focused; "Create “…”" first when the name is new; with an empty query the last used first, then by shots there.
     - **Weather**: a 2-column grid.

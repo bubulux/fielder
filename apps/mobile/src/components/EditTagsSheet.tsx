@@ -1,21 +1,24 @@
 import { useEffect, useState } from "react";
 import { View } from "react-native";
 import { pruneExtra } from "@fielder/vocab";
-import { api, type Shot } from "../api";
+import type { Shot } from "../api";
 import { useApp } from "../appState";
+import { editShot, isWaiting } from "../localShots";
 import { ensureLocation } from "../namedSync";
+import { isOfflineMode } from "../net";
 import { store } from "../storage";
 import { Banner, Button, Sheet, SheetList, toast } from "../ui";
 import { TagEditor, type TagDraft } from "./TagEditor";
 
 const draftOf = (s: Shot): TagDraft => ({
-  tags: { name: s.name, light: s.light, artificial: s.artificial, weather: s.weather, int_ext: s.int_ext, location_id: s.location_id, extra: s.extra ?? {} },
+  tags: { name: s.name, light: s.light, artificial: s.artificial, weather: s.weather, int_ext: s.int_ext, location_id: s.location_id, shot_size: s.shot_size ?? null, camera_support: s.camera_support ?? null, movement: s.movement ?? [], extra: s.extra ?? {} },
   newLocation: null,
 });
 
 /**
- * Edit a stored shot's tags: the same TagEditor as after a capture, in a 92 % sheet with Save
- * pinned. PATCH /api/shots/:id; a failure keeps the sheet open with the error on top.
+ * Edit a shot's tags: the same TagEditor as after a capture, in a 92 % sheet with Save pinned.
+ * Saved through editShot (server, upload queue, or kept on the phone until online); a rejection
+ * keeps the sheet open with the error on top.
  */
 export function EditTagsSheet({ shot, visible, onClose }: { shot: Shot; visible: boolean; onClose: () => void }) {
   const app = useApp();
@@ -31,12 +34,15 @@ export function EditTagsSheet({ shot, visible, onClose }: { shot: Shot; visible:
       let tags = { ...draft.tags, name: draft.tags.name?.trim() || null, extra: pruneExtra(draft.tags.extra) };
       const nl = draft.newLocation;
       if (nl) {
-        const id = await ensureLocation(nl);
-        app.setLocations([...app.locations.filter((l) => l.id !== nl.id && l.id !== id), { ...nl, id, synced: true }]);
+        // Offline (or a queued shot): keep the new location on the phone; the next flush creates it first.
+        let id = nl.id, synced = false;
+        if (!shot.queued && !isOfflineMode()) { try { id = await ensureLocation(nl); synced = true; } catch { /* stays local */ } }
+        app.setLocations([...app.locations.filter((l) => l.id !== nl.id && l.id !== id), { ...nl, id, synced }]);
         tags = { ...tags, location_id: id };
       }
-      app.shots.update(await api.patchShot(shot.id, tags));
-      toast("Saved");
+      const updated = await editShot(shot, tags);
+      app.shots.update(updated);
+      toast(updated.queued ? "Saved · uploads with the shot" : isWaiting(shot.id) ? "Saved · syncs when online" : "Saved");
       onClose();
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));

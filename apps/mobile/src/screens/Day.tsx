@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ActivityIndicator, Pressable, ScrollView, SectionList, Text, View } from "react-native";
 import { dayLight, lightLabel, localDay, PHASE_ICONS, shootableWindows, type DayLight, type Interval } from "@fielder/vocab";
-import { api, cover, type Shot, type ShootingDay } from "../api";
+import { api, cover, positionOf, type Shot, type ShootingDay } from "../api";
 import { useApp } from "../appState";
 import { useOnline } from "../net";
 import { offlineDays, removeOfflineDay, saveDayOffline, type OfflineDay } from "../offline";
@@ -17,9 +17,10 @@ export const windowsText = (w: Interval[]) => (w.length ? w.map((x) => `${hhmm(x
 export const todayIso = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; };
 const dateParts = (date: string) => { const d = new Date(`${date}T12:00:00`); return { wd: d.toLocaleDateString([], { weekday: "short" }), dd: String(d.getDate()), mon: d.toLocaleDateString([], { month: "short" }), long: d.toLocaleDateString([], { weekday: "short", day: "numeric", month: "short" }) }; };
 
+/** Centre of the shots' positions (for the daylight), Berlin when none has one. */
 function centroid(shots: Shot[]) {
-  if (shots.length === 0) return BERLIN;
-  const ps = shots.map(cover);
+  const ps = shots.map(positionOf).filter((p): p is { lat: number; lon: number } => !!p);
+  if (ps.length === 0) return BERLIN;
   return { lat: ps.reduce((a, p) => a + p.lat, 0) / ps.length, lon: ps.reduce((a, p) => a + p.lon, 0) / ps.length };
 }
 

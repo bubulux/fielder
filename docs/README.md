@@ -21,10 +21,10 @@ Reference documentation for the whole app. Start with [architecture](architectur
 | [features/capture.md](features/capture.md) | Phone Shoot tab: rigs, lenses, overlay, controls, HUD chips, Tag after capture, sequences, direct upload, upload queue |
 | [features/review-and-tagging.md](features/review-and-tagging.md) | Review flow, tags (light model, INT/EXT, weather, location), view modes (mask/frame/fit/raw) |
 | [features/extra-fields.md](features/extra-fields.md) | User-defined fields as JSON, AI import, per-project selection |
-| [features/positions.md](features/positions.md) | GPS acquisition and manual pin correction |
+| [features/positions.md](features/positions.md) | GPS modes (High · Low · Off), photos without a position, manual pin correction |
 | [features/rig-explorer.md](features/rig-explorer.md) | Re-framing a photo for other rigs and lenses |
 | [features/schedule.md](features/schedule.md) | Shooting days, daylight phases, forecast, shootable windows |
-| [features/day-mode-offline.md](features/day-mode-offline.md) | Phone "Day" tab and offline days |
+| [features/day-mode-offline.md](features/day-mode-offline.md) | Phone "Day" tab, offline days, offline project, offline mode, edits kept on the phone |
 | [features/phone-app.md](features/phone-app.md) | Phone shell: 5 tabs, gates, pushed screens, header and sync state, Setup hub, shared components |
 | [features/dashboard.md](features/dashboard.md) | Dashboard shell and sections: Shots (grid/list/map, filters, views), shot view, Review, Plan, Library |
 | [features/debug-log.md](features/debug-log.md) | The phone's background debug log |

@@ -21,4 +21,6 @@ export const DEFAULT_SETTINGS: Settings = {
   loggingEnabled: false,
   hudChips: { project: true, rig: true, fov: true, gps: true, warnings: true },
   theme: "auto",
+  gpsMode: "high",
+  offlineMode: false,
 };

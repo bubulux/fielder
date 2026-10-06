@@ -1,6 +1,7 @@
 import { Pressable, ScrollView, Text } from "react-native";
 import { Image } from "expo-image";
-import { imageHeaders, imageUri, type Shot } from "../api";
+import type { Shot } from "../api";
+import { photoSource } from "./ShotFrame";
 import { FIXED, makeStyles, RADIUS, type, useTheme } from "../ui";
 
 /** Thumbnails of a sequence; renders nothing for single-photo shots. The current one has an accent ring and number. */
@@ -12,7 +13,7 @@ export function PhotoStrip({ shot, index, onPick }: { shot: Shot; index: number;
     <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingVertical: 8, paddingHorizontal: 2 }}>
       {shot.photos.map((p, i) => (
         <Pressable key={p.id} onPress={() => onPick(i)} style={[s.thumb, i === index && s.thumbOn]} accessibilityRole="button" accessibilityLabel={`Photo ${i + 1}`} accessibilityState={{ selected: i === index }}>
-          <Image source={{ uri: imageUri(p), headers: imageHeaders() }} style={{ width: "100%", height: "100%" }} contentFit="cover" cachePolicy="disk" />
+          <Image source={photoSource(p)} style={{ width: "100%", height: "100%" }} contentFit="cover" cachePolicy="disk" />
           <Text style={[s.n, i === index && { backgroundColor: c.accent, color: c.onAccent }]}>{i + 1}</Text>
         </Pressable>
       ))}

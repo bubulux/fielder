@@ -40,6 +40,14 @@ const CONTROL_COL = 80;
 const MAX_UPLOAD_EDGE = 1280;
 /** A watched GPS fix younger than this is used as is; otherwise the capture waits briefly for a fresh one. */
 const FIX_MAX_AGE_MS = 15_000;
+/** Low precision accepts the phone's last known position up to this old. */
+const LOW_MAX_AGE_MS = 30 * 60_000;
+
+/** A position for a capture; `reused` = taken over from the sequence's first photo. */
+interface Fix { lat: number; lon: number; accuracy: number | null; altitude: number | null; heading: number | null; at: number; reused?: boolean }
+const toFix = (p: Location.LocationObject | null): Fix | null =>
+  p ? { lat: p.coords.latitude, lon: p.coords.longitude, accuracy: p.coords.accuracy ?? null, altitude: p.coords.altitude ?? null, heading: p.coords.heading ?? null, at: p.timestamp } : null;
+
 /** GPS worse than this is a warning. */
 const GPS_WARN_M = 20;
 
@@ -108,21 +116,27 @@ export function Viewfinder({ active: tabActive }: { active: boolean }) {
     return onAuthChange(() => { setAuthEmail(signedInEmail()); void run(); });
   }, []);
 
-  // GPS: watch at the best accuracy while the camera is on screen, so a capture has a warm, precise fix.
+  // GPS: while the camera is on screen, watch so a capture has a warm fix. High precision watches at
+  // the best accuracy every second, low precision at a battery-friendly accuracy every 5 s; off does
+  // not start the location service at all (removing the watch stops it, no restart needed).
+  const gpsMode = settings.gpsMode;
   const lastFix = useRef<Location.LocationObject | null>(null);
   const [gpsAccuracy, setGpsAccuracy] = useState<number | null>(null);
   useEffect(() => {
-    if (!tabActive || !locPerm?.granted) return;
+    lastFix.current = null;
+    setGpsAccuracy(null);
+    if (!tabActive || !locPerm?.granted || gpsMode === "off") return;
     let sub: Location.LocationSubscription | null = null;
     let cancelled = false;
     // Android: ask once to turn on Google Location Accuracy (Wi-Fi/cell assisted), which fixes much faster and tighter.
     if (Platform.OS === "android") Location.enableNetworkProviderAsync().catch(() => {});
-    Location.watchPositionAsync({ accuracy: Location.Accuracy.BestForNavigation, timeInterval: 1000, distanceInterval: 0 }, (pos) => {
+    const high = gpsMode === "high";
+    Location.watchPositionAsync({ accuracy: high ? Location.Accuracy.BestForNavigation : Location.Accuracy.Balanced, timeInterval: high ? 1000 : 5000, distanceInterval: 0 }, (pos) => {
       lastFix.current = pos;
       setGpsAccuracy(pos.coords.accuracy ?? null);
     }).then((x) => { if (cancelled) x.remove(); else sub = x; }).catch((e) => log("warn", "gps watch failed", e));
     return () => { cancelled = true; sub?.remove(); };
-  }, [tabActive, locPerm?.granted]);
+  }, [tabActive, locPerm?.granted, gpsMode]);
 
   // Toasts sit above the chrome block (portrait); in landscape the controls are a side column.
   useToastOffset(portrait ? CHROME_H : 0, tabActive);
@@ -133,17 +147,29 @@ export function Viewfinder({ active: tabActive }: { active: boolean }) {
   const preview = useMemo(() => previewBox(area), [area.width, area.height]);
   const overlay = useMemo(() => (rig ? computeOverlay(settings, rig, lensMm, preview) : null), [settings, rig, lensMm, preview]);
 
-  async function getPosition(): Promise<Location.LocationObject | null> {
+  /**
+   * The position for a capture, or null (GPS off, or no fix at all; the photo is kept without one).
+   * In a running sequence every photo after the first takes the first one's position, so frames
+   * never wait on GPS. Low precision takes what the phone has right now; high may wait up to 8 s.
+   */
+  async function getPosition(): Promise<Fix | null> {
+    const seqFirst = sequenceRef.current?.photos[0]?.meta;
+    if (seqFirst && seqFirst.lat !== null && seqFirst.lon !== null) {
+      return { lat: seqFirst.lat, lon: seqFirst.lon, accuracy: seqFirst.gps_accuracy_m, altitude: null, heading: null, at: Date.now(), reused: true };
+    }
+    if (gpsMode === "off") return null;
     if (!locPerm?.granted) {
       const r = await requestLocPerm();
       if (!r.granted) return null;
     }
     const watched = lastFix.current;
-    if (watched && Date.now() - watched.timestamp < FIX_MAX_AGE_MS) return watched;
+    // Low precision (and a sequence whose first photo had no fix): never wait.
+    if (gpsMode === "low" || seqFirst) return toFix(watched ?? (await Location.getLastKnownPositionAsync({ maxAge: LOW_MAX_AGE_MS }).catch(() => null)));
+    if (watched && Date.now() - watched.timestamp < FIX_MAX_AGE_MS) return toFix(watched);
     const fresh = Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Highest });
     const timeout = new Promise<null>((res) => setTimeout(() => res(null), 8000));
     const pos = await Promise.race([fresh.catch(() => null), timeout]);
-    return pos ?? lastFix.current ?? (await Location.getLastKnownPositionAsync({ maxAge: 10 * 60 * 1000 }));
+    return toFix(pos ?? lastFix.current ?? (await Location.getLastKnownPositionAsync({ maxAge: 10 * 60 * 1000 }).catch(() => null)));
   }
 
   async function capture() {
@@ -155,12 +181,8 @@ export function Viewfinder({ active: tabActive }: { active: boolean }) {
         getPosition(),
         camera.current.takePictureAsync({ quality: 0.7, exif: true, skipProcessing: false }),
       ]);
-      if (!pos) {
-        log("warn", "capture without GPS fix");
-        try { new File(pic.uri).delete(); } catch { /* temp file */ }
-        void notice("No GPS position", "Could not get a location fix, so the photo was not kept. Wait for the GPS chip and try again.");
-        return;
-      }
+      // Never lose a capture for want of a fix: it is kept without a position (set one later by hand).
+      if (!pos && gpsMode !== "off") { log("warn", "capture without GPS fix", { mode: gpsMode }); toast("No GPS fix · saved without position", "neutral"); }
       const landscapePic = pic.width >= pic.height;
       const rendered = await ImageManipulator.manipulate(pic.uri)
         .resize(landscapePic ? { width: Math.min(MAX_UPLOAD_EDGE, pic.width) } : { height: Math.min(MAX_UPLOAD_EDGE, pic.height) })
@@ -173,10 +195,10 @@ export function Viewfinder({ active: tabActive }: { active: boolean }) {
       const meta: PhotoMetadata = {
         id: Crypto.randomUUID(),
         ordinal: 0,
-        timestamp: new Date(pos.timestamp || Date.now()).toISOString(),
-        lat: pos.coords.latitude,
-        lon: pos.coords.longitude,
-        gps_accuracy_m: pos.coords.accuracy ?? null,
+        timestamp: new Date().toISOString(),
+        lat: pos?.lat ?? null,
+        lon: pos?.lon ?? null,
+        gps_accuracy_m: pos?.accuracy ?? null,
         lens_mm: lensMm,
         preset_id: rig.synced ? rig.id : null,
         width: small.width,
@@ -204,9 +226,12 @@ export function Viewfinder({ active: tabActive }: { active: boolean }) {
           exif_focal_length: exif.FocalLength ?? null,
           exif_focal_length_35mm: exif.FocalLengthIn35mmFilm ?? null,
           exif_model: exif.Model ?? null,
-          gps_altitude_m: pos.coords.altitude ?? null,
-          gps_heading_deg: pos.coords.heading ?? null,
-          gps_fix_age_ms: Date.now() - pos.timestamp,
+          gps_mode: gpsMode,
+          gps_altitude_m: pos?.altitude ?? null,
+          gps_heading_deg: pos?.heading ?? null,
+          gps_fix_age_ms: pos ? Date.now() - pos.at : null,
+          // Taken over from the sequence's first photo.
+          gps_from_first_photo: pos?.reused ?? false,
         },
       };
       log("info", "capture", { lens: lensMm, rig: rig.name, gps_accuracy_m: meta.gps_accuracy_m, sequence: !!seqAtStart, direct: settings.directUpload });
@@ -323,8 +348,9 @@ export function Viewfinder({ active: tabActive }: { active: boolean }) {
 
   const shutterOff = busy || !rig || !cameraReady || !project;
   const chips = settings.hudChips;
-  const gpsPoor = gpsAccuracy == null || gpsAccuracy > GPS_WARN_M;
-  const gpsText = gpsAccuracy == null ? "No GPS fix yet" : `GPS ±${Math.round(gpsAccuracy)} m`;
+  // Off is a choice, not a warning; low precision only warns when there is no fix at all.
+  const gpsPoor = gpsMode !== "off" && (gpsAccuracy == null || (gpsMode === "high" && gpsAccuracy > GPS_WARN_M));
+  const gpsText = gpsMode === "off" ? "GPS off" : `${gpsMode === "low" ? "GPS low" : "GPS"} ${gpsAccuracy == null ? "· no fix yet" : `±${Math.round(gpsAccuracy)} m`}`;
   const n = sync.state === "stuck" ? sync.stuck : sync.pending;
 
   // Keyed by state: Android does not redraw a dashed border back to solid, nor re-round a view whose
@@ -365,7 +391,7 @@ export function Viewfinder({ active: tabActive }: { active: boolean }) {
       {overlay?.human && chips.fov && (
         <HudChip icon="human-male" iconColor={HUMAN_COLOR}>{overlay.human.relation === "equal" ? "Matches the human view" : overlay.human.relation === "wider" ? "Wider than the human view" : overlay.human.fits ? "Narrower than the human view" : "Narrower; human frame off screen"}</HudChip>
       )}
-      {chips.gps ? <HudChip icon={gpsPoor ? "crosshairs-question" : "crosshairs-gps"} kind={gpsPoor && chips.warnings ? "warn" : undefined}>{gpsText}</HudChip>
+      {chips.gps ? <HudChip icon={gpsMode === "off" ? "crosshairs-off" : gpsPoor ? "crosshairs-question" : "crosshairs-gps"} kind={gpsPoor && chips.warnings ? "warn" : undefined}>{gpsText}</HudChip>
         : chips.warnings && gpsPoor && <HudChip icon="crosshairs-question" kind="warn">{gpsAccuracy == null ? "No GPS" : gpsText}</HudChip>}
       {chips.warnings && overlay?.exceedsPreview && <HudChip icon="arrow-expand-all" kind="warn">Rig sees more than the phone: black = outside its view</HudChip>}
       {chips.warnings && !isConfigured && <HudChip icon="cloud-off-outline" kind="warn">No server in this build; shots stay on the phone</HudChip>}

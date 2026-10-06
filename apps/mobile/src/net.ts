@@ -16,6 +16,18 @@ export function markOnline(v: boolean) {
 
 export const isOnline = () => online;
 
+/**
+ * Offline mode (Setup → Offline): the app makes no requests at all, so nothing waits on a dead
+ * network or spends battery and data; everything queues. Counts as offline for the UI.
+ */
+let paused = false;
+export const isOfflineMode = () => paused;
+export function setOfflineMode(v: boolean) {
+  paused = v;
+  // Back on: optimistic until the next request says otherwise.
+  markOnline(!v);
+}
+
 export function useOnline(): boolean {
   const [v, setV] = useState(online);
   useEffect(() => { setV(online); listeners.add(setV); return () => { listeners.delete(setV); }; }, []);

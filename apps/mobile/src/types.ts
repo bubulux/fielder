@@ -26,6 +26,14 @@ export type RigOrientation = "landscape" | "portrait";
 /** Screen orientation the app locks to on launch; "auto" follows the sensor. */
 export type OrientationLock = "auto" | "landscape" | "portrait";
 
+/**
+ * How a capture gets its position. "high": a fresh, precise fix (may wait up to 8 s when the signal
+ * is poor); "low": whatever the phone has right now, never waits; "off": no GPS at all (the location
+ * service is not used, photos carry no position).
+ */
+export type GpsMode = "high" | "low" | "off";
+export const GPS_MODES: readonly GpsMode[] = ["high", "low", "off"];
+
 /** Viewfinder HUD chips. "warnings" covers no project, no/poor GPS, sign-in and rig-wider-than-phone notices. */
 export interface HudChips { project: boolean; rig: boolean; fov: boolean; gps: boolean; warnings: boolean }
 
@@ -53,6 +61,9 @@ export interface Settings {
   hudChips: HudChips;
   /** "auto" follows the phone's dark mode; "sun" = light (daylight), "set" = dark. */
   theme: "auto" | "sun" | "set";
+  gpsMode: GpsMode;
+  /** Never touch the network: uploads and edits wait on the phone until this is switched off. */
+  offlineMode: boolean;
 }
 
 /** Scouting tags entered in the review form after capture. Values are @fielder/vocab ids; null / [] / false = not specified. */
@@ -65,6 +76,10 @@ export interface ShotTags {
   weather: string | null;
   int_ext: string | null;
   location_id: string | null;
+  shot_size: string | null;
+  camera_support: string | null;
+  /** Any subset of MOVEMENTS. */
+  movement: string[];
   extra: Extra;
 }
 
@@ -74,9 +89,12 @@ export interface PhotoMetadata {
   /** Position inside the shot, 0-based. */
   ordinal: number;
   timestamp: string;
-  lat: number;
-  lon: number;
+  /** Both null when captured without a position (GPS off, or no fix at all). */
+  lat: number | null;
+  lon: number | null;
   gps_accuracy_m: number | null;
+  /** Set by hand on the phone before upload. */
+  position_corrected?: boolean;
   lens_mm: number;
   preset_id: string | null;
   width: number;
@@ -91,6 +109,8 @@ export interface PhotoMetadata {
 export interface ShotMetadata extends ShotTags {
   id: string;
   project_id: string;
+  /** A review decision made on the phone before upload (absent = unreviewed). */
+  state?: "unreviewed" | "approved" | "archived";
   photos: PhotoMetadata[];
 }
 
@@ -122,7 +142,24 @@ export interface PendingUpload {
   lastError?: string;
   /** Rejected by the server repeatedly: kept on the phone, only retried by hand (Setup → Uploads). */
   stuck?: boolean;
+  /** Tags or state changed after a part was already sent: the upload ends with a PATCH (the server keeps the tags of an existing shot). */
+  editedAfterSend?: boolean;
+  /** At least one part reached the server. */
+  sent?: boolean;
 }
+/** Changes to an uploaded shot made without a connection; replayed in order by flush(). */
+export interface PendingEdit {
+  shotId: string;
+  /** Tag and state changes merged (later wins). */
+  patch: Partial<ShotTags> & { state?: ShotMetadata["state"] };
+  /** Hand-set positions, in order. */
+  positions: { photoId: string; lat: number; lon: number; all: boolean }[];
+  at: string;
+}
+
+/** A shot that left the queue (Uploads → Uploaded, kept 7 days). */
+export interface UploadRecord { id: string; projectId: string; name: string | null; photos: number; capturedAt: string; uploadedAt: string }
+
 /** One captured photo waiting for the tag form or the queue. */
 export interface DraftPhoto {
   /** Local file (temp for single captures, persistent for sequences). */

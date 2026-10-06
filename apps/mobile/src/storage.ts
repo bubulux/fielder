@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import Storage from "expo-sqlite/kv-store";
 import { DEFAULT_SETTINGS } from "./defaults";
 import type { FieldDef, FieldDefinition } from "@fielder/vocab";
-import type { CaptureDraft, LocationEntry, PendingUpload, Preset, ProjectEntry, Settings, ShotTags } from "./types";
+import type { CaptureDraft, LocationEntry, PendingEdit, PendingUpload, Preset, ProjectEntry, Settings, ShotTags, UploadRecord } from "./types";
 
 export { DEFAULT_SETTINGS };
 
@@ -20,7 +20,12 @@ const KEYS = {
   captureDraft: "captureDraft.v1",
   fields: "fields.v1",
   lastTags: "lastTags.v1",
+  pendingEdits: "pendingEdits.v1",
+  uploadHistory: "uploadHistory.v1",
 } as const;
+
+/** How long uploaded shots stay listed on the Uploads screen. */
+const HISTORY_DAYS = 7;
 
 /** Tags of the last upload, offered on the next Tag screen (the name never is). Extra fields only within the same project. */
 export interface LastTags { projectId: string; tags: Omit<ShotTags, "name"> }
@@ -45,6 +50,13 @@ function readArray<T>(key: string): T[] {
 }
 function write(key: string, value: unknown) {
   Storage.setItemSync(key, JSON.stringify(value));
+}
+
+const editListeners = new Set<() => void>();
+/** Called whenever edits waiting for the server change. */
+export function onEditsChange(cb: () => void): () => void {
+  editListeners.add(cb);
+  return () => { editListeners.delete(cb); };
 }
 
 const pendingListeners = new Set<(count: number) => void>();
@@ -77,6 +89,17 @@ export const store = {
 
   loadPending: (): PendingUpload[] => readArray<PendingUpload>(KEYS.pending),
   savePending: (q: PendingUpload[]) => { write(KEYS.pending, q); for (const cb of pendingListeners) cb(q.length); },
+
+  /** Edits of uploaded shots made without a connection, oldest first; sent by flush(). */
+  loadEdits: (): PendingEdit[] => readArray<PendingEdit>(KEYS.pendingEdits),
+  saveEdits: (e: PendingEdit[]) => { write(KEYS.pendingEdits, e); for (const cb of editListeners) cb(); },
+
+  /** Shots uploaded in the last HISTORY_DAYS days, newest first. */
+  loadHistory: (): UploadRecord[] => {
+    const since = Date.now() - HISTORY_DAYS * 86_400_000;
+    return readArray<UploadRecord>(KEYS.uploadHistory).filter((r) => Date.parse(r.uploadedAt) >= since);
+  },
+  addHistory: (r: UploadRecord) => write(KEYS.uploadHistory, [r, ...store.loadHistory().filter((x) => x.id !== r.id)].slice(0, 500)),
 
   loadLocations: (): LocationEntry[] => readArray<LocationEntry>(KEYS.locations),
   saveLocations: (l: LocationEntry[]) => write(KEYS.locations, l),

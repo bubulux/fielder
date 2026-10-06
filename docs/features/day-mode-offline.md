@@ -35,3 +35,11 @@ Light is computed on the phone (`@fielder/vocab` `dayLight`), so it works offlin
 - Capturing works offline anyway: shots queue ([capture](capture.md)). Projects and extra-field definitions are cached, so tagging works too. Map tiles are **not** cached; maps show "Map needs a connection".
 
 Storage: kv key `offlineDays.v1` (day id → `{ day, shots, projectName, savedAt }`).
+
+## Offline project and offline mode (Setup → Offline, `screens/Offline.tsx`)
+
+- **Offline mode** (a switch, `settings.offlineMode`): the app makes no request at all (`net.ts` `setOfflineMode`, checked in `api.ts`), photos load only from the phone, and the header banner says "Offline mode". Captures, decisions and edits wait on the phone. Switching it off flushes and reloads.
+- **Waiting on this phone**: shots to upload and edited shots to sync, with Open Uploads.
+- **Keep <project> on this phone** (`offline.ts` `saveProjectOffline`): stores every shot of the active project and downloads every photo into the same `offline-photos/` folder as offline days (an estimate is shown first, about 250 KB a photo). While online, every load of the project's shots refreshes the copy in the background (new photos only; photos of shots that left the project are deleted unless a day uses them). **Update now** and **Remove** (confirms; photos of offline days stay). Storage: `offlineProjects.v1` (project id → `{ shots, projectName, savedAt, bytes }`).
+- **What the tabs show** (`useShots` in `shots.ts`): the server's list, or without a connection the offline project copy (else the shots of offline days), plus the queued shots, with edits still waiting applied on top. Shots shows "Showing what is on this phone" then.
+- **Edits without a connection** (`localShots.ts`): a decision, tag edit or position on an uploaded shot is tried on the server; on a network error (or in offline mode, or when older edits of the shot still wait) it is kept in `pendingEdits.v1` and shown at once ("· syncs when online"). `flush()` sends them in order after the uploads; one the server rejects is dropped and logged, a network error keeps the rest. A location created meanwhile is created first (and remapped on a name clash). Deleting an uploaded shot needs a connection (Archive works offline).

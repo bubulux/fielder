@@ -1,6 +1,8 @@
 import { Directory, File, Paths } from "expo-file-system";
-import { api, ApiError } from "./api";
+import { api, ApiError, type Shot } from "./api";
+import { flushEdits, remapEdits } from "./localShots";
 import { log } from "./log";
+import { isOfflineMode } from "./net";
 import { syncLocations, syncProjects } from "./namedSync";
 import { store } from "./storage";
 import type { PendingUpload, ShotMetadata } from "./types";
@@ -42,6 +44,35 @@ export function enqueue(metadata: ShotMetadata, tempUris: Record<string, string>
   store.savePending([...store.loadPending(), entry]);
   log("info", "queued", { shot: metadata.id, photos: metadata.photos.length, project: metadata.project_id });
   return entry;
+}
+
+/** The first part is on its way (from now on the server's tags may be fixed; see editedAfterSend). */
+function markSent(shotId: string) {
+  store.savePending(store.loadPending().map((p) => (p.metadata.id === shotId && !p.sent ? { ...p, sent: true } : p)));
+}
+function setEdited(shotId: string, v: boolean) {
+  store.savePending(store.loadPending().map((p) => (p.metadata.id === shotId ? { ...p, editedAfterSend: v } : p)));
+}
+
+const rejected = (err: unknown) => err instanceof ApiError && err.status >= 400 && err.status < 500 && ![401, 403, 408, 429].includes(err.status);
+
+/**
+ * The PATCH after an upload. Its photos are already safe on the server, so a rejection must not
+ * leave the shot stuck: retry without the extra fields (stale definitions on the phone), then give
+ * up on the tags with a log entry. Network errors still throw (the upload is retried later).
+ */
+async function followUp(id: string, patch: Parameters<typeof api.patchShot>[1]): Promise<Shot | null> {
+  try { return await api.patchShot(id, patch); } catch (err) { if (!rejected(err)) throw err; log("warn", "follow-up patch rejected, retrying without extra", { shot: id, error: String(err) }); }
+  const { extra: _, ...rest } = patch;
+  try { return await api.patchShot(id, rest); } catch (err) { if (!rejected(err)) throw err; log("warn", "follow-up patch rejected, tags left as uploaded", { shot: id, error: String(err) }); }
+  return null;
+}
+
+const uploadedListeners = new Set<(shot: Shot) => void>();
+/** Called with the server's copy of each shot that just left the queue. */
+export function onUploaded(cb: (shot: Shot) => void): () => void {
+  uploadedListeners.add(cb);
+  return () => { uploadedListeners.delete(cb); };
 }
 
 function remove(entry: PendingUpload) {
@@ -103,6 +134,8 @@ export const flushState = () => ({ flushing: !!flushing, progress });
  */
 export function flush(opts: { includeStuck?: boolean } = {}): Promise<FlushResult> {
   if (flushing) return flushing;
+  // Offline mode: nothing leaves the phone until it is switched off.
+  if (isOfflineMode()) return Promise.resolve({ uploaded: 0, remaining: store.loadPending().length, lastError: "offline mode is on" });
   flushing = (async () => {
     let uploaded = 0;
     let lastError: string | undefined;
@@ -119,6 +152,7 @@ export function flush(opts: { includeStuck?: boolean } = {}): Promise<FlushResul
     if (locations) {
       store.saveLocations(mergeServerList(locations.items, store.loadLocations(), locations.remap));
       remapPending("location_id", locations.remap);
+      remapEdits(locations.remap);
     }
     for (const queued of store.loadPending()) {
       let entry = queued;
@@ -135,12 +169,30 @@ export function flush(opts: { includeStuck?: boolean } = {}): Promise<FlushResul
       try {
         // Big sequences go in parts; the server adds missing photos to the existing shot.
         const total = entry.metadata.photos.length;
+        // From the first request on, the server may hold the tags it got: later edits need a PATCH.
+        markSent(entry.metadata.id);
+        let server: Shot | null = null;
         for (let i = 0; i < total; i += UPLOAD_CHUNK) {
           setProgress({ shotId: entry.metadata.id, done: i, total });
-          await api.uploadShot({ ...entry.metadata, photos: entry.metadata.photos.slice(i, i + UPLOAD_CHUNK) }, entry.files);
+          server = (await api.uploadShot({ ...entry.metadata, photos: entry.metadata.photos.slice(i, i + UPLOAD_CHUNK) }, entry.files)).shot;
+        }
+        // Tags, state or positions changed on the phone after that: bring the server up to date. An
+        // edit made while the PATCH runs sets the flag again, so loop until it stays clear.
+        let latest = store.loadPending().find((p) => p.metadata.id === entry.metadata.id) ?? entry;
+        while (latest.editedAfterSend) {
+          setEdited(latest.metadata.id, false);
+          const { id, photos, ...rest } = latest.metadata;
+          const { project_id: _, ...tags } = rest;
+          server = await followUp(id, { ...tags, state: latest.metadata.state ?? "unreviewed" }) ?? server;
+          for (const p of photos) if (p.position_corrected && p.lat !== null && p.lon !== null) server = await api.patchPhotoPosition(p.id, p.lat, p.lon, false);
+          latest = store.loadPending().find((p) => p.metadata.id === entry.metadata.id) ?? latest;
         }
         log("info", "upload ok", { shot: entry.metadata.id, photos: entry.metadata.photos.length });
-        remove(entry);
+        remove(latest);
+        // Hand the server's copy to the lists right away, so the shot doesn't blink out until a reload.
+        if (server) for (const cb of uploadedListeners) cb(server);
+        store.addHistory({ id: latest.metadata.id, projectId: latest.metadata.project_id, name: latest.metadata.name, photos: latest.metadata.photos.length,
+          capturedAt: latest.metadata.photos.map((p) => p.timestamp).sort()[0] ?? new Date().toISOString(), uploadedAt: new Date().toISOString() });
         uploaded++;
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
@@ -158,7 +210,8 @@ export function flush(opts: { includeStuck?: boolean } = {}): Promise<FlushResul
         if (!rejected) break; // network/auth problem: stop and try again later
       }
     }
-    return { uploaded, remaining: store.loadPending().length, lastError };
+    const edits = await flushEdits();
+    return { uploaded, remaining: store.loadPending().length, lastError: lastError ?? edits.lastError };
   })().finally(() => { flushing = null; setProgress(null); notify(); });
   setProgress(null); // announce the start (flushing is set now)
   return flushing;

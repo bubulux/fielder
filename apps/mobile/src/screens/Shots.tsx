@@ -1,24 +1,17 @@
 import { useMemo, useRef, useState, type ReactNode } from "react";
 import { FlatList, Pressable, ScrollView, Text, useWindowDimensions, View } from "react-native";
 import { label, STATE_ICONS } from "@fielder/vocab";
-import { cover, type Shot } from "../api";
+import { cover, positionOf, type Shot } from "../api";
 import { useApp } from "../appState";
 import { useOnline } from "../net";
-import { offlineDays } from "../offline";
 import { applyFilter, placeLabel, rigLabel, shortTime, shotTitle, STATE_FILTERS, type StateFilter } from "../shots";
 import { usePref } from "../storage";
-import { AppHeader, Banner, BORDER, Button, Chip, Empty, FIXED, IconButton, makeStyles, num, OfflineBanner, RADIUS, Seg, SeqBadge, Skeleton, StateMarker, type, useLayoutSize, useRefreshControl } from "../ui";
+import { AppHeader, Banner, BORDER, Button, Chip, Empty, FIXED, IconButton, makeStyles, num, OfflineBanner, PhotoTag, RADIUS, Seg, SeqBadge, Skeleton, StateMarker, type, useLayoutSize, useRefreshControl } from "../ui";
+import { offlineProject } from "../offline";
 import { LeafletView, type MapHandle } from "../components/LeafletView";
 import { shotsScript, type MapPin } from "../components/mapHtml";
 import { OptionSheet } from "../components/OptionSheet";
 import { FRAME_MODES, frameModeLabel, ShotFrame, type FrameMode } from "../components/ShotFrame";
-
-/** The shots shown when the server can't be reached: those saved with offline days of this project. */
-function offlineShots(projectId: string | null): Shot[] {
-  const seen = new Map<string, Shot>();
-  for (const d of offlineDays()) if (d.day.project_id === projectId) for (const s of d.shots) seen.set(s.id, s);
-  return [...seen.values()].sort((a, b) => b.captured_at.localeCompare(a.captured_at));
-}
 
 /**
  * Gallery and Map in one tab: one state filter and one frame view (both remembered) over the
@@ -36,10 +29,10 @@ export function Shots() {
   const [picked, setPicked] = useState<string | null>(app.mapFocus);
   const map = useRef<MapHandle | null>(null);
   const [box, onBox] = useLayoutSize();
-  const { shots: loaded, error, refreshing, load } = app.shots;
+  const { shots, source, error, refreshing, load } = app.shots;
   const refresh = useRefreshControl(refreshing, () => void load());
-  const fallback = !loaded && !!error;
-  const shots = useMemo(() => (loaded ?? (error ? offlineShots(app.project?.id ?? null) : null)), [loaded, error, app.project?.id]);
+  const fallback = source === "phone";
+  const kept = !!offlineProject(app.project?.id ?? null);
   const visible = useMemo(() => applyFilter(shots, filter), [shots, filter]);
   const counts = useMemo(() => Object.fromEntries(STATE_FILTERS.map((f) => [f, applyFilter(shots, f).length])), [shots]);
   const open = (shot: Shot) => app.push({ name: "shot", shotId: shot.id, list: visible.map((x) => x.id) });
@@ -51,7 +44,7 @@ export function Shots() {
   const modeChip = <Chip icon="crop-free" label={frameModeLabel(mode)} onPress={() => setModeSheet(true)} />;
   const stateChips = (
     <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingHorizontal: 16 }}>
-      {STATE_FILTERS.map((f) => <Chip key={f} icon={f === "all" ? undefined : STATE_ICONS[f]} label={`${label(f)} ${counts[f] ?? 0}`} selected={filter === f} onPress={() => setFilter(f)} />)}
+      {STATE_FILTERS.map((f) => <Chip key={f} icon={f === "all" ? undefined : f === "queued" ? QUEUED_ICON : STATE_ICONS[f]} label={`${label(f)} ${counts[f] ?? 0}`} selected={filter === f} onPress={() => setFilter(f)} />)}
     </ScrollView>
   );
   const bar = portrait ? (
@@ -75,7 +68,8 @@ export function Shots() {
       </View>
     );
   } else if (app.shotsView === "map") {
-    const pins: MapPin[] = visible.map((x) => ({ id: x.id, lat: cover(x).lat, lon: cover(x).lon, state: x.state, icon: STATE_ICONS[x.state] }));
+    // Shots captured without GPS have no pin.
+    const pins: MapPin[] = visible.flatMap((x) => { const p = positionOf(x); return p ? [{ id: x.id, lat: p.lat, lon: p.lon, state: x.state, icon: STATE_ICONS[x.state] }] : []; });
     const sel = picked ? visible.find((x) => x.id === picked) ?? null : null;
     body = (
       <View style={{ flex: 1 }}>
@@ -94,10 +88,10 @@ export function Shots() {
         contentContainerStyle={{ paddingHorizontal: 16, paddingVertical: 12, gap }}
         columnWrapperStyle={{ gap }}
         refreshControl={refresh}
-        ListHeaderComponent={fallback ? <View style={{ marginBottom: 4 }}><Banner kind="offline" title="Showing shots saved offline" meta={`${shots.length} shot${shots.length === 1 ? "" : "s"} from days made available offline`} /></View> : null}
+        ListHeaderComponent={fallback ? <View style={{ marginBottom: 4 }}><Banner kind="offline" title="Showing what is on this phone" meta={kept ? "The project's offline copy and the queued shots." : "Queued shots and shots of days made available offline. Keep the whole project on the phone in Setup → Offline."} /></View> : null}
         ListEmptyComponent={
           (shots.length === 0
-            ? <Empty icon="camera-iris" title={fallback ? "Nothing saved offline" : `No shots in ${app.project?.name ?? "this project"} yet`} body={fallback ? "Make a day available offline while you have a connection." : "Take one in the Shoot tab; it shows up here after it uploads."}>
+            ? <Empty icon="camera-iris" title={fallback ? "Nothing on this phone" : `No shots in ${app.project?.name ?? "this project"} yet`} body={fallback ? "Keep the project on the phone (Setup → Offline) while you have a connection." : "Take one in the Shoot tab; it shows up here right away."}>
                 {!fallback && <Button icon="camera-iris" label="Go to Shoot" onPress={() => app.setTab("shoot")} />}
               </Empty>
             : <Empty icon="filter-off-outline" title={`No ${label(filter).toLowerCase()} shots`}>
@@ -111,9 +105,9 @@ export function Shots() {
 
   return (
     <View style={s.root}>
-      <AppHeader offlineMeta={fallback ? "Showing shots saved with offline days." : undefined} />
+      <AppHeader offlineMeta={fallback ? "Showing what is stored on this phone." : undefined} />
       {bar}
-      {error && loaded && online && <View style={{ padding: 12 }}><Banner kind="danger" title="Couldn't refresh" meta={error} action={<Button kind="secondary" label="Retry" onPress={() => void load()} />} /></View>}
+      {error && source === "server" && online && <View style={{ padding: 12 }}><Banner kind="danger" title="Couldn't refresh" meta={error} action={<Button kind="secondary" label="Retry" onPress={() => void load()} />} /></View>}
       <View style={{ flex: 1 }} onLayout={onBox}>{body}</View>
       <OptionSheet visible={modeSheet} title="Frame view" sub="How the rig frame is drawn on the photos" options={FRAME_MODES.map((m) => ({ id: m, label: frameModeLabel(m), icon: m === "mask" ? "square-opacity" : m === "frame" ? "crop-free" : m === "fit" ? "fit-to-screen-outline" : "image-outline" }))}
         value={[mode]} onChange={(ids) => ids[0] && setMode(ids[0] as FrameMode)} onClose={() => setModeSheet(false)} columns={2} />
@@ -130,6 +124,7 @@ export function ShotCard({ shot, width, mode, onPress }: { shot: Shot; width: nu
         <ShotFrame photo={cover(shot)} width={width - 2} settings={settings} mode={mode} />
         {shot.photos.length > 1 && <View style={s.tl}><SeqBadge count={shot.photos.length} /></View>}
         <View style={s.tr}><StateMarker state={shot.state} iconOnly /></View>
+        {shot.queued && <View style={s.bl}><QueuedTag /></View>}
       </View>
       <View style={{ padding: 10, gap: 2 }}>
         <Text style={s.cardTitle} numberOfLines={1}>{shotTitle(shot)}</Text>
@@ -137,6 +132,13 @@ export function ShotCard({ shot, width, mode, onPress }: { shot: Shot; width: nu
       </View>
     </Pressable>
   );
+}
+
+const QUEUED_ICON = "cloud-upload-outline";
+
+/** "Queued" on a photo: opaque, icon + label (never colour alone). */
+export function QueuedTag() {
+  return <PhotoTag icon={QUEUED_ICON}>Queued</PhotoTag>;
 }
 
 /** Native card for the tapped pin, 12 dp above the tab bar: thumb, title, place · time, state, open. */
@@ -169,6 +171,7 @@ const useStyles = makeStyles((c) => ({
   cardPressed: { borderColor: c.borderStrong, transform: [{ translateY: 1 }] },
   tl: { position: "absolute", top: 8, left: 8 },
   tr: { position: "absolute", top: 8, right: 8 },
+  bl: { position: "absolute", bottom: 8, left: 8 },
   cardTitle: { ...type("small", "bold"), color: c.text },
   cardSub: { ...type("caption"), color: c.textDim },
   preview: { position: "absolute", left: 12, right: 12, bottom: 12, flexDirection: "row", alignItems: "center", gap: 12, padding: 10, borderRadius: RADIUS.md, backgroundColor: c.surfaceRaised, borderWidth: BORDER.control, borderColor: c.borderStrong, elevation: 8 },

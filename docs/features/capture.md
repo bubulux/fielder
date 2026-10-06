@@ -42,10 +42,10 @@ In landscape the row becomes an 80 dp column next to the tab bar, read top to bo
 - **Project**: tap opens the Project sheet.
 - **Rig and lens**.
 - **FOV**: FF-equivalent and angle of view, with the fit zoom, plus the human-view relation.
-- **GPS accuracy**: see [positions](positions.md).
+- **GPS**: the mode and accuracy ("GPS ±5 m", "GPS low ±40 m", "GPS off"); see [positions](positions.md).
 - **Warnings**, shown independently of the others:
   - red "No project" (tap to pick)
-  - amber: no GPS fix or worse than ±20 m, rig wider than the phone, not signed in (tap to sign in), no server in this build
+  - amber: no GPS fix, or worse than ±20 m in high precision (never in GPS off), rig wider than the phone, not signed in (tap to sign in), no server in this build
 
 There is no theme button on the HUD any more; the theme is Setup → Theme.
 
@@ -55,7 +55,7 @@ Setup → Viewfinder / Capture / Phone calibration hold the rest: frame colour a
 
 ## What a capture produces
 
-`takePictureAsync` and a GPS fix run in parallel. The photo is resized to 1280 px JPEG (the full-size temp file is deleted) and gets `PhotoMetadata`: id, ordinal, timestamp, lat/lon, accuracy, lens, preset id, size, the `framing` snapshot and `device` ([data model](../data-model.md)). Without a GPS fix the capture is refused.
+`takePictureAsync` and the position (per the GPS mode, [positions](positions.md)) run in parallel. The photo is resized to 1280 px JPEG (the full-size temp file is deleted) and gets `PhotoMetadata`: id, ordinal, timestamp (the capture time), lat/lon, accuracy, lens, preset id, size, the `framing` snapshot and `device` (incl. `gps_mode` and `gps_from_first_photo`; [data model](../data-model.md)). Without any fix the photo is kept without a position ("No GPS fix · saved without position"); a capture is never refused for GPS.
 
 It then becomes a **draft** (`CaptureDraft = { shotId, photos: DraftPhoto[] }`), with its photos moved into `draft-photos/` (`sequence.ts`, `keepPhoto`):
 - **Normal:** the **Tag** screen (`screens/Tag.tsx`) opens full screen, without the tab bar:
@@ -72,7 +72,10 @@ Drafts and running sequences are stored in the kv-store (`captureDraft.v1`, `seq
 ## Upload queue (`apps/mobile/src/uploads.ts`)
 
 - `enqueue` copies the photos to `pending-photos/` and stores the entry (`pendingUploads.v2`). It then deletes the draft files.
-- `flush()`: syncs projects, field definitions and locations, then uploads oldest first. Big sequences go 12 photos per request (the server appends to the same shot). The shutter never waits for it.
+- **Queued shots are visible right away**: in Shots (filter **Queued**, and in All with a "Queued" tag on the card) and in Review, with their local photos. They can be tagged, approved, archived, positioned or discarded before they upload; the change rewrites the queue entry (`localShots.ts`), and the decision travels with the upload (`state` in the metadata). Once the first part was sent (`sent`), a later change sets `editedAfterSend` and the upload ends with a PATCH (the server keeps the tags of an existing shot). That PATCH can't make a shot stuck: when rejected it retries without the extra fields, then leaves the tags as uploaded (logged).
+- After the upload the server's copy replaces the queued one in the lists at once (`onUploaded`), so nothing blinks out, and the shot is recorded for the **Uploaded · last 7 days** list (`uploadHistory.v1`).
+- **Offline mode** (Setup → Offline): `flush()` does nothing and the API makes no request until it is switched off; switching it off flushes and reloads.
+- `flush()`: syncs projects, field definitions and locations, then uploads oldest first, then sends edits kept on the phone (`flushEdits`, see [offline](day-mode-offline.md)). Big sequences go 12 photos per request (the server appends to the same shot). The shutter never waits for it.
 - **Network or auth errors** stop the round; it is retried at the next capture, sign-in, app start or manual retry.
 - **Rejections (4xx)** increase `attempts`. After 3 the entry is `stuck`: skipped automatically, listed on the Uploads screen with the error, and retried or discarded by hand. Files are never deleted for a rejection.
 - **A missing photo file** means the remaining photos are uploaded and the missing ones dropped.
