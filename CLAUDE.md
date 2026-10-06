@@ -41,6 +41,22 @@ A **shot** holds the metadata (name, location, INT/EXT, light phases + artificia
 - **Match the surrounding code**: terse doc comments on exported functions explaining *why*; plain CSS on the design tokens, never hard-coded colours (`docs/design.md`; both themes, Sun and Set, must stay high contrast); mobile UI from `src/ui` (primitives, `makeStyles`/`useTheme`). No new dependencies without a reason (the sun math and combobox are hand-written on purpose).
 - **Deploys to production are done by the owner** (`pnpm -C apps/worker run deploy`). You prepare, check and commit. You may apply additive remote migrations when asked. Commit only when asked or when working through an agreed plan; work on a branch.
 
+## Working from a GitHub issue
+
+When the owner hands you an issue (a number or a link), that means: read it, challenge it, then build it on a branch with a PR.
+
+1. **Read it** with `gh` (installed and logged in): `gh issue view <n> --json title,body,comments,labels`. The plain `gh issue view` fails on this repo (classic Projects deprecation).
+2. **Challenge it before writing code.** Issues are written brainstorm-style: treat them as ideas to check, not as a spec. Read the affected code and the feature page in `docs/features/`, then stop and reply with:
+   - questions on anything unclear, ambiguous or contradictory;
+   - where the idea is weak, inconsistent with the rest of the app, or has a better alternative: say so plainly, including UX improvements;
+   - your proposed approach (UX and data/API) in a few lines.
+
+   Wait for the owner's answers before implementing. Skip this stop only if the issue is unambiguous and you have no objections, and say so.
+3. **Branch** from an up-to-date `main`: `feat/<n>-<slug>` or `fix/<n>-<slug>`.
+4. **Implement**, update the docs in the same commits, run the checks below, commit per meaningful step.
+5. **Push and open a PR** that links the issue (`Closes #<n>` in the body). The body covers what changed, the decisions you made, what was checked, and what was not clicked through.
+6. **Report back** with the PR link, open points and what the owner should test. Merge only when asked (`gh pr merge <n> --merge`; that also closes the issue).
+
 ## Verify before you say "done"
 
 ```sh
