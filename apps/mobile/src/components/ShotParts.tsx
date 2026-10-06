@@ -6,11 +6,9 @@ import { api, type Photo, type Shot } from "../api";
 import { useApp } from "../appState";
 import type { Settings } from "../types";
 import { extraLine, placeLabel, rigLabel, shortTime, shotTitle, tagsLabel } from "../shots";
-import { FIXED, makeStyles, num, RADIUS, type, useTheme } from "../theme";
-import { confirm, notice, toast } from "./feedback";
+import { BORDER, confirm, FIXED, IconButton, ListRow, makeStyles, notice, num, PhotoTag, RADIUS, SeqBadge, Sheet, SheetList, StateMarker, toast, type, useTheme } from "../ui";
 import { useSwipe } from "./gestures";
 import { fitWidth, FrameModeSeg, ShotFrame, type FrameMode } from "./ShotFrame";
-import { IconButton, ListRow, PhotoTag, SeqBadge, Sheet, StateMarker } from "./ui";
 
 const PAST: Record<Shot["state"], string> = { approved: "Approved", archived: "Archived", unreviewed: "Back to review" };
 
@@ -45,13 +43,13 @@ export function MoreSheet({ shot, photo, visible, onClose, onDeleted, details = 
   const list = app.shots.shots?.map((s) => s.id) ?? [shot.id];
   return (
     <Sheet visible={visible} title={shotTitle(shot)} onClose={onClose}>
-      <View style={{ marginHorizontal: -20, marginTop: -12 }}>
+      <SheetList>
         {details && <ListRow icon="information-outline" title="Shot details" onPress={() => { onClose(); app.push({ name: "shot", shotId: shot.id, list }); }} />}
         <ListRow icon="map-marker-outline" title="Show on map" onPress={() => { onClose(); app.push({ name: "mapFocus", shotId: shot.id }); }} />
         <ListRow icon="crosshairs-gps" title="Correct position" meta={shot.photos.length > 1 ? "Of the photo on screen, or all of them" : undefined} onPress={() => { onClose(); app.push({ name: "position", shotId: shot.id, photoId: photo.id }); }} />
         <View style={{ height: 16 }} />
         <ListRow icon="delete-outline" iconColor={c.danger} titleColor={c.danger} title="Delete shot" trailing={null} onPress={() => { onClose(); void remove(shot).then((gone) => { if (gone) onDeleted?.(); }); }} />
-      </View>
+      </SheetList>
     </Sheet>
   );
 }
@@ -126,7 +124,7 @@ const useStyles = makeStyles((c) => ({
   tr: { position: "absolute", top: 10, right: 10 },
   full: { flex: 1, backgroundColor: FIXED.photoBg, alignItems: "center", justifyContent: "center" },
   fullClose: { position: "absolute", left: 12 },
-  fullCard: { position: "absolute", alignSelf: "center", alignItems: "center", gap: 6, padding: 10, borderRadius: RADIUS.md, backgroundColor: c.chromeBg, borderWidth: 1.5, borderColor: c.chromeBorder },
+  fullCard: { position: "absolute", alignSelf: "center", alignItems: "center", gap: 6, padding: 10, borderRadius: RADIUS.md, backgroundColor: c.chromeBg, borderWidth: BORDER.badge, borderColor: c.chromeBorder },
   fullText: { ...type("small", "bold"), color: c.chromeText, ...num },
 }));
 

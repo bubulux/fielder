@@ -6,12 +6,9 @@ import { pruneExtra, type FieldDef } from "@fielder/vocab";
 import { hhmm } from "../shots";
 import { store } from "../storage";
 import type { CaptureDraft, LocationEntry, ProjectEntry, Settings, ShotTags } from "../types";
-import { ActionBar } from "../components/chrome";
-import { confirm } from "../components/feedback";
+import { ActionBar, BORDER, Button, confirm, FIXED, makeStyles, num, RADIUS, SeqBadge, SIZE, type } from "../ui";
 import { FramedImage } from "../components/FramedImage";
 import { EMPTY_TAGS, TagEditor, type TagDraft } from "../components/TagEditor";
-import { Button, SeqBadge } from "../components/ui";
-import { FIXED, makeStyles, num, RADIUS, SIZE, type } from "../theme";
 
 interface Props {
   draft: CaptureDraft;
@@ -131,7 +128,7 @@ export function Tag({ draft, settings, project, locations, countAt, fields, onUp
           <View style={{ flex: 1, flexDirection: "row" }}>
             <View style={{ width: photoW, backgroundColor: FIXED.photoBg }}>{photo}{strip}</View>
             <ScrollView style={{ flex: 1 }} keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: 24 }}>{editor}</ScrollView>
-            <ActionBar column style={{ paddingRight: 12 + Math.max(SIZE.edgePad - 12, insets.right), width: 148 + Math.max(SIZE.edgePad - 12, insets.right) }}>{discardBtn}{uploadBtn}</ActionBar>
+            <ActionBar column style={{ paddingRight: 12 + Math.max(SIZE.edgePad - 12, insets.right), width: SIZE.actionColumn + Math.max(SIZE.edgePad - 12, insets.right) }}>{discardBtn}{uploadBtn}</ActionBar>
           </View>
         )}
       </KeyboardAvoidingView>
@@ -141,12 +138,12 @@ export function Tag({ draft, settings, project, locations, countAt, fields, onUp
 
 const useStyles = makeStyles((c) => ({
   root: { flex: 1, backgroundColor: c.bg },
-  header: { height: 64, justifyContent: "center", paddingHorizontal: 16, backgroundColor: c.surface, borderBottomWidth: 2, borderBottomColor: c.borderSubtle },
+  header: { height: SIZE.header, justifyContent: "center", paddingHorizontal: 16, backgroundColor: c.surface, borderBottomWidth: BORDER.control, borderBottomColor: c.borderSubtle },
   title: { ...type("title", "bold"), color: c.text },
   sub: { ...type("small"), color: c.textDim, ...num },
   photo: { backgroundColor: FIXED.photoBg, alignItems: "center", justifyContent: "center" },
   seqBadge: { position: "absolute", top: 10, right: 10 },
-  factsCard: { position: "absolute", left: 8, right: 8, bottom: 8, padding: 8, borderRadius: RADIUS.sm, backgroundColor: c.chromeBg, borderWidth: 1.5, borderColor: c.chromeBorder },
+  factsCard: { position: "absolute", left: 8, right: 8, bottom: 8, padding: 8, borderRadius: RADIUS.sm, backgroundColor: c.chromeBg, borderWidth: BORDER.badge, borderColor: c.chromeBorder },
   factsText: { ...type("small", "bold"), color: c.chromeText, ...num },
   stripWrap: { flexGrow: 0, backgroundColor: FIXED.photoBg },
   thumb: { width: 56, height: 56, borderRadius: RADIUS.sm, overflow: "hidden", borderWidth: 1, borderColor: c.chromeBorder, backgroundColor: FIXED.photoBg },

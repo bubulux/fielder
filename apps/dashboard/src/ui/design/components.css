@@ -1,0 +1,54 @@
+/*
+ * Additions to the design-system classes for the component library (src/ui): resets for buttons
+ * used as checkboxes, switches and rows, the input, select and combobox details, overlays, toasts
+ * and popovers. Loaded after the design system and before the page layouts in styles.css.
+ */
+
+/* Empty states. */
+.f-empty { flex: 1; }
+.f-empty.dashed { flex: none; border: var(--bw) dashed var(--border); border-radius: var(--radius-md); }
+
+/* Buttons used as checkboxes, switches and rows keep the DS look. */
+button.f-check, button.f-switch { background: none; border: 0; padding: 0; color: inherit; font: inherit; }
+.f-row { font: inherit; }
+button.f-row { width: 100%; }
+
+/* Inputs inside the DS wrappers; date and time pickers follow the theme. */
+[data-theme="set"] .f-input input[type="date"], [data-theme="set"] .f-input input[type="time"] { color-scheme: dark; }
+.f-input--search { flex: none; }
+.f-input--search input { min-width: 0; }
+.f-input .f-btn { flex: none; }
+
+/* Select: an f-pick trigger with an f-menu list below it. */
+.f-pick { position: relative; }
+.f-pick b { flex: none; font-weight: var(--weight-bold); }
+.f-select { position: relative; min-width: 0; }
+.f-select__list { position: absolute; top: calc(100% + 4px); left: 0; min-width: 100%; max-height: 320px; overflow: auto; z-index: 30; }
+.f-pick:focus-within { outline: var(--focus-width) solid var(--focus); outline-offset: var(--focus-offset); }
+
+/* Combobox input wrapper (list styles are f-combo__*). */
+.combo .f-input { width: 100%; }
+.combo .f-input input { padding: 0 10px; }
+.combo .f-combo__opt .meta { margin-left: auto; }
+/* The list takes the width of its options, not of a narrow input (filter value column). */
+.combo .f-combo__list { right: auto; min-width: 100%; width: max-content; max-width: min(320px, 90vw); overflow-x: hidden; }
+.combo .f-combo__opt { overflow-wrap: anywhere; }
+.combo .f-combo__hint { flex-wrap: wrap; row-gap: var(--space-1); }
+.combo .f-combo__hint span { white-space: nowrap; }
+.combo .f-combo__list.is-end { left: auto; right: 0; }
+
+/* Overlays (dialogs, command palette) and toasts. */
+.overlay { position: fixed; inset: 0; z-index: 2000; display: flex; align-items: center; justify-content: center; padding: var(--space-6); }
+.overlay--top { align-items: flex-start; padding-top: 12vh; }
+.overlay > .f-modal, .overlay > .f-cmdk { position: relative; max-height: 100%; }
+.f-modal:focus { outline: none; }
+.toasts { position: fixed; left: 50%; bottom: 44px; transform: translateX(-50%); z-index: 2100; display: flex; flex-direction: column; gap: var(--space-2); align-items: center; pointer-events: none; }
+.toasts .f-toast { pointer-events: auto; }
+
+/* Menus anchored under a button. */
+.menu-anchor { position: relative; }
+.popover { position: absolute; top: calc(100% + 4px); z-index: 70; }
+.f-menu__item .mdi-blank { width: 18px; }
+
+/* Checkbox. */
+button.f-check.is-indeterminate .f-check__box { background: var(--accent); border-color: var(--accent); }

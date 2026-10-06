@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from "preact/hooks";
 import type { Project, SavedView } from "./api";
 import type { LibrarySection, Route } from "./router";
 import type { ThemeChoice } from "./theme";
-import { cx, Icon, Kbd, Mark } from "./ui";
+import { Button, cx, Icon, IconButton, Kbd, Mark, MenuItem, useOutsideClick } from "./ui";
 
 export const ALL_PROJECTS = "all";
 /** The project the dashboard works on, or every project at once. */
@@ -56,7 +56,7 @@ export function Sidebar({ route, rail, onToggle, scope, projects, views, editedV
     <nav class="f-side" aria-label="Sections">
       <div class="f-side__brand" style={rail ? { padding: 0, justifyContent: "center" } : undefined}>
         <Mark />{!rail && <span style={{ flex: 1 }}>Fielder</span>}
-        {!rail && <button type="button" class="f-btn f-btn--ghost f-btn--sm f-btn--icon" aria-label="Collapse the sidebar (Ctrl B)" title="Collapse the sidebar (Ctrl B)" onClick={onToggle}><Icon name="chevron-double-left" /></button>}
+        {!rail && <IconButton icon="chevron-double-left" label="Collapse the sidebar (Ctrl B)" title="Collapse the sidebar (Ctrl B)" onClick={onToggle} />}
       </div>
       <ScopeSwitch rail={rail} scope={scope} name={scopeName} projects={projects} onScope={onScope} onManage={() => onNavigate({ page: "library", section: "projects", id: null })} />
       <div style={{ height: "10px" }} />
@@ -76,7 +76,7 @@ export function Sidebar({ route, rail, onToggle, scope, projects, views, editedV
         <>
           <div class="f-side__label">
             <span>Saved views</span>
-            <button type="button" class="f-btn f-btn--ghost f-btn--sm f-btn--icon" aria-label="New view" title="New view: build a filter in Shots and save it" style={{ height: "22px", width: "22px", margin: "-4px -4px -4px 0" }} onClick={onNewView}><Icon name="plus" /></button>
+            <IconButton icon="plus" label="New view" title="New view: build a filter in Shots and save it" style={{ height: "22px", width: "22px", margin: "-4px -4px -4px 0" }} onClick={onNewView} />
           </div>
           {views.length === 0 && <span class="meta" style={{ padding: "2px 10px" }}>Filter shots, then save the filter as a view.</span>}
           {views.map((v) => (
@@ -97,9 +97,9 @@ export function Sidebar({ route, rail, onToggle, scope, projects, views, editedV
         </>
       ) : (
         <div class="f-side__foot">
-          <button type="button" class="f-btn f-btn--secondary f-btn--sm" style={{ flex: 1, justifyContent: "flex-start" }} onClick={onPalette}><Icon name="magnify" />Go to…<span style={{ marginLeft: "auto" }}><Kbd>⌘K</Kbd></span></button>
-          <button type="button" class="f-btn f-btn--ghost f-btn--sm f-btn--icon" aria-label={THEME_LABEL[theme]} title={THEME_LABEL[theme]} onClick={() => onTheme(THEME_NEXT[theme])}><Icon name={THEME_ICON[theme]} /></button>
-          <button type="button" class="f-btn f-btn--ghost f-btn--sm f-btn--icon" aria-label="Reload data" title={loadedAt ? `Reload data (loaded ${loadedAt.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })})` : "Reload data"} onClick={onReload}><Icon name="refresh" /></button>
+          <Button kind="secondary" size="sm" icon="magnify" style={{ flex: 1, justifyContent: "flex-start" }} onClick={onPalette}>Go to…<span style={{ marginLeft: "auto" }}><Kbd>⌘K</Kbd></span></Button>
+          <IconButton icon={THEME_ICON[theme]} label={THEME_LABEL[theme]} title={THEME_LABEL[theme]} onClick={() => onTheme(THEME_NEXT[theme])} />
+          <IconButton icon="refresh" label="Reload data" title={loadedAt ? `Reload data (loaded ${loadedAt.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })})` : "Reload data"} onClick={onReload} />
         </div>
       )}
     </nav>
@@ -122,10 +122,8 @@ function ScopeSwitch({ rail, scope, name, projects, onScope, onManage }: { rail:
     setHi(Math.max(0, items.findIndex((i) => i.id === scope)));
     const b = box.current?.getBoundingClientRect();
     if (b) setAt({ top: b.bottom + 4, left: b.left, width: rail ? 260 : b.width });
-    const close = (e: MouseEvent) => { if (!box.current?.contains(e.target as Node)) setOpen(false); };
-    document.addEventListener("mousedown", close);
-    return () => document.removeEventListener("mousedown", close);
   }, [open]);
+  useOutsideClick(() => box.current, () => setOpen(false), open);
   const take = (id: string) => { setOpen(false); if (id === "__manage__") onManage(); else onScope(id); };
   const onKey = (e: KeyboardEvent) => {
     if (!open) { if (e.key === "ArrowDown" || e.key === "Enter" || e.key === " ") { e.preventDefault(); setOpen(true); } return; }
@@ -149,11 +147,8 @@ function ScopeSwitch({ rail, scope, name, projects, onScope, onManage }: { rail:
           {items.map((it, i) => (
             <Fragment key={it.id}>
               {it.id === ALL_PROJECTS && <div class="f-menu__sep" />}
-              <button type="button" role="option" aria-selected={it.id === scope} class={cx("f-menu__item", i === hi && "is-hi", it.id === scope && "is-sel")}
-                onMouseEnter={() => setHi(i)} onClick={() => take(it.id)}>
-                <Icon name={it.id === scope ? "check" : it.icon} /><span style={{ overflow: "hidden", textOverflow: "ellipsis", flex: 1 }}>{it.label}</span>
-                {it.meta && <span class="f-nav__count">{it.meta}</span>}
-              </button>
+              <MenuItem role="option" aria-selected={it.id === scope} icon={it.id === scope ? "check" : it.icon} highlighted={i === hi} selected={it.id === scope} count={it.meta}
+                onMouseEnter={() => setHi(i)} onClick={() => take(it.id)}>{it.label}</MenuItem>
             </Fragment>
           ))}
         </div>

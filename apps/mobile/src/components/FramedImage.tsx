@@ -1,9 +1,8 @@
 import { View, type StyleProp, type ViewStyle } from "react-native";
 import { Image, type ImageSource } from "expo-image";
 import type { Settings } from "../types";
-import { FIXED } from "../theme";
+import { FIXED, Seg } from "../ui";
 import { Overlay } from "./Overlay";
-import { Seg } from "./ui";
 
 /** "mask" = neutral dark mask outside the frame, "frame" = border only, "fit" = crop to the frame, "off" = raw photo. */
 export type FrameMode = "mask" | "frame" | "fit" | "off";

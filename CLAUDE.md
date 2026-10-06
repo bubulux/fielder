@@ -19,8 +19,8 @@ The owner talks to you in English.
 | --- | --- |
 | `apps/worker/src` | API routes (`shots.ts`, `projects.ts`, `fields.ts`, `days.ts`, …), `http.ts` router + `assert*` helpers |
 | `apps/worker/migrations` | D1 schema, numbered, additive |
-| `apps/dashboard/src` | `App.tsx` (state, routes), `Sidebar.tsx`, one file per page (`ShotsPage`, `ShotView` + `Inspector`, `Review`, `Plan`, library pages), `keys.ts` (shortcuts), `ui.tsx` (design-system components), `design/` (tokens + component CSS), `styles.css` (layouts) |
-| `apps/mobile` | `App.tsx` (tabs, gates, pushed-screen stack), `src/screens/` (Viewfinder + Tag, Review, Shots + ShotDetails, Day + StepThrough, Setup hub + sub-screens, Uploads, Gates), `src/components/` (`ui.tsx` primitives, `chrome.tsx` header/rows/bars, `TagEditor.tsx`, `feedback.tsx` confirm + toast), `uploads.ts` (queue), `sync.ts`, `rigs.ts`, `storage.ts` (kv), `api.ts` |
+| `apps/dashboard/src` | `App.tsx` (state, routes), `Sidebar.tsx`, one file per page (`ShotsPage`, `ShotView` + `Inspector`, `Review`, `Plan`, library pages), `keys.ts` (shortcuts), `ui/` (component library: design-system components by group, `ui/design/` tokens + component CSS), `styles.css` (layouts) |
+| `apps/mobile` | `App.tsx` (tabs, gates, pushed-screen stack), `src/screens/` (Viewfinder + Tag, Review, Shots + ShotDetails, Day + StepThrough, Setup hub + sub-screens, Uploads, Gates), `src/ui/` (component library: `theme.tsx`, primitives by design-system group, `chrome.tsx` header/rows/bars, `dialogs.tsx` confirm + toast), `src/components/` (`TagEditor.tsx`, sheets, viewfinder parts), `uploads.ts` (queue), `sync.ts`, `rigs.ts`, `storage.ts` (kv), `api.ts` |
 | `packages/vocab` | Shared vocabularies, filters, extra-field definitions, daylight math: anything both the Worker and a client must agree on |
 | `packages/fov-math` | Camera/lens/FOV/overlay/reframe math |
 
@@ -38,7 +38,7 @@ A **shot** holds the metadata (name, location, INT/EXT, light phases + artificia
   Keep it that way.
 - **Shared rules go in `packages/vocab`** and are reused by the Worker. Interactive edits are validated strictly, uploads leniently.
 - **Migrations**: a new numbered file for every change; never edit an applied one. Production holds real data now: ask before anything destructive.
-- **Match the surrounding code**: terse doc comments on exported functions explaining *why*; plain CSS on the design tokens, never hard-coded colours (`docs/design.md`; both themes, Sun and Set, must stay high contrast); mobile UI from `components/ui.tsx` with `makeStyles`/`useTheme` from `theme.tsx`. No new dependencies without a reason (the sun math and combobox are hand-written on purpose).
+- **Match the surrounding code**: terse doc comments on exported functions explaining *why*; plain CSS on the design tokens, never hard-coded colours (`docs/design.md`; both themes, Sun and Set, must stay high contrast); mobile UI from `src/ui` (primitives, `makeStyles`/`useTheme`). No new dependencies without a reason (the sun math and combobox are hand-written on purpose).
 - **Deploys to production are done by the owner** (`pnpm -C apps/worker run deploy`). You prepare, check and commit. You may apply additive remote migrations when asked. Commit only when asked or when working through an agreed plan; work on a branch.
 
 ## Verify before you say "done"

@@ -5,9 +5,8 @@ import { api, type Shot } from "../api";
 import { useApp } from "../appState";
 import { ensureLocation } from "../namedSync";
 import { store } from "../storage";
-import { toast } from "./feedback";
+import { Banner, Button, Sheet, SheetList, toast } from "../ui";
 import { TagEditor, type TagDraft } from "./TagEditor";
-import { Banner, Button, Sheet } from "./ui";
 
 const draftOf = (s: Shot): TagDraft => ({
   tags: { name: s.name, light: s.light, artificial: s.artificial, weather: s.weather, int_ext: s.int_ext, location_id: s.location_id, extra: s.extra ?? {} },
@@ -47,11 +46,11 @@ export function EditTagsSheet({ shot, visible, onClose }: { shot: Shot; visible:
   return (
     <Sheet visible={visible} title="Edit details" onClose={onClose} height={0.92} leadLabel="Cancel" doneLabel={null}
       footer={<Button icon="check" label="Save" onPress={() => void save()} busy={busy} />}>
-      <View style={{ marginHorizontal: -20, marginTop: -12 }}>
+      <SheetList>
         {error && <View style={{ padding: 12 }}><Banner kind="danger" title="Not saved" meta={`${error}. Your edits are still here.`} /></View>}
         <TagEditor value={draft} onChange={setDraft} locations={app.locations} countAt={app.countAt}
           fields={store.fieldsForProject(shot.project_id)} projectName={app.projects.find((p) => p.id === shot.project_id)?.name} />
-      </View>
+      </SheetList>
     </Sheet>
   );
 }

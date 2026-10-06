@@ -3,8 +3,8 @@ import type { FieldDef } from "@fielder/vocab";
 import type { Location, Preset, Project, Shot } from "./api";
 import type { MaskMode } from "./Framed";
 import type { Stage } from "./router";
-import { ShotView } from "./ShotView";
-import { Empty, Icon } from "./ui";
+import { ReviewProgress, ShotView } from "./ShotView";
+import { Button, Empty, Toolbar, ToolbarTitle } from "./ui";
 
 interface Props {
   shots: Shot[];
@@ -40,8 +40,8 @@ export function ReviewPage(p: Props) {
   if (!current) {
     return (
       <>
-        <div class="f-toolbar"><div class="f-toolbar__title"><span>Review</span></div><div class="review-progress"><span class="num" style={{ fontSize: "var(--text-caption)" }}><strong>0 left</strong></span><div class="f-progress" style={{ height: "6px" }}><div class="f-progress__bar" style={{ width: "100%" }} /></div></div></div>
-        <Empty icon="check-all" tone="ok" title="Nothing to review" actions={<><button type="button" class="f-btn f-btn--secondary" onClick={p.onBrowseApproved}><Icon name="check-circle" />Browse approved shots</button><button type="button" class="f-btn f-btn--ghost" onClick={p.onPlan}>Plan a day</button></>}>
+        <Toolbar><ToolbarTitle>Review</ToolbarTitle><ReviewProgress value={1}><strong>0 left</strong></ReviewProgress></Toolbar>
+        <Empty icon="check-all" tone="ok" title="Nothing to review" actions={<><Button kind="secondary" icon="check-circle" onClick={p.onBrowseApproved}>Browse approved shots</Button><Button kind="ghost" onClick={p.onPlan}>Plan a day</Button></>}>
           All {p.shots.length} shots in {p.scopeName} are reviewed. New uploads land here, oldest first.
         </Empty>
       </>

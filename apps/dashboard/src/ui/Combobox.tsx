@@ -1,4 +1,5 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "preact/hooks";
+import { Highlight, Icon } from "./core";
 
 export interface ComboOption { value: string; label: string; hint?: string }
 
@@ -88,7 +89,7 @@ export function Combobox({ options, value, onChange, placeholder, onCreate, clea
   return (
     <div class="combo f-combo">
       <div class={small ? "f-input f-input--sm" : "f-input"}>
-        {icon && <i class={`mdi mdi-${icon} f-input__icon`} aria-hidden="true" />}
+        {icon && <Icon name={icon} class="f-input__icon" />}
         <input
           id={id}
           ref={input}
@@ -104,7 +105,7 @@ export function Combobox({ options, value, onChange, placeholder, onCreate, clea
           role="combobox"
           aria-expanded={open}
         />
-        <i class={`mdi f-combo__caret mdi-${open ? "chevron-up" : "chevron-down"}`} aria-hidden="true" />
+        <Icon name={open ? "chevron-up" : "chevron-down"} class="f-combo__caret" />
       </div>
       {open && entries.length > 0 && (
         <ul class={alignEnd ? "f-combo__list is-end" : "f-combo__list"} ref={list} role="listbox">
@@ -118,9 +119,9 @@ export function Combobox({ options, value, onChange, placeholder, onCreate, clea
               role="option"
               aria-selected={e.kind === "option" && e.option.value === value}
             >
-              {e.kind === "option" ? <><i class={`mdi ${e.option.value === value ? "mdi-check" : ""}`} aria-hidden="true" /><span>{highlight(e.option.label, q)}</span>{e.option.hint && <span class="meta">{e.option.hint}</span>}</>
-                : e.kind === "create" ? <><i class="mdi mdi-plus" aria-hidden="true" />Create “{(query ?? "").trim()}”</>
-                : <><i class="mdi mdi-close" aria-hidden="true" /><span class="meta">None</span></>}
+              {e.kind === "option" ? <><i class={`mdi ${e.option.value === value ? "mdi-check" : ""}`} aria-hidden="true" /><span><Highlight text={e.option.label} q={q} /></span>{e.option.hint && <span class="meta">{e.option.hint}</span>}</>
+                : e.kind === "create" ? <><Icon name="plus" />Create “{(query ?? "").trim()}”</>
+                : <><Icon name="close" /><span class="meta">None</span></>}
             </li>
           ))}
           <li class="f-combo__hint" aria-hidden="true"><span><kbd>↑</kbd> <kbd>↓</kbd> move</span><span><kbd>↵</kbd>/<kbd>Tab</kbd> take</span><span><kbd>Esc</kbd> cancel</span></li>
@@ -136,11 +137,4 @@ function clipBox(el: HTMLElement) {
     if (getComputedStyle(p).overflowX !== "visible") { const r = p.getBoundingClientRect(); return { left: r.left, right: r.right }; }
   }
   return { left: 0, right: window.innerWidth };
-}
-
-/** Mark the typed text inside a label (one inline run, so the word keeps its spacing). */
-function highlight(label: string, q: string) {
-  const i = q ? label.toLowerCase().indexOf(q) : -1;
-  if (i < 0) return label;
-  return <>{label.slice(0, i)}<mark>{label.slice(i, i + q.length)}</mark>{label.slice(i + q.length)}</>;
 }

@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { FlatList, Pressable, Text, View } from "react-native";
-import { makeStyles, type, useTheme } from "../theme";
-import { Button, Checkbox, Chip, Hint, Icon, Input, Sheet } from "./ui";
+import { Button, Checkbox, Chip, ChipCell, ChipGrid, ChipRow, Hint, Icon, makeStyles, Sheet, SheetSearch, type, useTheme } from "../ui";
 
 export interface Option { id: string; label: string; meta?: string; icon?: string }
 
@@ -58,11 +57,11 @@ export function OptionSheet({ visible, title, sub, options, value, multiple, onC
       <Sheet visible={visible} title={title} sub={sub} onClose={onClose} footer={footer} doneLabel={multiple ? null : "Done"}>
         {options.length === 0 && <Hint>{emptyText ?? "Nothing to choose from."}</Hint>}
         {columns === 2 ? (
-          <View style={s.grid}>
-            {options.map((o) => <View key={o.id} style={s.cell}><Chip block icon={o.icon} label={o.label} selected={isOn(o.id)} onPress={() => tap(o.id)} /></View>)}
-          </View>
+          <ChipGrid>
+            {options.map((o) => <ChipCell key={o.id}><Chip block icon={o.icon} label={o.label} selected={isOn(o.id)} onPress={() => tap(o.id)} /></ChipCell>)}
+          </ChipGrid>
         ) : (
-          <View style={s.wrap}>{options.map((o) => <Chip key={o.id} icon={o.icon} label={o.label} selected={isOn(o.id)} onPress={() => tap(o.id)} />)}</View>
+          <ChipRow>{options.map((o) => <Chip key={o.id} icon={o.icon} label={o.label} selected={isOn(o.id)} onPress={() => tap(o.id)} />)}</ChipRow>
         )}
         {!multiple && value.length > 0 && <Hint>Tap the selected one again to clear it.</Hint>}
       </Sheet>
@@ -70,7 +69,7 @@ export function OptionSheet({ visible, title, sub, options, value, multiple, onC
   }
   return (
     <Sheet visible={visible} title={title} sub={sub} onClose={onClose} height={0.86} scroll={false} footer={footer} doneLabel={multiple ? null : "Done"}>
-      <View style={s.search}><Input value={q} onChangeText={setQ} placeholder={`Search ${title.toLowerCase()}`} autoFocus={options.length > CHIP_LIMIT} autoCapitalize="none" /></View>
+      <SheetSearch value={q} onChangeText={setQ} placeholder={`Search ${title.toLowerCase()}`} autoFocus={options.length > CHIP_LIMIT} autoCapitalize="none" />
       <FlatList
         data={shown}
         keyExtractor={(o) => o.id}
@@ -96,10 +95,6 @@ export function OptionSheet({ visible, title, sub, options, value, multiple, onC
 }
 
 const useStyles = makeStyles((c) => ({
-  wrap: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
-  grid: { flexDirection: "row", flexWrap: "wrap", marginHorizontal: -4 },
-  cell: { width: "50%", padding: 4 },
-  search: { paddingHorizontal: 16, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: c.borderSubtle },
   item: { flexDirection: "row", alignItems: "center", gap: 14, minHeight: 56, paddingHorizontal: 16, paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: c.borderSubtle },
   itemOn: { backgroundColor: c.accentTint },
   itemText: { ...type("body"), color: c.text },

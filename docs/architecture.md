@@ -7,8 +7,8 @@ Single-user tool for film location scouting and shoot planning. A phone (Android
 | Path | Stack | Role |
 | --- | --- | --- |
 | `apps/worker` | Cloudflare Worker, D1 (SQLite), R2 | JSON API, image proxy, serves the dashboard as static assets. Hand-written router (`src/http.ts`). |
-| `apps/dashboard` | Vite + Preact + Leaflet, plain CSS (design-system classes in `src/design/`, layouts in `src/styles.css`), hash routes, sidebar shell | Web UI. Built into `dist/`, served by the Worker. |
-| `apps/mobile` | Expo SDK 57, React Native 0.86, runs in **Expo Go** | Viewfinder, capture, review, shots, day mode; 5 tabs plus pushed screens ([phone app](features/phone-app.md)). Own UI primitives in `src/components/ui.tsx`. |
+| `apps/dashboard` | Vite + Preact + Leaflet, plain CSS (component library and design-system classes in `src/ui/`, layouts in `src/styles.css`), hash routes, sidebar shell | Web UI. Built into `dist/`, served by the Worker. |
+| `apps/mobile` | Expo SDK 57, React Native 0.86, runs in **Expo Go** | Viewfinder, capture, review, shots, day mode; 5 tabs plus pushed screens ([phone app](features/phone-app.md)). Own component library in `src/ui/`. |
 | `packages/fov-math` | Pure TS, `node --test` | Camera bodies/formats, lenses, speedboosters, FOV and overlay math, re-framing. |
 | `packages/vocab` | Pure TS, `node --test` | Shared vocabularies (light, weather, INT/EXT, states), filter model, extra-field definitions, sun/daylight math. |
 

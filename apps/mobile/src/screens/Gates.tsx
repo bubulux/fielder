@@ -3,10 +3,8 @@ import { ActivityIndicator, ScrollView, Text, View } from "react-native";
 import { WebView as RNWebView, type WebViewMessageEvent, type WebViewProps } from "react-native-webview";
 import { setToken } from "../auth";
 import { API_URL } from "../config";
-import { ActionBar } from "../components/chrome";
+import { ActionBar, Banner, BORDER, Button, Empty, Hint, IconButton, ListRow, makeStyles, Mark, SIZE, type, useTheme } from "../ui";
 import { NewProjectSheet, projectMeta, type PickProject } from "../components/ProjectSheet";
-import { Banner, Button, Empty, Hint, IconButton, ListRow, Mark } from "../components/ui";
-import { makeStyles, type, useTheme } from "../theme";
 import type { ProjectEntry } from "../types";
 
 // react-native-webview's class typings collapse to `never` under this TS/React combination; use the props type directly.
@@ -111,7 +109,7 @@ const useStyles = makeStyles((c) => ({
   brand: { ...type("title", "heavy"), color: c.text },
   gateTitle: { ...type("display", "heavy"), color: c.text },
   gateText: { ...type("body"), color: c.textDim },
-  webHead: { height: 64, flexDirection: "row", alignItems: "center", gap: 8, paddingHorizontal: 12, backgroundColor: c.surface, borderBottomWidth: 2, borderBottomColor: c.borderSubtle },
+  webHead: { height: SIZE.header, flexDirection: "row", alignItems: "center", gap: 8, paddingHorizontal: 12, backgroundColor: c.surface, borderBottomWidth: BORDER.control, borderBottomColor: c.borderSubtle },
   webTitle: { ...type("title", "bold"), color: c.text },
   spinner: { position: "absolute", top: 0, left: 0, right: 0, bottom: 0, alignItems: "center", justifyContent: "center", backgroundColor: c.bg },
 }));

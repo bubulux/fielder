@@ -6,9 +6,7 @@ import { API_URL, isConfigured } from "../config";
 import { isLogging, logCount } from "../log";
 import { useRigs } from "../rigs";
 import { useSync } from "../sync";
-import { AppHeader, SyncCard } from "../components/chrome";
-import { Banner, Button, ListRow, SectionLabel, Seg } from "../components/ui";
-import { makeStyles, num, type } from "../theme";
+import { AppHeader, Banner, Button, ListRow, makeStyles, num, SectionLabel, Seg, SyncCard, type } from "../ui";
 import { colourName } from "./SetupScreens";
 import type { Settings } from "../types";
 

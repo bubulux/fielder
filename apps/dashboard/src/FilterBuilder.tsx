@@ -1,8 +1,7 @@
-import { useEffect, useRef, useState } from "preact/hooks";
+import { useRef, useState } from "preact/hooks";
 import { FILTER_FIELDS, filterField, isGroup, OP_LABELS, OPS_BY_KIND, type FilterGroup, type FilterOp, type FilterRule } from "@fielder/vocab";
-import { Combobox } from "./Combobox";
 import { fieldOptions, type RefLists } from "./shotsQuery";
-import { cx, ErrorLine, Icon, Kbd, Select } from "./ui";
+import { Button, Checkbox, Combobox, cx, ErrorLine, Icon, IconButton, Input, Kbd, MenuItem, Panel, PanelBody, PanelFoot, PanelHead, Seg, Select, useOutsideClick } from "./ui";
 
 const needsValue = (op: FilterOp) => op !== "empty" && op !== "not_empty";
 const isList = (op: FilterOp) => op === "in" || op === "not_in";
@@ -12,14 +11,14 @@ const defaultRule = (): FilterRule => ({ field: "state", op: "is", value: "appro
 /** Filter side panel: nested all/any groups of rules; the result count and Clear all sit in the foot. */
 export function FilterPanel({ group, ctx, onChange, onClose, resultLine }: { group: FilterGroup; ctx: RefLists; onChange: (g: FilterGroup) => void; onClose: () => void; resultLine: string }) {
   return (
-    <aside class="f-panel" aria-label="Filter">
-      <div class="f-panel__head"><span class="f-panel__title">Filter</span><Kbd>F</Kbd><button type="button" class="f-btn f-btn--ghost f-btn--sm f-btn--icon" aria-label="Close filter" onClick={onClose}><Icon name="close" /></button></div>
-      <div class="f-panel__body">
+    <Panel label="Filter">
+      <PanelHead title="Filter"><Kbd>F</Kbd><IconButton icon="close" label="Close filter" onClick={onClose} /></PanelHead>
+      <PanelBody>
         <GroupEditor group={group} ctx={ctx} onChange={onChange} />
         <p class="meta" style={{ margin: 0 }}>The state switch above counts inside this filter and is saved with the view.</p>
-      </div>
-      <div class="f-panel__foot"><span class="num" style={{ flex: 1, fontWeight: 700 }}>{resultLine}</span><button type="button" class="f-btn f-btn--ghost f-btn--sm" disabled={group.rules.length === 0} onClick={() => onChange({ ...group, rules: [] })}>Clear all</button></div>
-    </aside>
+      </PanelBody>
+      <PanelFoot><span class="num" style={{ flex: 1, fontWeight: 700 }}>{resultLine}</span><Button kind="ghost" size="sm" disabled={group.rules.length === 0} onClick={() => onChange({ ...group, rules: [] })}>Clear all</Button></PanelFoot>
+    </Panel>
   );
 }
 
@@ -30,20 +29,18 @@ function GroupEditor({ group, ctx, onChange, onRemove, depth = 0 }: { group: Fil
     <div class="f-rgroup">
       <div class="f-rgroup__head">
         Match
-        <div class="f-seg" role="radiogroup" aria-label="Match">
-          {(["all", "any"] as const).map((m) => <button key={m} type="button" role="radio" aria-checked={group.match === m} class="f-seg__opt" onClick={() => onChange({ ...group, match: m })}>{m}</button>)}
-        </div>
+        <Seg label="Match" value={group.match} onChange={(m) => onChange({ ...group, match: m })} options={[{ id: "all", label: "all" }, { id: "any", label: "any" }]} />
         {depth === 0 ? "of these rules" : "of"}
         <span class="grow" />
-        {onRemove && <button type="button" class="f-btn f-btn--ghost f-btn--sm f-btn--icon" aria-label="Remove group" onClick={onRemove}><Icon name="close" /></button>}
+        {onRemove && <IconButton icon="close" label="Remove group" onClick={onRemove} />}
       </div>
       {group.rules.length === 0 && <span class="meta">No rules: every shot matches.</span>}
       {group.rules.map((r, i) => isGroup(r)
         ? <GroupEditor key={i} group={r} ctx={ctx} depth={depth + 1} onChange={(g) => setRule(i, g)} onRemove={() => removeRule(i)} />
         : <RuleRow key={i} rule={r} ctx={ctx} onChange={(x) => setRule(i, x)} onRemove={() => removeRule(i)} />)}
       <div class="f-rgroup__foot">
-        <button type="button" class={cx("f-btn f-btn--sm", depth === 0 ? "f-btn--secondary" : "f-btn--ghost")} onClick={() => onChange({ ...group, rules: [...group.rules, defaultRule()] })}><Icon name="plus" />Rule</button>
-        {depth < 3 && <button type="button" class="f-btn f-btn--ghost f-btn--sm" onClick={() => onChange({ ...group, rules: [...group.rules, { match: group.match === "all" ? "any" : "all", rules: [defaultRule()] }] })}><Icon name="plus-box-multiple-outline" />Group</button>}
+        <Button kind={depth === 0 ? "secondary" : "ghost"} size="sm" icon="plus" onClick={() => onChange({ ...group, rules: [...group.rules, defaultRule()] })}>Rule</Button>
+        {depth < 3 && <Button kind="ghost" size="sm" icon="plus-box-multiple-outline" onClick={() => onChange({ ...group, rules: [...group.rules, { match: group.match === "all" ? "any" : "all", rules: [defaultRule()] }] })}>Group</Button>}
       </div>
     </div>
   );
@@ -67,16 +64,16 @@ function RuleRow({ rule, ctx, onChange, onRemove }: { rule: FilterRule; ctx: Ref
     } else if (f.kind === "enum" || f.kind === "ref") {
       value = <Combobox small options={opts} value={rule.value == null || rule.value === "" ? null : String(rule.value)} onChange={(v) => onChange({ ...rule, value: v ?? "" })} placeholder="Choose" />;
     } else if (f.kind === "text") {
-      value = <label class="f-input f-input--sm"><input value={String(rule.value ?? "")} onInput={(e) => onChange({ ...rule, value: (e.target as HTMLInputElement).value })} placeholder="Text" /></label>;
+      value = <Input box="label" sm value={String(rule.value ?? "")} onInput={(e) => onChange({ ...rule, value: (e.target as HTMLInputElement).value })} placeholder="Text" />;
     } else if (f.kind === "number") {
-      const unit = f.id.endsWith("mm") ? <span class="f-input__unit">mm</span> : null;
+      const unit = f.id.endsWith("mm") ? "mm" : undefined;
       value = isPair(rule.op)
-        ? <div class="pair"><label class={cx("f-input f-input--sm", bad && "is-error")}><input inputMode="decimal" value={pair[0]} onInput={(e) => onChange({ ...rule, value: [num((e.target as HTMLInputElement).value), num(pair[1])] })} /></label>–<label class={cx("f-input f-input--sm", bad && "is-error")}><input inputMode="decimal" value={pair[1]} onInput={(e) => onChange({ ...rule, value: [num(pair[0]), num((e.target as HTMLInputElement).value)] })} />{unit}</label></div>
-        : <label class={cx("f-input f-input--sm", bad && "is-error")}><input inputMode="decimal" value={typeof rule.value === "number" ? String(rule.value) : ""} placeholder="Number" onInput={(e) => { const t = (e.target as HTMLInputElement).value; onChange({ ...rule, value: t.trim() === "" ? undefined : Number(t) }); }} />{unit}</label>;
+        ? <div class="pair"><Input box="label" sm invalid={bad} inputMode="decimal" value={pair[0]} onInput={(e) => onChange({ ...rule, value: [num((e.target as HTMLInputElement).value), num(pair[1])] })} />–<Input box="label" sm invalid={bad} unit={unit} inputMode="decimal" value={pair[1]} onInput={(e) => onChange({ ...rule, value: [num(pair[0]), num((e.target as HTMLInputElement).value)] })} /></div>
+        : <Input box="label" sm invalid={bad} unit={unit} inputMode="decimal" value={typeof rule.value === "number" ? String(rule.value) : ""} placeholder="Number" onInput={(e) => { const t = (e.target as HTMLInputElement).value; onChange({ ...rule, value: t.trim() === "" ? undefined : Number(t) }); }} />;
     } else if (f.kind === "date") {
       value = isPair(rule.op)
-        ? <div class="pair"><label class="f-input f-input--sm"><input type="date" value={pair[0]} onInput={(e) => onChange({ ...rule, value: [(e.target as HTMLInputElement).value, pair[1]] })} /></label>–<label class="f-input f-input--sm"><input type="date" value={pair[1]} onInput={(e) => onChange({ ...rule, value: [pair[0], (e.target as HTMLInputElement).value] })} /></label></div>
-        : <label class="f-input f-input--sm"><input type="date" value={String(rule.value ?? "")} onInput={(e) => onChange({ ...rule, value: (e.target as HTMLInputElement).value })} /></label>;
+        ? <div class="pair"><Input box="label" sm type="date" value={pair[0]} onInput={(e) => onChange({ ...rule, value: [(e.target as HTMLInputElement).value, pair[1]] })} />–<Input box="label" sm type="date" value={pair[1]} onInput={(e) => onChange({ ...rule, value: [pair[0], (e.target as HTMLInputElement).value] })} /></div>
+        : <Input box="label" sm type="date" value={String(rule.value ?? "")} onInput={(e) => onChange({ ...rule, value: (e.target as HTMLInputElement).value })} />;
     }
   }
   return (
@@ -85,7 +82,7 @@ function RuleRow({ rule, ctx, onChange, onRemove }: { rule: FilterRule; ctx: Ref
         options={[...FILTER_FIELDS.map((x) => ({ value: x.id, label: x.label })), ...ctx.extra.map((x) => ({ value: x.id, label: x.label, group: "Extra fields" }))]} />
       <Select label="Operator" value={rule.op} onChange={(v) => setOp(v as FilterOp)} options={ops.map((o) => ({ value: o, label: OP_LABELS[o] }))} />
       <div class="rule-value">{value}</div>
-      <button type="button" class="f-btn f-btn--ghost f-btn--sm f-btn--icon" aria-label="Remove rule" onClick={onRemove}><Icon name="close" /></button>
+      <IconButton icon="close" label="Remove rule" onClick={onRemove} />
       {bad && <ErrorLine>Enter a number</ErrorLine>}
     </div>
   );
@@ -96,12 +93,7 @@ export function MultiPick({ options, value, onChange, placeholder = "Choose…" 
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState("");
   const box = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    if (!open) return;
-    const close = (e: MouseEvent) => { if (!box.current?.contains(e.target as Node)) setOpen(false); };
-    document.addEventListener("mousedown", close);
-    return () => document.removeEventListener("mousedown", close);
-  }, [open]);
+  useOutsideClick(() => box.current, () => setOpen(false), open);
   const names = value.map((v) => options.find((o) => o.value === v)?.label ?? v);
   const summary = names.length === 0 ? placeholder : names.length <= 2 ? names.join(", ") : `${names.slice(0, 2).join(", ")} +${names.length - 2}`;
   const shown = q ? options.filter((o) => o.label.toLowerCase().includes(q.toLowerCase())) : options;
@@ -115,10 +107,10 @@ export function MultiPick({ options, value, onChange, placeholder = "Choose…" 
         <div class="f-menu" style={{ position: "absolute", top: "calc(100% + 4px)", left: 0, right: 0, zIndex: 20, maxHeight: "280px", overflow: "auto" }}>
           {options.length > 8 && <label class="f-input f-input--sm" style={{ margin: "2px 2px 6px" }}><Icon name="magnify" /><input autoFocus value={q} placeholder="Search" onInput={(e) => setQ((e.target as HTMLInputElement).value)} /></label>}
           {shown.map((o) => (
-            <button key={o.value} type="button" role="option" aria-selected={value.includes(o.value)} class={cx("f-menu__item", value.includes(o.value) && "is-sel")} onClick={() => toggle(o.value)}>
-              <span class={cx("f-check", value.includes(o.value) && "is-checked")}><span class="f-check__box">{value.includes(o.value) && <Icon name="check" />}</span></span>
+            <MenuItem key={o.value} role="option" aria-selected={value.includes(o.value)} selected={value.includes(o.value)} onClick={() => toggle(o.value)}>
+              <Checkbox as="span" checked={value.includes(o.value)} />
               <span style={{ overflow: "hidden", textOverflow: "ellipsis" }}>{o.label}</span>
-            </button>
+            </MenuItem>
           ))}
           {shown.length === 0 && <span class="meta" style={{ padding: "6px 10px" }}>No match</span>}
         </div>

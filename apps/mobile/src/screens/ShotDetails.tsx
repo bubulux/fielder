@@ -6,16 +6,13 @@ import { useApp } from "../appState";
 import { useOnline } from "../net";
 import { fovLabel, placeLabel, rigLabel, shortTime, shotTitle } from "../shots";
 import { store } from "../storage";
-import { ActionBar, AppHeader, PushScreen } from "../components/chrome";
+import { ActionBar, AppHeader, BORDER, Button, Empty, FONT, IconButton, makeStyles, notice, num, PushScreen, SectionLabel, SideBySide, toast, Toggle, type, useLayoutSize, useTheme } from "../ui";
 import { EditTagsSheet } from "../components/EditTagsSheet";
-import { notice, toast } from "../components/feedback";
 import { LeafletView } from "../components/LeafletView";
 import { focusScript, positionScript } from "../components/mapHtml";
 import { PhotoStrip } from "../components/PhotoStrip";
 import { FRAME_MODES, FrameModeSeg, type FrameMode } from "../components/ShotFrame";
 import { FullPhoto, MoreSheet, ShotPhoto, ShotSummary, useShotActions } from "../components/ShotParts";
-import { Button, Empty, IconButton, SectionLabel, Toggle, useLayoutSize } from "../components/ui";
-import { FONT, makeStyles, num, type, useTheme } from "../theme";
 
 const time = (iso: string) => new Date(iso).toLocaleString([], { weekday: "short", day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit", second: "2-digit" });
 
@@ -67,10 +64,10 @@ export function ShotDetails({ shotId, list }: { shotId: string; list: string[] }
       <View style={s.section}>
         <Text style={s.value}>{photo.lat.toFixed(5)}, {photo.lon.toFixed(5)}</Text>
         <Text style={s.meta}>{photo.position_corrected ? "Corrected by hand" : photo.gps_accuracy_m != null ? `GPS ±${Math.round(photo.gps_accuracy_m)} m` : "GPS accuracy unknown"}</Text>
-        <View style={{ flexDirection: "row", gap: 8 }}>
+        <SideBySide>
           <Button style={{ flex: 1 }} kind="secondary" icon="map-marker-outline" label="Show on map" onPress={() => app.push({ name: "mapFocus", shotId: shot.id })} />
           <Button style={{ flex: 1 }} kind="secondary" icon="crosshairs-gps" label="Correct" onPress={() => app.push({ name: "position", shotId: shot.id, photoId: photo.id })} disabled={!online} />
-        </View>
+        </SideBySide>
       </View>
       <Head title={shot.photos.length > 1 ? `Camera · photo ${photoIndex + 1}` : "Camera"} />
       <Facts rows={cameraRows(photo)} />
@@ -209,10 +206,10 @@ export function CorrectPosition({ shotId, photoId }: { shotId: string; photoId: 
       footer={<View style={{ flex: 1, gap: 8 }}>
         {shot.photos.length > 1 && <View style={{ marginHorizontal: -16 }}><Toggle label={`All ${shot.photos.length} photos of this shot`} value={all} onChange={setAll} /></View>}
         <Text style={s.coords}>{pos[0].toFixed(5)}, {pos[1].toFixed(5)} · moved {moved < 1 ? "0" : Math.round(moved)} m</Text>
-        <View style={{ flexDirection: "row", gap: 8 }}>
+        <SideBySide>
           <Button style={{ flex: 1 }} kind="secondary" label="Cancel" onPress={app.pop} />
           <Button style={{ flex: 2 }} icon="crosshairs-gps" label="Save position" onPress={() => void save()} disabled={moved < 0.5} busy={busy} />
-        </View>
+        </SideBySide>
       </View>}>
       <LeafletView script={script} fitLabel="Back to the pin" onMessage={(m) => { if (typeof m.lat === "number" && typeof m.lon === "number") setPos([m.lat, m.lon]); }} />
     </PushScreen>
@@ -251,7 +248,7 @@ const useStyles = makeStyles((c) => ({
   mono: { fontFamily: FONT.mono, fontSize: 12, lineHeight: 17, color: c.text, backgroundColor: c.surfaceSunken, padding: 10, borderRadius: 6 },
   title: { ...type("title", "bold"), color: c.text },
   floatBack: { position: "absolute", top: 12, left: 12 },
-  panel: { width: 320, backgroundColor: c.bg, borderLeftWidth: 2, borderLeftColor: c.border },
-  panelHead: { flexDirection: "row", alignItems: "center", gap: 8, padding: 12, borderBottomWidth: 2, borderBottomColor: c.borderSubtle, backgroundColor: c.surface },
+  panel: { width: 320, backgroundColor: c.bg, borderLeftWidth: BORDER.control, borderLeftColor: c.border },
+  panelHead: { flexDirection: "row", alignItems: "center", gap: 8, padding: 12, borderBottomWidth: BORDER.control, borderBottomColor: c.borderSubtle, backgroundColor: c.surface },
   coords: { ...type("small", "bold"), color: c.text, ...num },
 }));

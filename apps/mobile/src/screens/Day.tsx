@@ -1,16 +1,13 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { ActivityIndicator, Pressable, RefreshControl, ScrollView, SectionList, Text, View } from "react-native";
+import { ActivityIndicator, Pressable, ScrollView, SectionList, Text, View } from "react-native";
 import { dayLight, lightLabel, localDay, PHASE_ICONS, shootableWindows, type DayLight, type Interval } from "@fielder/vocab";
 import { api, cover, type Shot, type ShootingDay } from "../api";
 import { useApp } from "../appState";
 import { useOnline } from "../net";
 import { offlineDays, removeOfflineDay, saveDayOffline, type OfflineDay } from "../offline";
 import { hhmm, placeLabel, shotTitle } from "../shots";
-import { ActionBar, AppHeader } from "../components/chrome";
-import { confirm, toast, useToastOffset } from "../components/feedback";
+import { ActionBar, AppHeader, BORDER, Button, confirm, Empty, Icon, makeStyles, num, type Palette, RADIUS, SectionHeading, SeqBadge, toast, type, useRefreshControl, useTheme, useToastOffset } from "../ui";
 import { ShotFrame } from "../components/ShotFrame";
-import { Button, Empty, Icon, SeqBadge } from "../components/ui";
-import { makeStyles, num, RADIUS, type, useTheme, type Palette } from "../theme";
 
 const BERLIN = { lat: 52.52, lon: 13.405 };
 export const phaseFill = (c: Palette, phase: string) => (phase === "dawn" ? c.phaseDawn : phase === "day" ? c.phaseDay : phase === "dusk" ? c.phaseDusk : c.phaseNight);
@@ -60,7 +57,6 @@ type OfflineState = "none" | "saving" | "saved" | "stale" | "error";
  */
 export function Day() {
   const s = useStyles();
-  const { c } = useTheme();
   const app = useApp();
   const online = useOnline();
   const project = app.project;
@@ -79,6 +75,7 @@ export function Day() {
     try { setDays(await api.listDays(project.id)); setFailed(false); } catch { setFailed(true); } finally { setRefreshing(false); }
   }, [project?.id]);
   useEffect(() => { setDayId(null); setOpened(false); setDays(null); void load(); }, [load]);
+  const refresh = useRefreshControl(refreshing, () => void load());
 
   const mine = offline.filter((o) => o.day.project_id === project?.id);
   const list: ShootingDay[] | null = days && !failed ? days : failed ? mine.map((o) => o.day) : null;
@@ -144,8 +141,8 @@ export function Day() {
           sections={sections}
           keyExtractor={(d) => d.id}
           stickySectionHeadersEnabled={false}
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => void load()} tintColor={c.accent} colors={[c.accent]} progressBackgroundColor={c.surface} />}
-          renderSectionHeader={({ section }) => <Text style={s.sectionHead}>{section.title}</Text>}
+          refreshControl={refresh}
+          renderSectionHeader={({ section }) => <SectionHeading>{section.title}</SectionHeading>}
           ListEmptyComponent={failed
             ? <Empty icon="cloud-off-outline" title="Nothing saved offline" body="Make a day available offline while you have a connection." />
             : <Empty icon="calendar-blank-outline" title="No shooting days yet" body="Plan them in the dashboard (Plan). They show up here with their light and shots." />}
@@ -343,9 +340,8 @@ function DayOverview({ day, shots, offlineCopy, onBack, onStart, state, progress
 
 const useStyles = makeStyles((c) => ({
   root: { flex: 1, backgroundColor: c.bg },
-  sectionHead: { ...type("overline", "bold"), color: c.textDim, paddingHorizontal: 16, paddingTop: 20, paddingBottom: 8 },
   dayRow: { flexDirection: "row", alignItems: "center", gap: 12, minHeight: 96, paddingHorizontal: 16, paddingVertical: 14, backgroundColor: c.surface, borderBottomWidth: 1, borderBottomColor: c.borderSubtle },
-  date: { width: 56, alignItems: "center", paddingVertical: 6, borderRadius: RADIUS.sm, borderWidth: 2, borderColor: c.border, backgroundColor: c.surface },
+  date: { width: 56, alignItems: "center", paddingVertical: 6, borderRadius: RADIUS.sm, borderWidth: BORDER.control, borderColor: c.border, backgroundColor: c.surface },
   dateWd: { ...type("caption", "bold"), fontSize: 12, letterSpacing: 0.7, textTransform: "uppercase" },
   dateDd: { ...type("heading", "heavy"), lineHeight: 26, ...num },
   dateMon: { ...type("caption", "semibold"), fontSize: 12 },
@@ -362,7 +358,7 @@ const useStyles = makeStyles((c) => ({
   window: { position: "absolute", top: 0, bottom: 0, backgroundColor: c.ok, borderRadius: 2 },
   times: { ...type("small"), color: c.textDim, ...num },
   notes: { ...type("small"), color: c.text },
-  off: { gap: 8, padding: 12, borderRadius: RADIUS.sm, borderWidth: 2 },
+  off: { gap: 8, padding: 12, borderRadius: RADIUS.sm, borderWidth: BORDER.control },
   offRow: { flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 4, paddingRight: 4, minHeight: 56 },
   offTitle: { ...type("body", "bold"), color: c.text },
   offMeta: { ...type("caption"), color: c.textDim },

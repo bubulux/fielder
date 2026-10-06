@@ -3,7 +3,7 @@ import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { patchPhotoPosition, type Photo, type Shot } from "./api";
 import { useKeys } from "./keys";
-import { cx, Icon } from "./ui";
+import { Button, Checkbox, Icon, Spinner, ToolbarSpacer } from "./ui";
 
 interface Props { shot: Shot; photo: Photo; onSaved: (s: Shot) => void; onCancel: () => void; onError: (msg: string) => void }
 
@@ -53,14 +53,14 @@ export function PositionStage({ shot, photo, onSaved, onCancel, onError }: Props
       <div class="f-stage__bar">
         <Icon name="cursor-move" size={18} /><span style={{ fontSize: "var(--text-small)" }}>Drag the pin or click the map</span>
         <span class="meta num">{pos[0].toFixed(5)}, {pos[1].toFixed(5)}{changed ? ` · moved ${Math.round(moved)} m` : ""}</span>
-        <span class="f-toolbar__sp" />
+        <ToolbarSpacer />
         {shot.photos.length > 1 && (
-          <button type="button" class={cx("f-check", all && "is-checked")} role="checkbox" aria-checked={all} onClick={() => setAll(!all)}>
-            <span class="f-check__box">{all && <Icon name="check" />}</span>All {shot.photos.length} photos of this shot
-          </button>
+          <Checkbox checked={all} role="checkbox" aria-checked={all} onClick={() => setAll(!all)}>
+            All {shot.photos.length} photos of this shot
+          </Checkbox>
         )}
-        <button type="button" class="f-btn f-btn--ghost f-btn--sm" onClick={onCancel}>Cancel<span class="f-btn__kbd">Esc</span></button>
-        <button type="button" class="f-btn f-btn--sm" disabled={!changed || busy} onClick={() => void save()}>{busy && <span class="f-spinner" style={{ width: "14px", height: "14px", borderWidth: "2px", borderTopColor: "currentColor" }} />}{busy ? "Saving…" : "Save position"}<span class="f-btn__kbd">↵</span></button>
+        <Button kind="ghost" size="sm" kbd="Esc" onClick={onCancel}>Cancel</Button>
+        <Button size="sm" kbd="↵" disabled={!changed || busy} onClick={() => void save()}>{busy && <Spinner style={{ width: "14px", height: "14px", borderWidth: "2px", borderTopColor: "currentColor" }} />}{busy ? "Saving…" : "Save position"}</Button>
       </div>
       <div class="f-stage__view" style={{ padding: 0 }}>
         <div ref={el} class="map" />

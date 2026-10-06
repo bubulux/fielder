@@ -5,8 +5,7 @@ import { cover, shotTitle } from "./format";
 import { Framed, type MaskMode } from "./Framed";
 import { invalidateDays } from "./Inspector";
 import { useKeys } from "./keys";
-import { Popover } from "./ShotsPage";
-import { confirmDialog, cx, Empty, Icon, Kbd, SaveStatus, Select, toast, type SaveState } from "./ui";
+import { Banner, Button, Checkbox, confirmDialog, cx, Empty, EmptyNote, Field, Icon, IconButton, Input, Kbd, ListRow, MenuItem, Panel, PanelBody, PanelHead, Popover, ReorderButtons, SaveStatus, Select, Spinner, toast, Toolbar, ToolbarTitle, type SaveState } from "./ui";
 import { fetchForecast, weatherText, type HourForecast } from "./weather";
 
 interface Props {
@@ -100,11 +99,11 @@ export function PlanPage({ project, projects, onPickProject, shots, mask, dayId,
   if (!project) {
     return (
       <>
-        <div class="f-toolbar"><div class="f-toolbar__title"><span>Plan</span></div></div>
+        <Toolbar><ToolbarTitle>Plan</ToolbarTitle></Toolbar>
         <Empty icon="folder-outline" title="Pick a project to plan">
           Shooting days belong to one project. “All projects” can browse, but not plan.
           <div class="f-menu" style={{ marginTop: "12px", width: "300px", textAlign: "left" }}>
-            {projects.map((p) => <button key={p.id} type="button" class="f-menu__item" onClick={() => onPickProject(p.id)}><Icon name="folder-outline" /><span style={{ overflow: "hidden", textOverflow: "ellipsis", flex: 1 }}>{p.name}</span><span class="f-nav__count">{p.shot_count} shots</span></button>)}
+            {projects.map((p) => <MenuItem key={p.id} icon="folder-outline" count={`${p.shot_count} shots`} onClick={() => onPickProject(p.id)}>{p.name}</MenuItem>)}
           </div>
         </Empty>
       </>
@@ -115,21 +114,21 @@ export function PlanPage({ project, projects, onPickProject, shots, mask, dayId,
   const today = isoDate(new Date());
   return (
     <div class="f-app__body">
-      <aside class="f-panel f-panel--left" style={{ "--panel-w": "280px" }} aria-label="Shooting days">
-        <div class="f-panel__head"><span class="f-panel__title">Shooting days</span><button type="button" class="f-btn f-btn--sm" title="New day (⇧N)" onClick={() => void create()}><Icon name="plus" />New day</button></div>
-        <div class="f-panel__body f-panel__body--flush" role="listbox" aria-label="Days">
-          {!days ? <div class="status"><span class="f-spinner" /></div> : days.length === 0 ? (
-            <div class="f-empty"><div class="f-empty__title" style={{ fontSize: "var(--text-body-lg)" }}>No days yet</div><div class="meta">“New day” starts on the next Saturday.</div></div>
+      <Panel left width="280px" label="Shooting days">
+        <PanelHead title="Shooting days"><Button size="sm" icon="plus" title="New day (⇧N)" onClick={() => void create()}>New day</Button></PanelHead>
+        <PanelBody flush role="listbox" aria-label="Days">
+          {!days ? <div class="status"><Spinner /></div> : days.length === 0 ? (
+            <EmptyNote title="No days yet">“New day” starts on the next Saturday.</EmptyNote>
           ) : days.map((d) => (
             <div key={d.id} role="option" aria-selected={d.id === dayId} tabIndex={0} class={cx("f-dayitem", d.id === dayId && "is-selected", d.date < today && "is-past")} onClick={() => onDay(d.id)} onKeyDown={(e) => { if (e.key === "Enter") onDay(d.id); }}>
               <span class="f-dayitem__date">{dateLabel(d.date)}{d.date === today ? " · today" : ""}</span>
               <span class="f-dayitem__meta">{d.title || "Untitled"} · {d.shots.length} shot{d.shots.length === 1 ? "" : "s"}</span>
             </div>
           ))}
-        </div>
-      </aside>
+        </PanelBody>
+      </Panel>
       {days && days.length === 0 ? (
-        <Empty icon="calendar-blank-outline" title={`No shooting days in ${project.name}`} actions={<button type="button" class="f-btn" onClick={() => void create()}><Icon name="plus" />New day</button>}>
+        <Empty icon="calendar-blank-outline" title={`No shooting days in ${project.name}`} actions={<Button icon="plus" onClick={() => void create()}>New day</Button>}>
           Plan which approved shots to shoot on which day, against the light and the forecast.
         </Empty>
       ) : day ? (
@@ -196,20 +195,20 @@ function DayEditor({ day, shots, mask, onChange, onDelete, onOpen, save, savedAt
       <div class="f-scroll">
         <div class="plan-day" ref={rowsRef}>
           {error && (
-            <div class="f-banner f-banner--danger" role="alert"><Icon name="cloud-alert" /><div class="f-banner__text"><span class="f-banner__title">Not saved</span><span class="f-banner__meta">{error}. Your changes are kept here; they save on retry or on the next edit.</span></div><button type="button" class="f-btn f-btn--secondary f-btn--sm" onClick={onRetry}>Retry</button></div>
+            <Banner role="alert" icon="cloud-alert" title="Not saved" meta={`${error}. Your changes are kept here; they save on retry or on the next edit.`} action={<Button kind="secondary" size="sm" onClick={onRetry}>Retry</Button>} />
           )}
           <div class="plan-head">
-            <label class="f-field" style={{ width: "170px" }}><span class="f-field__label">Date</span><span class="f-input"><input type="date" class="num" style={{ fontWeight: 700 }} value={day.date} onInput={(e) => { const v = (e.target as HTMLInputElement).value; if (v) onChange({ ...day, date: v }); }} /></span></label>
-            <label class="f-field" style={{ flex: 1, minWidth: "220px" }}><span class="f-field__label">Title</span><span class="f-input"><input value={day.title ?? ""} placeholder="e.g. Moabit and the river" onInput={(e) => onChange({ ...day, title: (e.target as HTMLInputElement).value || null })} /></span></label>
+            <Field label="Date" style={{ width: "170px" }}><Input type="date" class="num" style={{ fontWeight: 700 }} value={day.date} onInput={(e) => { const v = (e.target as HTMLInputElement).value; if (v) onChange({ ...day, date: v }); }} /></Field>
+            <Field label="Title" style={{ flex: 1, minWidth: "220px" }}><Input value={day.title ?? ""} placeholder="e.g. Moabit and the river" onInput={(e) => onChange({ ...day, title: (e.target as HTMLInputElement).value || null })} /></Field>
             <div class="plan-head__status">
               <SaveStatus state={save} onRetry={onRetry} savedLabel={savedAt ? `Saved ${hhmm(savedAt)}` : "Saved"} />
               <div class="menu-anchor">
-                <button type="button" class="f-btn f-btn--ghost f-btn--sm f-btn--icon" aria-label="Day menu" aria-expanded={menu} onClick={() => setMenu(!menu)}><Icon name="dots-horizontal" /></button>
-                {menu && <Popover right onClose={() => setMenu(false)}><button type="button" class="f-menu__item f-menu__item--danger" onClick={() => { setMenu(false); onDelete(); }}><Icon name="delete-outline" />Delete day…</button></Popover>}
+                <IconButton icon="dots-horizontal" label="Day menu" aria-expanded={menu} onClick={() => setMenu(!menu)} />
+                {menu && <Popover right onClose={() => setMenu(false)}><MenuItem icon="delete-outline" danger onClick={() => { setMenu(false); onDelete(); }}>Delete day…</MenuItem></Popover>}
               </div>
             </div>
           </div>
-          <label class="f-field"><span class="f-field__label">Notes</span><textarea class="f-textarea" rows={2} placeholder="Call time, permits, crew…" value={day.notes ?? ""} onInput={(e) => onChange({ ...day, notes: (e.target as HTMLTextAreaElement).value || null })} /></label>
+          <Field label="Notes"><textarea class="f-textarea" rows={2} placeholder="Call time, permits, crew…" value={day.notes ?? ""} onInput={(e) => onChange({ ...day, notes: (e.target as HTMLTextAreaElement).value || null })} /></Field>
 
           <div class="light-box">
             <div class="f-dayrow">
@@ -234,10 +233,10 @@ function DayEditor({ day, shots, mask, onChange, onDelete, onOpen, save, savedAt
 
           <div class="plan-shots-head">
             <h2>Planned shots <span class="meta num">{planned.length}</span></h2>
-            {planned.some((x) => x.ds.planned_time) && <button type="button" class="f-btn f-btn--secondary f-btn--sm" onClick={() => setShots([...day.shots].sort((a, b) => (a.planned_time ?? "99").localeCompare(b.planned_time ?? "99")))}><Icon name="sort-clock-ascending-outline" />Sort by planned time</button>}
-            <button type="button" class={cx("f-btn f-btn--sm", adding && "f-btn--secondary")} aria-pressed={adding} onClick={() => setAdding(!adding)}><Icon name="plus" />Add shots<span class="f-btn__kbd">N</span></button>
+            {planned.some((x) => x.ds.planned_time) && <Button kind="secondary" size="sm" icon="sort-clock-ascending-outline" onClick={() => setShots([...day.shots].sort((a, b) => (a.planned_time ?? "99").localeCompare(b.planned_time ?? "99")))}>Sort by planned time</Button>}
+            <Button kind={adding ? "secondary" : "primary"} size="sm" icon="plus" kbd="N" aria-pressed={adding} onClick={() => setAdding(!adding)}>Add shots</Button>
           </div>
-          {groups.length === 0 && <div class="f-empty dashed"><div class="f-empty__title" style={{ fontSize: "var(--text-body-lg)" }}>No shots on this day</div><div class="meta">Add approved shots from the panel. Each one shows its window for this date.</div></div>}
+          {groups.length === 0 && <EmptyNote dashed title="No shots on this day">Add approved shots from the panel. Each one shows its window for this date.</EmptyNote>}
           {groups.map((g, gi) => {
             const union = mergeIntervals(g.items.flatMap(({ shot }) => shootableWindows(light, shot.light)));
             return (
@@ -267,9 +266,8 @@ function DayEditor({ day, shots, mask, onChange, onDelete, onOpen, save, savedAt
                         {!fits && <span class="f-field__error" style={{ fontSize: "11px" }}><Icon name="alert-circle" />Outside window</span>}
                       </div>
                       <div class="btn-row" style={{ gap: "2px", justifyContent: "flex-end" }}>
-                        <button type="button" class="f-btn f-btn--ghost f-btn--sm f-btn--icon" aria-label="Move up (Alt+↑)" title="Move up (Alt+↑)" disabled={i === 0} onClick={() => move(i, -1)}><Icon name="arrow-up" /></button>
-                        <button type="button" class="f-btn f-btn--ghost f-btn--sm f-btn--icon" aria-label="Move down (Alt+↓)" title="Move down (Alt+↓)" disabled={i === day.shots.length - 1} onClick={() => move(i, 1)}><Icon name="arrow-down" /></button>
-                        <button type="button" class="f-btn f-btn--ghost f-btn--sm f-btn--icon" aria-label="Remove from day" title="Remove from day (Del)" onClick={() => setShots(day.shots.filter((x) => x !== ds))}><Icon name="close" /></button>
+                        <ReorderButtons index={i} count={day.shots.length} onMove={move} onRemove={() => setShots(day.shots.filter((x) => x !== ds))}
+                          up={{ label: "Move up (Alt+↑)", title: "Move up (Alt+↑)" }} down={{ label: "Move down (Alt+↓)", title: "Move down (Alt+↓)" }} remove={{ label: "Remove from day", title: "Remove from day (Del)" }} />
                       </div>
                     </div>
                   );
@@ -312,7 +310,7 @@ function LightTrack({ light, start, hours, pct }: { light: DayLight; start: Date
 }
 
 function Forecast({ forecast, date, pct, hours }: { forecast: HourForecast[] | null | "loading"; date: string; pct: (d: Date) => number; hours: number }) {
-  if (forecast === "loading") return <span class="f-loading meta"><span class="f-spinner" />Loading forecast…</span>;
+  if (forecast === "loading") return <span class="f-loading meta"><Spinner />Loading forecast…</span>;
   if (forecast === null) return <div class="f-wx__none"><Icon name="weather-cloudy-clock" />{dateLabel(date)} is outside the forecast (about 16 days ahead).</div>;
   const w = `${100 / hours}%`;
   const tip = (h: HourForecast) => `${hhmm(h.time)} · ${weatherText(h.code)} · cloud ${h.cloudPct} % · rain ${h.precipProb ?? 0} % · ${Math.round(h.tempC)} °C`;
@@ -335,33 +333,33 @@ function AddShotsPanel({ shots, light, taken, mask, onAdd, onClose }: { shots: S
   for (const s of candidates) { const k = s.location_name ?? "No location"; byLocation.set(k, [...(byLocation.get(k) ?? []), s]); }
   useKeys({ Escape: onClose });
   return (
-    <aside class="f-panel" aria-label="Add shots" style={{ "--panel-w": "340px" }}>
-      <div class="f-panel__head"><span class="f-panel__title">Add shots</span><Kbd>N</Kbd><button type="button" class="f-btn f-btn--ghost f-btn--sm f-btn--icon" aria-label="Close" onClick={onClose}><Icon name="close" /></button></div>
+    <Panel label="Add shots" width="340px">
+      <PanelHead title="Add shots"><Kbd>N</Kbd><IconButton icon="close" label="Close" onClick={onClose} /></PanelHead>
       <div class="panel-filters">
         <Select label="Location" icon="map-marker-outline" value={location} onChange={setLocation}
           options={[{ value: "", label: "All locations" }, ...locations.map(([id, name]) => ({ value: id, label: name }))]} />
-        <button type="button" class={cx("f-check", onlyApproved && "is-checked")} role="checkbox" aria-checked={onlyApproved} onClick={() => setOnlyApproved(!onlyApproved)}>
-          <span class="f-check__box">{onlyApproved && <Icon name="check" />}</span>Approved only <span class="meta">· {notOnDay.length} not on this day</span>
-        </button>
+        <Checkbox checked={onlyApproved} role="checkbox" aria-checked={onlyApproved} onClick={() => setOnlyApproved(!onlyApproved)}>
+          Approved only <span class="meta">· {notOnDay.length} not on this day</span>
+        </Checkbox>
       </div>
-      <div class="f-panel__body" style={{ gap: "14px" }}>
+      <PanelBody style={{ gap: "14px" }}>
         {candidates.length === 0 && <span class="meta">No more shots to add{onlyApproved ? ". Approve shots in Review first, or untick “Approved only”." : "."}</span>}
         {[...byLocation.entries()].map(([name, list]) => (
           <div key={name} class="add-group">
-            <div class="add-group__head"><strong class="ellipsis">{name}</strong><span class="meta">{list.length}</span><button type="button" class="f-btn f-btn--ghost f-btn--sm" onClick={() => onAdd(list.map((s) => s.id))}>Add all</button></div>
+            <div class="add-group__head"><strong class="ellipsis">{name}</strong><span class="meta">{list.length}</span><Button kind="ghost" size="sm" onClick={() => onAdd(list.map((s) => s.id))}>Add all</Button></div>
             {list.map((s) => {
               const w = shootableWindows(light, s.light);
               return (
-                <button key={s.id} type="button" class="f-row f-row--dense add-row" onClick={() => onAdd([s.id])} title="Add to the day">
-                  <div class="f-row__thumb" style={{ width: "56px" }}><Framed photo={cover(s)} mode={mask} /></div>
-                  <div class="f-row__main"><span class="f-row__title">{shotTitle(s)}</span><span class="f-row__meta">{lightLabel(s.light, s.artificial) || "Any time"} · <b style={{ color: w.length ? "var(--ok)" : "var(--warn-ink)" }}>{w.length ? windowsText(w) : "no fitting light"}</b></span></div>
-                  <Icon name="plus" size={20} />
-                </button>
+                <ListRow key={s.id} class="add-row" tooltip="Add to the day" onClick={() => onAdd([s.id])}
+                  thumb={<div class="f-row__thumb" style={{ width: "56px" }}><Framed photo={cover(s)} mode={mask} /></div>}
+                  title={shotTitle(s)}
+                  meta={<>{lightLabel(s.light, s.artificial) || "Any time"} · <b style={{ color: w.length ? "var(--ok)" : "var(--warn-ink)" }}>{w.length ? windowsText(w) : "no fitting light"}</b></>}
+                  trailing={<Icon name="plus" size={20} />} />
               );
             })}
           </div>
         ))}
-      </div>
-    </aside>
+      </PanelBody>
+    </Panel>
   );
 }

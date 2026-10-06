@@ -2,9 +2,8 @@ import { useMemo, useRef, type ComponentType, type ReactNode, type Ref, type Ref
 import { View } from "react-native";
 import { WebView as RNWebView, type WebViewMessageEvent, type WebViewProps } from "react-native-webview";
 import { useOnline } from "../net";
-import { makeStyles, useTheme } from "../theme";
+import { Empty, IconButton, makeStyles, useTheme } from "../ui";
 import { mapPage } from "./mapHtml";
-import { Empty, IconButton } from "./ui";
 
 // react-native-webview's class typings collapse to `never` under this TS/React combination; use the props type directly.
 const WebView = RNWebView as unknown as ComponentType<WebViewProps & { ref?: Ref<{ injectJavaScript: (js: string) => void }> }>;

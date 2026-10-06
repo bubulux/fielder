@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { ScrollView, Share, Text, View } from "react-native";
+import { HUMAN_STEPS } from "../defaults";
 import { cover } from "../api";
 import { useApp } from "../appState";
 import { isSignedIn, onAuthChange, sessionExpiry, setToken, signedInEmail } from "../auth";
@@ -10,13 +11,10 @@ import { PHONE } from "../phone";
 import { useRigs } from "../rigs";
 import { store } from "../storage";
 import type { HudChips, Settings } from "../types";
-import { Block, PushScreen } from "../components/chrome";
-import { confirm, toast } from "../components/feedback";
+import { Block, BORDER, Button, Chip, ChipCell, ChipGrid, ChipRow, confirm, ErrorText, FIXED, Hint, Input, makeStyles, num, PushScreen, SectionLabel, Seg, toast, Toggle, type } from "../ui";
 import { HudChip } from "../components/Hud";
 import { Overlay } from "../components/Overlay";
 import { ShotFrame } from "../components/ShotFrame";
-import { Button, Chip, Hint, Input, SectionLabel, Seg, Toggle } from "../components/ui";
-import { FIXED, makeStyles, num, type } from "../theme";
 
 /** Frame colours on offer (values stored in settings; they draw over the camera image, not the UI). */
 export const BORDER_COLORS: { value: string; label: string }[] = [
@@ -30,7 +28,6 @@ export const TINTS: { label: string; value: string }[] = [
   { label: "Red 50%", value: "rgba(255,0,0,0.5)" },
   { label: "White 50%", value: "rgba(255,255,255,0.5)" },
 ];
-export const HUMAN_STEPS = [35, 43, 50];
 const HUD: { key: keyof HudChips; label: string; meta?: string; icon: string }[] = [
   { key: "project", label: "Project", icon: "folder-outline" },
   { key: "rig", label: "Rig and lens", icon: "camera-outline" },
@@ -81,18 +78,18 @@ export function ViewfinderSettings() {
           <Toggle icon="fit-to-screen-outline" label="Fit to frame" meta="Digital zoom so the rig frame fills the screen; also the Fit button" value={st.fitToFrame} onChange={(v) => set("fitToFrame", v)} />
           <Block>
             <SectionLabel>Frame colour</SectionLabel>
-            <View style={s.wrap}>{BORDER_COLORS.map((x) => <Chip key={x.value} swatch={x.value} label={x.label} selected={x.value.toUpperCase() === st.borderColor.toUpperCase()} onPress={() => set("borderColor", x.value)} />)}</View>
+            <ChipRow>{BORDER_COLORS.map((x) => <Chip key={x.value} swatch={x.value} label={x.label} selected={x.value.toUpperCase() === st.borderColor.toUpperCase()} onPress={() => set("borderColor", x.value)} />)}</ChipRow>
             <SectionLabel>Frame width</SectionLabel>
             <Seg size="lg" block accessibilityLabel="Frame width" value={String(st.borderWidthPx)} onChange={(v) => set("borderWidthPx", Number(v))} options={[1, 2, 3, 4, 6].map((w) => ({ id: String(w), label: `${w}` }))} />
           </Block>
           <Toggle icon="square-opacity" label="Blackout outside the frame" value={st.blackoutEnabled} onChange={(v) => set("blackoutEnabled", v)} />
           <Block>
-            <View style={s.grid}>
-              {TINTS.map((t) => <View key={t.value} style={s.cell}><Chip block swatch={t.value} label={t.label} selected={t.value === st.blackoutColor} disabled={!st.blackoutEnabled} onPress={() => set("blackoutColor", t.value)} /></View>)}
-            </View>
+            <ChipGrid>
+              {TINTS.map((t) => <ChipCell key={t.value}><Chip block swatch={t.value} label={t.label} selected={t.value === st.blackoutColor} disabled={!st.blackoutEnabled} onPress={() => set("blackoutColor", t.value)} /></ChipCell>)}
+            </ChipGrid>
             <SectionLabel>Human view button</SectionLabel>
             <Seg size="lg" block accessibilityLabel="Human view button" value={st.humanViewButton} onChange={(v) => set("humanViewButton", v)} options={[{ id: "cycle", label: "Cycle" }, { id: "toggle", label: "Toggle" }]} />
-            <View style={s.wrap}>{HUMAN_STEPS.map((mm) => <Chip key={mm} label={`${mm} mm-eq`} selected={st.humanViewFocalMm === mm} onPress={() => set("humanViewFocalMm", mm)} />)}</View>
+            <ChipRow>{HUMAN_STEPS.map((mm) => <Chip key={mm} label={`${mm} mm-eq`} selected={st.humanViewFocalMm === mm} onPress={() => set("humanViewFocalMm", mm)} />)}</ChipRow>
             <Hint>Cycle: off → 35 → 43 → 50 → off. Toggle: off ↔ {st.humanViewFocalMm} mm-eq. The cyan frame shows roughly what a person sees: 43–50 mm is the region of attention, 35 mm a wider take.</Hint>
           </Block>
         </ScrollView>
@@ -120,7 +117,6 @@ export function CaptureSettings() {
 }
 
 export function Calibration() {
-  const s = useStyles();
   const st = useApp().settings;
   const set = useSet();
   const [text, setText] = useState(String(st.phoneEquivalentFocalMm));
@@ -131,7 +127,7 @@ export function Calibration() {
       <Block>
         <SectionLabel>Main camera, 35 mm-equivalent</SectionLabel>
         <Input value={text} keyboardType="decimal-pad" onChangeText={(t) => { setText(t); const n = Number(t.replace(",", ".")); if (Number.isFinite(n) && n >= 5 && n <= 200) set("phoneEquivalentFocalMm", n); }} />
-        {!valid && <Text style={s.error}>Enter a value between 5 and 200 mm.</Text>}
+        {!valid && <ErrorText>Enter a value between 5 and 200 mm.</ErrorText>}
         <Hint>The spec sheet says {PHONE.mainCameraEquivalentFocalMm} mm. Only change this if the frame is measurably off against a real camera; a smaller value makes the frame smaller on screen.</Hint>
         {st.phoneEquivalentFocalMm !== PHONE.mainCameraEquivalentFocalMm && (
           <Button kind="secondary" icon="restore" label={`Reset to ${PHONE.mainCameraEquivalentFocalMm} mm`} onPress={() => { set("phoneEquivalentFocalMm", PHONE.mainCameraEquivalentFocalMm); setText(String(PHONE.mainCameraEquivalentFocalMm)); }} />
@@ -210,14 +206,10 @@ export function DebugLog() {
 }
 
 const useStyles = makeStyles((c) => ({
-  previewWrap: { alignItems: "center", paddingVertical: 12, backgroundColor: c.surface, borderBottomWidth: 2, borderBottomColor: c.border },
+  previewWrap: { alignItems: "center", paddingVertical: 12, backgroundColor: c.surface, borderBottomWidth: BORDER.control, borderBottomColor: c.border },
   preview: { backgroundColor: FIXED.photoBg, overflow: "hidden" },
   previewChips: { position: "absolute", top: 6, left: 6, right: 6, flexDirection: "row", flexWrap: "wrap", gap: 4 },
-  wrap: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
-  grid: { flexDirection: "row", flexWrap: "wrap", marginHorizontal: -4 },
-  cell: { width: "50%", padding: 4 },
   value: { ...type("body", "bold"), color: c.text },
   meta: { ...type("small"), color: c.textDim, ...num },
-  error: { ...type("small", "semibold"), color: c.danger },
 }));
 

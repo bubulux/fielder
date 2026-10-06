@@ -5,11 +5,8 @@ import { CAMERAS, computeFraming, CUSTOM_CAMERA_ID, describeRig, findFormat, SPE
 import { useApp } from "../appState";
 import { deleteRig, getRigs, pickRig, saveRig, useRigs } from "../rigs";
 import type { Preset } from "../types";
-import { Block, FieldRow, PushScreen } from "../components/chrome";
-import { confirm, toast } from "../components/feedback";
+import { Block, Button, confirm, Empty, ErrorText, FieldRow, Hint, Input, ListRow, makeStyles, num, PushScreen, SectionLabel, Seg, SideBySide, toast, Toggle, type } from "../ui";
 import { OptionSheet } from "../components/OptionSheet";
-import { Button, Empty, Hint, Input, ListRow, SectionLabel, Seg, Toggle } from "../components/ui";
-import { makeStyles, num, type } from "../theme";
 
 export function rigMeta(p: Preset): string {
   if (!p.synced) return "Not synced yet · saved on the phone";
@@ -132,11 +129,11 @@ export function RigEditor({ rigId }: { rigId: string | null }) {
   return (
     <PushScreen title={d.isNew ? "New rig" : "Edit rig"} sub={d.isNew ? undefined : existing?.name}
       footer={<View style={{ flex: 1, gap: 6 }}>
-        {err && <Text style={s.error}>{err}</Text>}
-        <View style={{ flexDirection: "row", gap: 8 }}>
+        {err && <ErrorText>{err}</ErrorText>}
+        <SideBySide>
           <Button style={{ flex: 1 }} kind="secondary" label="Cancel" onPress={app.pop} />
           <Button style={{ flex: 2 }} icon="check" label="Save rig" onPress={save} disabled={!!err} />
-        </View>
+        </SideBySide>
       </View>}>
       <Block>
         <SectionLabel>Name</SectionLabel>
@@ -153,10 +150,10 @@ export function RigEditor({ rigId }: { rigId: string | null }) {
         </>
       ) : (
         <Block>
-          <View style={{ flexDirection: "row", gap: 8 }}>
+          <SideBySide>
             <Input style={{ flex: 1 }} value={d.w} onChangeText={(x) => patch({ w: x })} placeholder="width mm" keyboardType="decimal-pad" />
             <Input style={{ flex: 1 }} value={d.h} onChangeText={(x) => patch({ h: x })} placeholder="height mm" keyboardType="decimal-pad" />
-          </View>
+          </SideBySide>
           <Hint>The area your recording mode uses, from the camera's spec sheet.</Hint>
         </Block>
       )}
@@ -192,7 +189,6 @@ export function RigEditor({ rigId }: { rigId: string | null }) {
 }
 
 const useStyles = makeStyles((c) => ({
-  error: { ...type("small", "semibold"), color: c.danger },
   dash: { ...type("title", "bold"), color: c.text },
   facts: { ...type("body", "semibold"), color: c.text, ...num },
 }));

@@ -10,8 +10,7 @@ import { useOnline } from "../net";
 import { extraLine, hhmm, placeLabel, rigLabel, shotTitle, tagsLabel } from "../shots";
 import { FRAME_MODES, FrameModeSeg, type FrameMode } from "../components/ShotFrame";
 import { ShotPhoto } from "../components/ShotParts";
-import { Button, Icon, PhotoTag, Sheet, useLayoutSize } from "../components/ui";
-import { FIXED, makeStyles, num, RADIUS, type, useTheme } from "../theme";
+import { BORDER, Button, FIXED, Icon, makeStyles, num, PhotoTag, RADIUS, Sheet, type, useLayoutSize, useTheme } from "../ui";
 import { store } from "../storage";
 import { plannedAt, useDayLight, windowFit, windowsText } from "./Day";
 
@@ -141,16 +140,16 @@ function Fact({ k, v, danger }: { k: string; v: string; danger?: boolean }) {
 const useStyles = makeStyles((c) => ({
   root: { flex: 1, backgroundColor: FIXED.photoBg },
   nav: { alignItems: "center", justifyContent: "center", gap: 2, alignSelf: "stretch" },
-  navPrev: { backgroundColor: c.surface, borderColor: c.border, borderRightWidth: 2 },
+  navPrev: { backgroundColor: c.surface, borderColor: c.border, borderRightWidth: BORDER.control },
   navNext: { backgroundColor: c.accent, borderColor: c.accent },
-  navOff: { backgroundColor: c.surface, borderWidth: 2, borderStyle: "dashed", borderColor: c.textDisabled },
+  navOff: { backgroundColor: c.surface, borderWidth: BORDER.control, borderStyle: "dashed", borderColor: c.textDisabled },
   navText: { ...type("label", "heavy") },
   pos: { position: "absolute", top: 10, left: 10 },
-  photoBtn: { position: "absolute", right: 10, bottom: 10, height: 48, flexDirection: "row", alignItems: "center", gap: 4, paddingLeft: 14, paddingRight: 8, borderRadius: RADIUS.sm, backgroundColor: FIXED.black, borderWidth: 1.5, borderColor: FIXED.white },
+  photoBtn: { position: "absolute", right: 10, bottom: 10, height: 48, flexDirection: "row", alignItems: "center", gap: 4, paddingLeft: 14, paddingRight: 8, borderRadius: RADIUS.sm, backgroundColor: FIXED.black, borderWidth: BORDER.badge, borderColor: FIXED.white },
   photoBtnText: { ...type("label", "heavy"), color: FIXED.white, ...num },
-  infoPortrait: { padding: 16, gap: 12, backgroundColor: c.surface, borderTopWidth: 2, borderTopColor: c.border },
-  infoSide: { width: 232, padding: 12, gap: 12, backgroundColor: c.surface, borderLeftWidth: 2, borderLeftColor: c.border, justifyContent: "space-between" },
-  stepNav: { flexDirection: "row", backgroundColor: c.surface, borderTopWidth: 2, borderTopColor: c.border },
+  infoPortrait: { padding: 16, gap: 12, backgroundColor: c.surface, borderTopWidth: BORDER.control, borderTopColor: c.border },
+  infoSide: { width: 232, padding: 12, gap: 12, backgroundColor: c.surface, borderLeftWidth: BORDER.control, borderLeftColor: c.border, justifyContent: "space-between" },
+  stepNav: { flexDirection: "row", backgroundColor: c.surface, borderTopWidth: BORDER.control, borderTopColor: c.border },
   name: { ...type("title", "bold"), color: c.text },
   place: { ...type("small", "semibold"), color: c.textDim },
   planned: { ...type("display", "heavy"), fontSize: 28, lineHeight: 34, color: c.text, ...num },

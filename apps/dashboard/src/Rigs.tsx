@@ -1,9 +1,8 @@
 import { useEffect, useState } from "preact/hooks";
 import { CAMERAS, CUSTOM_CAMERA_ID, findFormat } from "@fielder/fov-math";
 import { deletePreset, putPreset, type Preset, type Shot } from "./api";
-import { Combobox } from "./Combobox";
 import { useKeys } from "./keys";
-import { confirmDialog, cx, ErrorLine, Icon, toast } from "./ui";
+import { Button, Combobox, confirmDialog, cx, ErrorLine, Field, IconButton, Input, Panel, PanelBody, PanelFoot, PanelHead, Switch, toast, Toolbar, ToolbarSpacer, ToolbarTitle } from "./ui";
 
 interface Props { presets: Preset[]; shots: Shot[]; onChange: (p: Preset[]) => void; selectedId: string | null; onSelect: (id: string | null) => void }
 
@@ -41,7 +40,7 @@ export function RigsPage({ presets, shots, onChange, selectedId, onSelect }: Pro
   }, !d);
   return (
     <>
-      <div class="f-toolbar"><div class="f-toolbar__title"><span>Rigs</span><span class="meta num" style={{ fontSize: "var(--text-body)" }}>{presets.length}</span></div><span class="f-toolbar__sp" /><button type="button" class="f-btn f-btn--sm" onClick={() => { onSelect(null); setD(newDraft()); }}><Icon name="plus" />New rig</button></div>
+      <Toolbar><ToolbarTitle count={presets.length}>Rigs</ToolbarTitle><ToolbarSpacer /><Button size="sm" icon="plus" onClick={() => { onSelect(null); setD(newDraft()); }}>New rig</Button></Toolbar>
       <div class="f-app__body">
         <div class="f-scroll">
           <table class="f-table">
@@ -104,43 +103,39 @@ function RigEditor({ draft: d, setDraft, presets, used, onChange, onClose, onSav
   useKeys({ "Mod+s": () => void save(), Escape: onClose });
 
   return (
-    <aside class="f-panel" aria-label={d.isNew ? "New rig" : "Edit rig"}>
-      <div class="f-panel__head"><span class="f-panel__title">{d.isNew ? "New rig" : d.name}</span><button type="button" class="f-btn f-btn--ghost f-btn--sm f-btn--icon" aria-label="Close (Esc)" onClick={onClose}><Icon name="close" /></button></div>
-      <div class="f-panel__body">
-        <label class="f-field"><span class="f-field__label">Name</span><span class="f-input f-input--sm"><input value={d.name} placeholder={autoName(d)} onInput={(e) => patch({ name: (e.target as HTMLInputElement).value })} /></span><span class="f-field__help">Empty = “{autoName(d)}”</span></label>
-        <button type="button" class={cx("f-switch", custom && "is-on")} role="switch" aria-checked={custom} onClick={() => custom ? pickCamera(CAMERAS[0].id) : patch({ cameraId: CUSTOM_CAMERA_ID, formatId: null })}>
-          <span class="f-switch__track"><span class="f-switch__knob">{custom && <Icon name="check" />}</span></span>Custom sensor size
-        </button>
+    <Panel label={d.isNew ? "New rig" : "Edit rig"}>
+      <PanelHead title={d.isNew ? "New rig" : d.name}><IconButton icon="close" label="Close (Esc)" onClick={onClose} /></PanelHead>
+      <PanelBody>
+        <Field label="Name" help={<>Empty = “{autoName(d)}”</>}><Input sm value={d.name} placeholder={autoName(d)} onInput={(e) => patch({ name: (e.target as HTMLInputElement).value })} /></Field>
+        <Switch on={custom} onClick={() => custom ? pickCamera(CAMERAS[0].id) : patch({ cameraId: CUSTOM_CAMERA_ID, formatId: null })}>Custom sensor size</Switch>
         {!custom && (
           <>
-            <div class="f-field"><span class="f-field__label">Camera body</span><Combobox small options={CAMERAS.map((c) => ({ value: c.id, label: c.name }))} value={d.cameraId} clearable={false} onChange={pickCamera} /></div>
-            <div class="f-field"><span class="f-field__label">Format</span><Combobox small options={(cam?.formats ?? []).map((f) => ({ value: f.id, label: `${f.name} · ${f.widthMm} × ${f.heightMm} mm`, hint: f.windowed ? "windowed" : undefined }))} value={d.formatId} clearable={false} onChange={pickFormat} /></div>
+            <Field as="div" label="Camera body"><Combobox small options={CAMERAS.map((c) => ({ value: c.id, label: c.name }))} value={d.cameraId} clearable={false} onChange={pickCamera} /></Field>
+            <Field as="div" label="Format"><Combobox small options={(cam?.formats ?? []).map((f) => ({ value: f.id, label: `${f.name} · ${f.widthMm} × ${f.heightMm} mm`, hint: f.windowed ? "windowed" : undefined }))} value={d.formatId} clearable={false} onChange={pickFormat} /></Field>
           </>
         )}
         <div class="two-col">
-          <label class="f-field"><span class="f-field__label" style={custom ? undefined : { color: "var(--text-disabled)" }}>Width</span><span class={cx("f-input f-input--sm", !custom && "is-disabled")}><input inputMode="decimal" value={d.w} disabled={!custom} onInput={(e) => patch({ w: (e.target as HTMLInputElement).value })} /><span class="f-input__unit">mm</span></span></label>
-          <label class="f-field"><span class="f-field__label" style={custom ? undefined : { color: "var(--text-disabled)" }}>Height</span><span class={cx("f-input f-input--sm", !custom && "is-disabled")}><input inputMode="decimal" value={d.h} disabled={!custom} onInput={(e) => patch({ h: (e.target as HTMLInputElement).value })} /><span class="f-input__unit">mm</span></span></label>
+          <Field label="Width" labelStyle={custom ? undefined : { color: "var(--text-disabled)" }}><Input sm unit="mm" inputMode="decimal" value={d.w} disabled={!custom} onInput={(e) => patch({ w: (e.target as HTMLInputElement).value })} /></Field>
+          <Field label="Height" labelStyle={custom ? undefined : { color: "var(--text-disabled)" }}><Input sm unit="mm" inputMode="decimal" value={d.h} disabled={!custom} onInput={(e) => patch({ h: (e.target as HTMLInputElement).value })} /></Field>
         </div>
-        <label class="f-field"><span class="f-field__label">Speedbooster</span><span class="f-input f-input--sm" style={{ width: "140px" }}><input inputMode="decimal" value={d.sb} onInput={(e) => patch({ sb: (e.target as HTMLInputElement).value })} /><span class="f-input__unit">×</span></span><span class="f-field__help">1.00 = none · 0.71 = Metabones Ultra · 0.64 = XL</span></label>
-        <div class="f-field"><span class="f-field__label">Lens range</span>
+        <Field label="Speedbooster" help="1.00 = none · 0.71 = Metabones Ultra · 0.64 = XL"><Input sm unit="×" boxStyle={{ width: "140px" }} inputMode="decimal" value={d.sb} onInput={(e) => patch({ sb: (e.target as HTMLInputElement).value })} /></Field>
+        <Field as="div" label="Lens range" error={rangeError} help="Empty = any lens. Limits the phone’s lens strip and the rig explorer.">
           <div class="btn-row" style={{ gap: "8px" }}>
-            <span class={cx("f-input f-input--sm", rangeError && "is-error")} style={{ width: "100px" }}><input inputMode="decimal" aria-label="Shortest focal length" value={d.lmin} placeholder="min" onInput={(e) => patch({ lmin: (e.target as HTMLInputElement).value })} /><span class="f-input__unit">mm</span></span>–
-            <span class={cx("f-input f-input--sm", rangeError && "is-error")} style={{ width: "100px" }}><input inputMode="decimal" aria-label="Longest focal length" value={d.lmax} placeholder="max" onInput={(e) => patch({ lmax: (e.target as HTMLInputElement).value })} /><span class="f-input__unit">mm</span></span>
+            <Input sm unit="mm" invalid={!!rangeError} boxStyle={{ width: "100px" }} inputMode="decimal" aria-label="Shortest focal length" value={d.lmin} placeholder="min" onInput={(e) => patch({ lmin: (e.target as HTMLInputElement).value })} />–
+            <Input sm unit="mm" invalid={!!rangeError} boxStyle={{ width: "100px" }} inputMode="decimal" aria-label="Longest focal length" value={d.lmax} placeholder="max" onInput={(e) => patch({ lmax: (e.target as HTMLInputElement).value })} />
           </div>
-          {rangeError && <ErrorLine>{rangeError}</ErrorLine>}
-          <span class="f-field__help">Empty = any lens. Limits the phone’s lens strip and the rig explorer.</span>
-        </div>
+        </Field>
         <dl class="f-facts" style={{ paddingTop: "8px", borderTop: "var(--bw) solid var(--border-subtle)" }}>
           <dt>Crop</dt><dd>{crop ? `${crop.toFixed(2)} × (FF diagonal)${sb && sb !== 1 ? ` · with ×${sb}: ${(crop * sb).toFixed(2)}` : ""}` : "—"}</dd>
           {!d.isNew && <><dt>Used by</dt><dd>{used} shot{used === 1 ? "" : "s"} · they keep their framing snapshot</dd></>}
         </dl>
         {error && <ErrorLine>{error}</ErrorLine>}
-      </div>
-      <div class="f-panel__foot">
-        {!d.isNew && <button type="button" class="f-btn f-btn--danger f-btn--sm" onClick={() => void remove()}><Icon name="delete-outline" />Delete…</button>}
+      </PanelBody>
+      <PanelFoot>
+        {!d.isNew && <Button kind="danger" size="sm" icon="delete-outline" onClick={() => void remove()}>Delete…</Button>}
         <span class="grow" />
-        <button type="button" class="f-btn f-btn--sm" disabled={invalid || busy} onClick={() => void save()}>{busy ? "Saving…" : "Save rig"}<span class="f-btn__kbd">⌘S</span></button>
-      </div>
-    </aside>
+        <Button size="sm" kbd="⌘S" disabled={invalid || busy} onClick={() => void save()}>{busy ? "Saving…" : "Save rig"}</Button>
+      </PanelFoot>
+    </Panel>
   );
 }

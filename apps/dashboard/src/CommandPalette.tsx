@@ -3,7 +3,7 @@ import { useEffect, useMemo, useRef, useState } from "preact/hooks";
 import type { Location, Project, SavedView, Shot, ShootingDay } from "./api";
 import { cover, placeLabel, shotTitle } from "./format";
 import { Framed } from "./Framed";
-import { cx, Icon, Kbd } from "./ui";
+import { cx, Highlight, Icon, IconButton, Kbd, Modal, Overlay } from "./ui";
 
 export interface Command { id: string; group: string; icon: string; title: string; sub?: string; shot?: Shot; keys?: string; run: () => void }
 
@@ -23,12 +23,6 @@ interface Props {
 }
 
 const dayLabel = (date: string) => new Date(`${date}T12:00:00`).toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" });
-
-function Highlight({ text, q }: { text: string; q: string }) {
-  const i = q ? text.toLowerCase().indexOf(q) : -1;
-  if (i < 0) return <>{text}</>;
-  return <>{text.slice(0, i)}<mark>{text.slice(i, i + q.length)}</mark>{text.slice(i + q.length)}</>;
-}
 
 /** ⌘K: jump to a shot, location, view, project or day, or run an action. */
 export function CommandPalette(p: Props) {
@@ -59,8 +53,7 @@ export function CommandPalette(p: Props) {
   };
   let lastGroup = "";
   return (
-    <div class="overlay overlay--top" data-overlay onKeyDown={onKey}>
-      <div class="overlay__scrim" onClick={p.onClose} />
+    <Overlay top onClose={p.onClose} onKeyDown={onKey}>
       <div class="f-cmdk" role="dialog" aria-modal="true" aria-label="Go to">
         <div class="f-cmdk__input"><Icon name="magnify" /><input autoFocus value={q} placeholder="Go to a shot, location, view, day or project… or run an action" aria-label="Search" onInput={(e) => setQ((e.target as HTMLInputElement).value)} /><Kbd>Esc</Kbd></div>
         <div class="f-cmdk__list" ref={list} role="listbox">
@@ -82,7 +75,7 @@ export function CommandPalette(p: Props) {
         </div>
         <div class="f-cmdk__foot"><span><Kbd>↑</Kbd> <Kbd>↓</Kbd> move</span><span><Kbd>↵</Kbd> open</span><span><Kbd>Esc</Kbd> close</span></div>
       </div>
-    </div>
+    </Overlay>
   );
 }
 
@@ -96,17 +89,14 @@ const SHORTCUTS: [string, [string, string][]][] = [
 
 export function ShortcutSheet({ onClose }: { onClose: () => void }) {
   return (
-    <div class="overlay" data-overlay onKeyDown={(e) => { if (e.key === "Escape" || e.key === "?") { e.stopPropagation(); onClose(); } }}>
-      <div class="overlay__scrim" onClick={onClose} />
-      <div class="f-modal" role="dialog" aria-modal="true" aria-label="Keyboard shortcuts" style={{ width: "720px" }} tabIndex={-1} ref={(el) => el?.focus()}>
-        <div class="f-modal__head"><h2 class="f-modal__title">Keyboard shortcuts</h2><button type="button" class="f-btn f-btn--ghost f-btn--icon" aria-label="Close (Esc)" onClick={onClose}><Icon name="close" /></button></div>
+    <Modal title="Keyboard shortcuts" width="720px" tabIndex={-1} modalRef={(el) => el?.focus()} onClose={onClose} onKeyDown={(e) => { if (e.key === "Escape" || e.key === "?") { e.stopPropagation(); onClose(); } }}
+      headAction={<IconButton icon="close" label="Close (Esc)" size="md" onClick={onClose} />}>
         <div class="f-modal__body shortcut-grid">
           {SHORTCUTS.map(([group, rows]) => (
             <section key={group}><h3 class="section-title">{group}</h3><dl class="f-facts">{rows.map(([k, t]) => <Fragment key={k}><dt><Kbd>{k}</Kbd></dt><dd>{t}</dd></Fragment>)}</dl></section>
           ))}
           <p class="meta" style={{ gridColumn: "1 / -1", margin: 0 }}>Single keys never fire while you type in a field.</p>
         </div>
-      </div>
-    </div>
+    </Modal>
   );
 }

@@ -2,7 +2,7 @@ import { label, lightLabel } from "@fielder/vocab";
 import type { Shot } from "./api";
 import { cover, placeLabel, rigLabel, shotTitle } from "./format";
 import { Framed, type MaskMode } from "./Framed";
-import { cx, Icon, SeqBadge, StateMarker } from "./ui";
+import { cx, ProjectTag, SeqBadge, StateMarker } from "./ui";
 
 /** "Place · INT · Dusk / Night", falling back to the rig for untagged shots. */
 export const shotSub = (s: Shot) => [placeLabel(s) || rigLabel(cover(s)), label(s.int_ext).toUpperCase(), lightLabel(s.light, s.artificial)].filter(Boolean).join(" · ");
@@ -19,7 +19,7 @@ export function ShotCard({ shot, mask, project, focused, onClick, onFocus }: { s
       <div class="f-card__body">
         <span class="f-card__title">{shotTitle(shot)}</span>
         <span class="f-card__sub">{shotSub(shot)}</span>
-        {project && <span class="f-ptag" style={{ alignSelf: "flex-start" }} title={`Project: ${project}`}><Icon name="folder-outline" />{project}</span>}
+        {project && <ProjectTag icon="folder-outline" style={{ alignSelf: "flex-start" }} title={`Project: ${project}`}>{project}</ProjectTag>}
       </div>
     </button>
   );

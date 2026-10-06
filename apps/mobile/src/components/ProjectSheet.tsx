@@ -1,9 +1,8 @@
 import { useState } from "react";
-import { Text, View } from "react-native";
+import { Text } from "react-native";
 import * as Crypto from "expo-crypto";
 import type { ProjectEntry } from "../types";
-import { makeStyles, type } from "../theme";
-import { Button, Hint, Input, ListRow, Sheet } from "./ui";
+import { Button, Hint, Input, ListRow, makeStyles, Sheet, SheetList, type } from "../ui";
 
 /** Picked an existing project, or created one (`created` is then the new entry, not yet synced). */
 export type PickProject = (id: string, created: ProjectEntry | null) => void;
@@ -26,12 +25,12 @@ export function ProjectSheet({ visible, projects, activeId, onPick, onClose }: {
     <Sheet visible={visible} title="Project" sub="Every shot goes into the active project" onClose={onClose} height={0.7}
       footer={<Button kind="secondary" icon="plus" label="New project" onPress={() => setCreating(true)} />}>
       {projects.length > SEARCH_FROM && <Input value={q} onChangeText={setQ} placeholder="Search projects" autoCapitalize="none" />}
-      <View style={{ marginHorizontal: -20 }}>
+      <SheetList flushTop={false}>
         {shown.map((p) => (
           <ListRow key={p.id} icon={p.synced ? "folder-outline" : "folder-sync-outline"} title={p.name} meta={projectMeta(p)} selected={p.id === activeId} trailing={null}
             onPress={() => { setQ(""); onPick(p.id, null); }} />
         ))}
-      </View>
+      </SheetList>
       {shown.length === 0 && <Hint>{projects.length ? "No project matches." : "No projects yet. Create the first one."}</Hint>}
     </Sheet>
   );

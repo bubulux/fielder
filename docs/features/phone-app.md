@@ -10,12 +10,12 @@ Designed in Claude Design (2026-09-28). The IA is organised around what happens 
   - **Pick a project**: when none is active, or the active one no longer exists. "New project" works offline.
 - **Pushed screens** replace the tab (the tab bar is hidden, the tab stays mounted underneath). The stack is `Route` in `appState.tsx`: Uploads, Shot details, Correct position, the focused map, Step-through, Rigs & lenses, the Rig editor and the Setup sub-screens. Android back pops one; on a tab it returns to Shoot first. There is no navigation library.
 - **Sheet vs screen**: a sheet for a single choice that returns you where you were (project, rig pick, lens, tag fields). A full screen for anything with its own photo or map.
-- **AppHeader** (`components/chrome.tsx`), 64 dp, on every screen except Shoot:
+- **AppHeader** (`ui/chrome.tsx`), 64 dp, on every screen except Shoot:
   - Without a title: the **project pill** (tap opens the Project sheet; an amber "Pick a project" when none) and the **sync icon** (tap opens Uploads).
   - With a title: back/close, title + sub, an optional trailing action.
   - The **offline banner** pins under it whenever the server can't be reached.
 - **Sync state** (`src/sync.ts`): stuck (red, count) › uploading › offline › waiting (amber, count) › all on the server. "Offline" means the last API call failed with a network error (`src/net.ts`). While offline and signed in, the app retries every 20 s.
-- **Confirm sheets and toasts** (`components/feedback.tsx`) replace Android alerts: `confirm()` (title as a question, one sentence of consequence, Keep | destructive, optional safe alternative), `notice()`, `toast()` (2.5 s; 4 s with Undo).
+- **Confirm sheets and toasts** (`ui/dialogs.tsx`) replace Android alerts: `confirm()` (title as a question, one sentence of consequence, Keep | destructive, optional safe alternative), `notice()`, `toast()` (2.5 s; 4 s with Undo).
 - **Layout rules**: 52 dp buttons, 56 dp viewfinder controls, 76 dp shutter; 32 dp clearance at the camera cutout and the nav bar, 16 dp sides. Decisions are pinned in the thumb zone (`ActionBar`), in a right-hand column in landscape.
 
 ## Tabs and screens
@@ -53,13 +53,8 @@ Designed in Claude Design (2026-09-28). The IA is organised around what happens 
 
 ## Shared pieces
 
-- `components/ui.tsx`:
-  - `Icon`, `Button` (primary, approve, archive, secondary/ghost, danger, dangerSolid; `big` for landscape action columns)
-  - `IconButton`, `Chip`, `Seg` (`size="lg"`, `block`), `Input`
-  - `Sheet` (fixed `height`, lead/done labels, pinned `footer`)
-  - `Toggle` (64 dp row, whole row toggles), `Switch`, `Checkbox`, `ListRow`
-  - `StateMarker` (`lg`), `SeqBadge`, `PhotoTag`, `Banner`, `Empty`, `Skeleton`, `SectionLabel`, `useLayoutSize`
-- `components/chrome.tsx`: `AppHeader`, `PushScreen`, `Block`, `OfflineBanner`, `SyncIcon`, `SyncCard`, `Badge`, `FieldRow`, `ActionBar`.
+- `ui/` (component library, imported as `../ui`; files and components are listed in [design](../design.md#phone-component-library)). Screens build from it; a style that two screens copy belongs there.
+- `ui/chrome.tsx`: `AppHeader`, `PushScreen`, `Block`, `OfflineBanner`, `SyncIcon`, `SyncCard`, `Badge`, `FieldRow`, `ActionBar`.
 - `components/TagEditor.tsx`: the one tag editor (Tag, Review edit, Shot details edit), see [review and tagging](review-and-tagging.md). `components/OptionSheet.tsx`: chips up to 12 options, a search list above, checkboxes for multiple.
 - `components/gestures.ts`: `useSwipe` (PanResponder: horizontal swipe, double-tap).
 - Data: `src/shots.ts` (`useShots`, labels), `src/rigs.ts` (rigs and the one in use, shared by Shoot and Setup), `src/storage.ts` (`usePref` for per-screen choices).

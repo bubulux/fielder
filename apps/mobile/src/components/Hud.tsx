@@ -1,7 +1,6 @@
 import type { ReactNode } from "react";
 import { Pressable, Text } from "react-native";
-import { FIXED, makeStyles, num, type, useTheme } from "../theme";
-import { Icon } from "./ui";
+import { BORDER, FIXED, Icon, makeStyles, num, type, useTheme } from "../ui";
 
 /** Solid chip over the camera image (chrome colours, or warn / danger fills), never translucent text. */
 export function HudChip({ icon, kind, iconColor, onPress, label, children }: { icon: string; kind?: "warn" | "danger"; iconColor?: string; onPress?: () => void; label?: string; children: ReactNode }) {
@@ -19,7 +18,7 @@ export function HudChip({ icon, kind, iconColor, onPress, label, children }: { i
 }
 
 const useStyles = makeStyles((c) => ({
-  chip: { flexDirection: "row", alignItems: "center", gap: 6, maxWidth: "100%", minHeight: 32, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 6, backgroundColor: c.chromeBg, borderWidth: 1.5, borderColor: c.chromeBorder },
+  chip: { flexDirection: "row", alignItems: "center", gap: 6, maxWidth: "100%", minHeight: 32, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 6, backgroundColor: c.chromeBg, borderWidth: BORDER.badge, borderColor: c.chromeBorder },
   warn: { backgroundColor: c.warn, borderColor: FIXED.black },
   danger: { backgroundColor: FIXED.record, borderColor: FIXED.white },
   text: { ...type("hud", "bold"), ...num, flexShrink: 1 },

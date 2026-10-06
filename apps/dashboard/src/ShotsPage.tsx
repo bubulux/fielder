@@ -1,4 +1,3 @@
-import type { ComponentChildren } from "preact";
 import { useEffect, useMemo, useRef, useState } from "preact/hooks";
 import { label, lightLabel, SHOT_STATES, STATE_ICONS } from "@fielder/vocab";
 import { deleteShot, type SavedView, type Shot } from "./api";
@@ -10,7 +9,7 @@ import { ShotsMap } from "./MapView";
 import { ModeSwitch } from "./ModeSwitch";
 import { ShotCard } from "./ShotCard";
 import { filterPills, ruleCount, runQuery, type Layout, type RefLists, type ShotsQuery, type Sort, type StateFilter } from "./shotsQuery";
-import { confirmDialog, cx, Empty, Icon, Kbd, Seg, SeqBadge, StateMarker, toast } from "./ui";
+import { Banner, Button, Checkbox, confirmDialog, cx, Empty, Icon, IconButton, LinkButton, MenuItem, Popover, ProjectTag, SearchInput, Seg, SeqBadge, StateMarker, toast, Toolbar, ToolbarSpacer, ToolbarTitle } from "./ui";
 
 interface Props {
   shots: Shot[] | null;
@@ -72,45 +71,36 @@ export function ShotsPage(p: Props) {
 
   return (
     <>
-      <div class="f-toolbar">
-        <div class="f-toolbar__title">
-          {p.view && <Icon name="filter-variant" />}
-          <span>{title}</span>
-          {p.edited && <span class="f-edited">Edited</span>}
-        </div>
+      <Toolbar>
+        <ToolbarTitle icon={p.view ? "filter-variant" : undefined} after={p.edited && <span class="f-edited">Edited</span>}>{title}</ToolbarTitle>
         {p.view && p.edited && (
           <div class="btn-row" style={{ gap: "6px" }}>
-            <button type="button" class="f-btn f-btn--sm" onClick={p.onSaveView}>Save</button>
-            <button type="button" class="f-btn f-btn--secondary f-btn--sm" onClick={p.onSaveAsNew}>Save as new…</button>
-            <button type="button" class="f-btn f-btn--ghost f-btn--sm" onClick={p.onRevert}>Revert</button>
+            <Button size="sm" onClick={p.onSaveView}>Save</Button>
+            <Button kind="secondary" size="sm" onClick={p.onSaveAsNew}>Save as new…</Button>
+            <Button kind="ghost" size="sm" onClick={p.onRevert}>Revert</Button>
           </div>
         )}
-        {!p.view && rules > 0 && <button type="button" class="f-btn f-btn--secondary f-btn--sm" onClick={p.onSaveAsNew}><Icon name="content-save-outline" />Save view…</button>}
+        {!p.view && rules > 0 && <Button kind="secondary" size="sm" icon="content-save-outline" onClick={p.onSaveAsNew}>Save view…</Button>}
         {p.view && (
           <div class="menu-anchor">
-            <button type="button" class="f-btn f-btn--ghost f-btn--sm f-btn--icon" aria-label="View menu: rename, delete" aria-expanded={menu === "view"} onClick={() => setMenu(menu === "view" ? null : "view")}><Icon name="dots-horizontal" /></button>
+            <IconButton icon="dots-horizontal" label="View menu: rename, delete" aria-expanded={menu === "view"} onClick={() => setMenu(menu === "view" ? null : "view")} />
             {menu === "view" && (
               <Popover onClose={() => setMenu(null)}>
-                <button type="button" class="f-menu__item" onClick={() => { setMenu(null); p.onViewMenu("rename"); }}><Icon name="pencil-outline" />Rename…</button>
+                <MenuItem icon="pencil-outline" onClick={() => { setMenu(null); p.onViewMenu("rename"); }}>Rename…</MenuItem>
                 <div class="f-menu__sep" />
-                <button type="button" class="f-menu__item f-menu__item--danger" onClick={() => { setMenu(null); p.onViewMenu("delete"); }}><Icon name="delete-outline" />Delete view…</button>
+                <MenuItem icon="delete-outline" danger onClick={() => { setMenu(null); p.onViewMenu("delete"); }}>Delete view…</MenuItem>
               </Popover>
             )}
           </div>
         )}
-        <div class="f-toolbar__sp" />
-        <label class="f-input f-input--sm f-input--search">
-          <i class="mdi mdi-magnify f-input__icon" aria-hidden="true" />
-          <input ref={search} value={query.search} placeholder="Name or location" aria-label="Search shots" onInput={(e) => setQuery({ search: (e.target as HTMLInputElement).value })} />
-          {query.search ? <button type="button" class="f-btn f-btn--ghost f-btn--sm f-btn--icon" style={{ height: "24px", width: "24px", marginRight: "4px" }} aria-label="Clear search" onClick={() => setQuery({ search: "" })}><Icon name="close" /></button> : <Kbd>/</Kbd>}
-        </label>
-        <button type="button" class={cx("f-btn f-btn--sm", !p.panel && "f-btn--secondary")} aria-pressed={p.panel} onClick={() => p.onPanel(!p.panel)}>
-          <Icon name="filter-variant" />Filter{rules > 0 && <span class="f-btn__kbd">{rules}</span>}
-        </button>
+        <ToolbarSpacer />
+        <SearchInput inputRef={search} value={query.search} placeholder="Name or location" aria-label="Search shots" onInput={(e) => setQuery({ search: (e.target as HTMLInputElement).value })}
+          after={query.search ? <IconButton icon="close" label="Clear search" style={{ height: "24px", width: "24px", marginRight: "4px" }} onClick={() => setQuery({ search: "" })} /> : undefined} />
+        <Button kind={p.panel ? "primary" : "secondary"} size="sm" icon="filter-variant" kbd={rules > 0 && rules} aria-pressed={p.panel} onClick={() => p.onPanel(!p.panel)}>Filter</Button>
         <Seg label="Layout" value={p.layout} onChange={p.onLayout} options={[{ id: "grid", icon: "view-grid-outline", label: "Grid" }, { id: "list", icon: "view-list-outline", label: "List" }, { id: "map", icon: "map-outline", label: "Map" }]} />
         <ModeSwitch value={p.mask} onChange={p.onMask} />
-      </div>
-      <div class="f-toolbar f-toolbar--sub">
+      </Toolbar>
+      <Toolbar sub>
         <Seg label="Review state" value={query.state} onChange={(state) => setQuery({ state })} options={(["all", ...SHOT_STATES] as StateFilter[]).map(stateOpt)} />
         {pills.length > 0 && (
           <div class="f-fpills">
@@ -120,31 +110,31 @@ export function ShotsPage(p: Props) {
                 <button type="button" class="f-fpill__x" aria-label="Remove rule" onClick={() => removePill(pl.index)}><Icon name="close" /></button>
               </span>
             ))}
-            <button type="button" class="f-linkbtn" style={{ fontSize: "var(--text-caption)" }} onClick={() => setQuery({ filter: { ...query.filter, rules: [] } })}>Clear</button>
+            <LinkButton onClick={() => setQuery({ filter: { ...query.filter, rules: [] } })}>Clear</LinkButton>
           </div>
         )}
-        <div class="f-toolbar__sp" />
+        <ToolbarSpacer />
         <span class="meta num">{resultLine}</span>
         <div class="menu-anchor">
-          <button type="button" class="f-btn f-btn--ghost f-btn--sm" aria-expanded={menu === "sort"} onClick={() => setMenu(menu === "sort" ? null : "sort")}>{SORTS.find((s) => s.id === query.sort)?.label}<Icon name="chevron-down" /></button>
+          <Button kind="ghost" size="sm" iconAfter="chevron-down" aria-expanded={menu === "sort"} onClick={() => setMenu(menu === "sort" ? null : "sort")}>{SORTS.find((s) => s.id === query.sort)?.label}</Button>
           {menu === "sort" && (
             <Popover onClose={() => setMenu(null)} right>
-              {SORTS.map((s) => <button key={s.id} type="button" class={cx("f-menu__item", s.id === query.sort && "is-sel")} onClick={() => { setMenu(null); setQuery({ sort: s.id }); }}><Icon name={s.id === query.sort ? "check" : "blank"} />{s.label}</button>)}
+              {SORTS.map((s) => <MenuItem key={s.id} icon={s.id === query.sort ? "check" : "blank"} selected={s.id === query.sort} onClick={() => { setMenu(null); setQuery({ sort: s.id }); }}>{s.label}</MenuItem>)}
             </Popover>
           )}
         </div>
-      </div>
+      </Toolbar>
       <div class="f-app__body">
         {p.error && !p.shots ? (
           <div class="f-scroll"><div style={{ padding: "16px" }}><LoadError message={p.error} onRetry={p.onReload} /></div></div>
         ) : !result ? (
           <div class="f-scroll"><div class="shot-grid">{Array.from({ length: 12 }, (_, i) => <div key={i} class="skel-card"><div class="f-skel" style={{ aspectRatio: "4 / 3", borderRadius: 0 }} /><div style={{ padding: "10px", display: "flex", flexDirection: "column", gap: "6px" }}><div class="f-skel" style={{ height: "14px", width: "70%" }} /><div class="f-skel" style={{ height: "10px", width: "50%" }} /></div></div>)}</div></div>
         ) : total === 0 ? (
-          <Empty icon="camera-off-outline" title={`No shots in ${p.scopeName} yet`} actions={<button type="button" class="f-btn f-btn--secondary" onClick={p.onSwitchScope}>Switch scope</button>}>
+          <Empty icon="camera-off-outline" title={`No shots in ${p.scopeName} yet`} actions={<Button kind="secondary" onClick={p.onSwitchScope}>Switch scope</Button>}>
             Shots appear here after the phone uploads them. Pick another scope to browse other projects.
           </Empty>
         ) : shots.length === 0 && p.layout !== "map" ? (
-          <Empty icon="filter-remove-outline" title="No shots match" actions={<><button type="button" class="f-btn f-btn--secondary" onClick={() => p.onPanel(true)}>Edit filter</button><button type="button" class="f-btn f-btn--ghost" onClick={() => onQuery({ ...query, filter: { ...query.filter, rules: [] }, search: "", state: "all" })}>Clear filter</button></>}>
+          <Empty icon="filter-remove-outline" title="No shots match" actions={<><Button kind="secondary" onClick={() => p.onPanel(true)}>Edit filter</Button><Button kind="ghost" onClick={() => onQuery({ ...query, filter: { ...query.filter, rules: [] }, search: "", state: "all" })}>Clear filter</Button></>}>
             None of the {total} shots pass {rules > 0 ? "all rules" : "the search and state switch"}. Remove a rule or widen a range.
           </Empty>
         ) : p.layout === "map" ? (
@@ -162,26 +152,7 @@ export function ShotsPage(p: Props) {
 }
 
 export function LoadError({ message, onRetry }: { message: string; onRetry: () => void }) {
-  return (
-    <div class="f-banner f-banner--danger" role="alert">
-      <Icon name="alert-circle" />
-      <div class="f-banner__text"><span class="f-banner__title">Couldn’t load shots</span><span class="f-banner__meta">{message}</span></div>
-      <button type="button" class="f-btn f-btn--secondary f-btn--sm" onClick={onRetry}>Retry</button>
-    </div>
-  );
-}
-
-/** A small menu anchored under its button; closes on outside click or Esc. */
-export function Popover({ children, onClose, right }: { children: ComponentChildren; onClose: () => void; right?: boolean }) {
-  const box = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    const close = (e: MouseEvent) => { if (!box.current?.parentElement?.contains(e.target as Node)) onClose(); };
-    const esc = (e: KeyboardEvent) => { if (e.key === "Escape") { e.stopPropagation(); onClose(); } };
-    document.addEventListener("mousedown", close);
-    window.addEventListener("keydown", esc, true);
-    return () => { document.removeEventListener("mousedown", close); window.removeEventListener("keydown", esc, true); };
-  }, []);
-  return <div ref={box} class="f-menu popover" style={right ? { right: 0 } : { left: 0 }}>{children}</div>;
+  return <Banner role="alert" title="Couldn’t load shots" meta={message} action={<Button kind="secondary" size="sm" onClick={onRetry}>Retry</Button>} />;
 }
 
 function ShotsGrid({ shots, isAll, mask, onOpen }: { shots: Shot[]; isAll: boolean; mask: MaskMode; onOpen: (s: Shot) => void }) {
@@ -259,7 +230,7 @@ function ShotsList({ shots, isAll, mask, onOpen, onDeleted }: { shots: Shot[]; i
     <div class="f-scroll" style={{ position: "relative" }}>
       <table class="f-table">
         <thead><tr>
-          <th class="is-cell-check"><button type="button" class={cx("f-check", all && "is-checked", some && "is-indeterminate")} aria-label={all ? "Deselect all" : "Select all"} onClick={() => setSelected(all ? new Set() : new Set(shots.map((s) => s.id)))}><span class="f-check__box">{all ? <Icon name="check" /> : some ? <Icon name="minus" /> : null}</span></button></th>
+          <th class="is-cell-check"><Checkbox checked={all} indeterminate={some} aria-label={all ? "Deselect all" : "Select all"} onClick={() => setSelected(all ? new Set() : new Set(shots.map((s) => s.id)))} /></th>
           <th style={{ width: "72px" }} />
           <th>Name</th>{isAll && <th>Project</th>}<th>Location</th><th>State</th><th>INT/EXT</th><th>Light</th><th>Rig · lens</th><th class="is-num">Photos</th><th>Captured</th>
         </tr></thead>
@@ -267,11 +238,11 @@ function ShotsList({ shots, isAll, mask, onOpen, onDeleted }: { shots: Shot[]; i
           {shots.map((s, i) => (
             <tr key={s.id} class={cx(selected.has(s.id) && "is-selected", i === focus && "is-focus")} onClick={(e) => { setFocus(i); if (e.shiftKey || e.metaKey || e.ctrlKey) toggle(i, e.shiftKey); else onOpen(s); }}>
               <td class="is-cell-check" onClick={(e) => { e.stopPropagation(); setFocus(i); toggle(i, e.shiftKey); }}>
-                <span class={cx("f-check", selected.has(s.id) && "is-checked")} role="checkbox" aria-checked={selected.has(s.id)} aria-label={`Select ${shotTitle(s)}`}><span class="f-check__box">{selected.has(s.id) && <Icon name="check" />}</span></span>
+                <Checkbox as="span" checked={selected.has(s.id)} role="checkbox" aria-checked={selected.has(s.id)} aria-label={`Select ${shotTitle(s)}`} />
               </td>
               <td><div class="f-table__thumb"><Framed photo={cover(s)} mode={mask} /></div></td>
               <td class="is-strong"><div style={{ display: "flex", alignItems: "center", gap: "6px", maxWidth: "240px" }}><span style={{ overflow: "hidden", textOverflow: "ellipsis" }}>{shotTitle(s)}</span>{s.photos.length > 1 && <SeqBadge count={s.photos.length} small />}</div></td>
-              {isAll && <td><span class="f-ptag">{s.project_name}</span></td>}
+              {isAll && <td><ProjectTag>{s.project_name}</ProjectTag></td>}
               <td>{s.location_name ?? <span class="is-dim">—</span>}</td>
               <td><StateMarker state={s.state} /></td>
               <td>{label(s.int_ext).toUpperCase() || <span class="is-dim">—</span>}</td>
@@ -288,10 +259,10 @@ function ShotsList({ shots, isAll, mask, onOpen, onDeleted }: { shots: Shot[]; i
           <div class="f-selbar">
             <Icon name="checkbox-multiple-marked" size={20} />
             <span>{selected.size} selected</span>
-            {!all && <button type="button" class="f-linkbtn" style={{ fontSize: "var(--text-small)" }} onClick={() => setSelected(new Set(shots.map((s) => s.id)))}>Select all {shots.length}</button>}
+            {!all && <LinkButton size="small" onClick={() => setSelected(new Set(shots.map((s) => s.id)))}>Select all {shots.length}</LinkButton>}
             <span class="f-selbar__sp" />
-            <button type="button" class="f-btn f-btn--ghost f-btn--sm" onClick={() => setSelected(new Set())}>Clear<span class="f-btn__kbd">Esc</span></button>
-            <button type="button" class="f-btn f-btn--danger f-btn--sm" disabled={busy} onClick={() => void removeSelected()}><Icon name="delete-outline" />{busy ? "Deleting…" : `Delete ${selected.size} shot${selected.size === 1 ? "" : "s"}…`}</button>
+            <Button kind="ghost" size="sm" kbd="Esc" onClick={() => setSelected(new Set())}>Clear</Button>
+            <Button kind="danger" size="sm" icon="delete-outline" disabled={busy} onClick={() => void removeSelected()}>{busy ? "Deleting…" : `Delete ${selected.size} shot${selected.size === 1 ? "" : "s"}…`}</Button>
           </div>
         </div>
       )}

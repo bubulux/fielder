@@ -36,9 +36,47 @@ Switching:
 
 | Surface | Files |
 | --- | --- |
-| Phone | `apps/mobile/src/theme.tsx`: the Sun and Set palettes (from `fielder-tokens.rn.json`), `FIXED` colours for things over photos, the type scale (`type(step, weight)`: the custom font needs a family per weight, so use it instead of `fontWeight`), `RADIUS`, `SIZE`, `BORDER`, `ThemeProvider`, `useTheme()` and `makeStyles()` (a themed `StyleSheet`, built once per theme). `components/ui.tsx` holds the primitives (`Icon`, `Button`, `IconButton`, `Chip`, `Seg`, `Toggle`, `Switch`, `Checkbox`, `ListRow`, `Input`, `Sheet`, `StateMarker`, `SeqBadge`, `PhotoTag`, `Banner`, `Empty`, `Skeleton`, `SectionLabel`); `components/chrome.tsx` the redesign's additions (`AppHeader`, `PushScreen`, `SyncIcon`/`SyncCard`, `FieldRow`, `ActionBar`, `OfflineBanner`) and `components/feedback.tsx` the confirm sheets and toasts ([phone app](features/phone-app.md)). Icons come from `@expo/vector-icons/MaterialCommunityIcons`; the font from `@expo-google-fonts/atkinson-hyperlegible-next` (only the five weights used are imported, per weight). Maps in WebViews share `components/mapHtml.ts`. Control borders are 2 dp and touch targets at least 48 dp. |
-| Dashboard | `apps/dashboard/src/design/*.css`: tokens (`colors.css`, `typography.css`, `spacing.css`) and component classes (`f-btn`, `f-tab`, `f-seg`, `f-chip`, `f-input`, `f-combo__*`, `f-card`, `f-state`, `f-seq`, `f-tl__*`, `f-wx__*`, `f-pin`, …), copied unchanged from the export. `design/dashboard.css` holds the rework additions: app shell, sidebar, key-hint bar, toolbar, side panel, inspector sections, data table, selection bar, rule builder, menu, command palette, save status, JSON editor, stage, plan grid. `src/ui.tsx` wraps the common ones (`Icon`, `Kbd`, `Seg`, `Chip`, `LightChips`, `StateMarker`, `SeqBadge`, `Empty`, `Loading`, `ErrorLine`, `SaveStatus`, dialogs and toasts). `src/styles.css` holds only the layouts and must use tokens. Fonts and the MDI webfont are loaded in `index.html`. |
+| Phone | `apps/mobile/src/ui/` is the component library, imported as `../ui` (see below). `ui/theme.tsx`: the Sun and Set palettes (from `fielder-tokens.rn.json`), `FIXED` colours for things over photos, the type scale (`type(step, weight)`: the custom font needs a family per weight, so use it instead of `fontWeight`), `RADIUS`, `SIZE`, `BORDER`, `ThemeProvider`, `useTheme()` and `makeStyles()` (a themed `StyleSheet`, built once per theme). The primitives are split by design-system group in `ui/` (`Icon`, `Button`, `IconButton`, `Chip`, `Seg`, `Toggle`, `Switch`, `Checkbox`, `ListRow`, `Input`, `Sheet`, `StateMarker`, `SeqBadge`, `PhotoTag`, `Banner`, `Empty`, `Skeleton`, `SectionLabel`); `ui/chrome.tsx` the redesign's additions (`AppHeader`, `PushScreen`, `SyncIcon`/`SyncCard`, `FieldRow`, `ActionBar`, `OfflineBanner`) and `ui/dialogs.tsx` the confirm sheets and toasts ([phone app](features/phone-app.md)). Icons come from `@expo/vector-icons/MaterialCommunityIcons`; the font from `@expo-google-fonts/atkinson-hyperlegible-next` (only the five weights used are imported, per weight). Maps in WebViews share `components/mapHtml.ts`. Control borders are 2 dp and touch targets at least 48 dp. |
+| Dashboard | `apps/dashboard/src/ui/design/*.css`: tokens (`colors.css`, `typography.css`, `spacing.css`) and component classes (`f-btn`, `f-tab`, `f-seg`, `f-chip`, `f-input`, `f-combo__*`, `f-card`, `f-state`, `f-seq`, `f-tl__*`, `f-wx__*`, `f-pin`, …), copied unchanged from the export. `design/dashboard.css` holds the rework additions: app shell, sidebar, key-hint bar, toolbar, side panel, inspector sections, data table, selection bar, rule builder, menu, command palette, save status, JSON editor, stage, plan grid. `src/ui/` is the component library that renders them (see below); its own CSS additions are in `ui/design/components.css`. `src/styles.css` holds only page layouts and must use tokens (`--space-*`, `--control-*`, `--text-*`). Fonts and the MDI webfont are loaded in `index.html`. |
 
 **App icon and mark** (Claude Design, "Frame in a frame"; sources in the gitignored `references/Fielder app icon design/`): four viewfinder corners (the phone) around a solid frame (the cinema camera), white on cobalt `#0040D8`. Dashboard icons in `apps/dashboard/public/icons/`; Android: `apps/mobile/assets/icon.png`, the adaptive foreground and monochrome PNGs, background colour `#0040D8` in `app.json` (shown in APK builds; Expo Go shows its own icon). Inside the apps the mark is `Mark` (dashboard `ui.tsx`, an inline SVG; phone `components/ui.tsx`, drawn with Views): corners in the text colour, the frame in the accent, so it works in Sun and Set.
 
-To update the design system: re-export from Claude Design, copy the changed CSS over `apps/dashboard/src/design/`, carry colour changes into the palettes in `apps/mobile/src/theme.tsx`, and check the screens that use them.
+## Dashboard component library
+
+`apps/dashboard/src/ui/`, imported as `./ui`. Pages build from these instead of writing `f-*` markup, so a variant or size is changed in one place. Files follow the design system's groups:
+
+| File | Components |
+| --- | --- |
+| `core.tsx` | `cx`, `Icon` (optional slot class), `Mark`, `Kbd`, `Highlight` |
+| `actions.tsx` | `Button` (kind, size, icon, iconAfter, kbd hint), `IconButton` (ghost/sm by default, needs a label), `ReorderButtons` (up, down, remove), `LinkButton` |
+| `forms.tsx` | `Field` (label, help, error), `Input` (sm, unit, invalid, after), `SearchInput`, `Checkbox`, `Switch`, `Select`, `Chip`, `LightChips`; `Combobox.tsx` |
+| `navigation.tsx` | `Seg` |
+| `data.tsx` | `ListRow`, `MenuItem`, `StateMarker`, `SeqBadge`, `ProjectTag` |
+| `feedback.tsx` | `Banner`, `Empty` (a whole page), `EmptyNote` (inside a list), `Loading`, `Spinner`, `ProgressBar`, `ErrorLine`, `SaveStatus`, `toast`/`ToastHost` |
+| `overlays.tsx` | `Overlay`, `Modal`, `Popover`, `confirmDialog`/`promptDialog`/`ConfirmHost` |
+| `layout.tsx` | `Toolbar`, `ToolbarTitle`, `ToolbarSpacer`, `Panel`, `PanelHead`, `PanelBody`, `PanelFoot` |
+| `hooks.ts` | `useOutsideClick` |
+
+Domain pieces that draw photos (`Framed`, `FramedThumb`, `ShotCard`) stay next to the pages because they depend on the frame math in `format.ts`.
+
+## Phone component library
+
+`apps/mobile/src/ui/`, imported as `../ui` (`./src/ui` from `App.tsx`). Screens and sheets build from these; numbers come from the tokens, not literals.
+
+| File | Contents |
+| --- | --- |
+| `theme.tsx` | Palettes, `FIXED`, `FONT`, `type(step, weight)`, `num`, `SPACE`, `RADIUS`, `SIZE` (incl. `header` 64, `actionColumn` 148), `BORDER` (`control` 2, `badge` 1.5), `ThemeProvider`, `useTheme`, `makeStyles` |
+| `core.tsx` | `useLayoutSize`, `Icon`, `Mark`, `SectionLabel`, `SectionHeading` (padded, between full-width rows), `Hint` |
+| `actions.tsx` | `Button`, `IconButton`, `SideBySide` (two controls 8 dp apart) |
+| `forms.tsx` | `Chip`, `ChipRow`, `ChipGrid`/`ChipCell`, `Input`, `Switch`, `Toggle`, `Checkbox`, `Row` |
+| `navigation.tsx` | `Seg` |
+| `data.tsx` | `StateMarker`, `SeqBadge`, `PhotoTag`, `ListRow` |
+| `feedback.tsx` | `Banner`, `Empty`, `Skeleton`, `ErrorText`, `useRefreshControl` |
+| `overlays.tsx` | `Sheet`, `SheetList` (edge-to-edge rows), `SheetSearch` |
+| `dialogs.tsx` | `confirm`, `notice`, `ConfirmHost`, `toast`, `ToastHost`, `useToastOffset` |
+| `chrome.tsx` | `AppHeader`, `PushScreen`, `Block`, `OfflineBanner`, `SyncIcon`, `SyncCard`, `Badge`, `FieldRow`, `ActionBar` |
+| `styles.ts` | The one style sheet behind the primitives |
+
+Some look-alikes are kept apart on purpose because they differ by a few dp or a weight: the two "LAST" tags (field row and tag editor), the header count badge and the tab badge, the option-sheet and location-sheet rows, and the full-screen headers of Tag and Gates versus `AppHeader`. Unifying them is a visual change.
+
+To update the design system: re-export from Claude Design, copy the changed CSS over `apps/dashboard/src/ui/design/`, carry colour changes into the palettes in `apps/mobile/src/ui/theme.tsx`, and check the screens that use them.
