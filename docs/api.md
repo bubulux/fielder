@@ -18,22 +18,24 @@ All routes live in `apps/worker/src/` and are registered in `index.ts`. Every re
 | GET | `/api/shots?project_id=&state=&location_id=&limit=&before=&before_id=` | Newest first, keyset pagination on `(captured_at, id)`, `next` cursor. Photos embedded. |
 | GET | `/api/shots/:id` | |
 | POST | `/api/shots` | Multipart: `metadata` (JSON) + one `photo.<photoId>` file per photo not yet stored. See below. |
-| PATCH | `/api/shots/:id` | Any of `name, light, artificial, weather, int_ext, location_id, extra, state, project_id`. `extra` is validated against the project's fields. Moving to another project removes the shot from the old project's shooting days. |
+| PATCH | `/api/shots/:id` | Any of `name, light, artificial, weather, int_ext, shot_size, camera_support, movement, location_id, extra, state, project_id`. `extra` is validated against the project's fields. Moving to another project removes the shot from the old project's shooting days. |
 | PATCH | `/api/shots` | Bulk edit: `{ ids: uuid[] (≤ 500), set?: { any single-PATCH field except extra }, extra?: { key: value \| null } }`. Only the given fields change. `extra` is per key and merged into each shot's values (groups child by child, null clears, dependent selects that no longer fit are dropped), then the edited keys are checked against each shot's (new) project. Unknown ids → 404, any error → nothing written (one transaction). Moving removes the shots from the old project's shooting days. Returns `{ shots }`. |
 | DELETE | `/api/shots/:id` | Deletes photos (cascade) and their R2 objects |
 | GET | `/api/photos/:id/image` | Image from R2, immutable caching, supports conditional requests |
-| PATCH | `/api/photos/:id` | `{ lat, lon, all_in_shot? }` position correction; sets `position_corrected` |
+| PATCH | `/api/photos/:id` | `{ lat, lon, all_in_shot? }` position correction (also sets a position on photos captured without one); sets `position_corrected` |
 
 `POST /api/shots` metadata:
 
 ```json
 { "id": "<shot uuid>", "project_id": "…", "name": null, "location_id": null, "int_ext": null,
-  "light": ["dusk"], "artificial": false, "weather": null, "extra": {},
-  "photos": [{ "id": "…", "ordinal": 0, "timestamp": "ISO", "lat": 52.5, "lon": 13.4, "gps_accuracy_m": 5,
+  "light": ["dusk"], "artificial": false, "weather": null, "shot_size": "ws", "camera_support": null, "movement": ["pan"],
+  "extra": {}, "state": "unreviewed",
+  "photos": [{ "id": "…", "ordinal": 0, "timestamp": "ISO", "lat": 52.5, "lon": 13.4, "gps_accuracy_m": 5, "position_corrected": false,
                "preset_id": null, "lens_mm": 24, "width": 1280, "height": 960, "framing": {…}, "device": {…} }] }
 ```
 
 - Idempotent. An existing shot keeps its tags (they may have been edited since); only photos not stored yet are added. That is how retries and chunked sequence uploads work (the phone sends 12 photos per request, the server allows 60).
+- `lat`/`lon` may be null or missing (captured without GPS); half a position is dropped. `position_corrected` marks a position set by hand on the phone before upload. `state` carries a review decision made on the phone before upload; anything invalid becomes `unreviewed`.
 - Lenient on purpose: unknown `preset_id`/`location_id` become null, names over 120 characters are cut, `extra` is only pruned, not validated.
 - `201` for a new shot, `200` for an existing one; `duplicate: true` when nothing was added.
 

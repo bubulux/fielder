@@ -4,7 +4,7 @@
  * groups nest so "A and (B or C)" is expressible.
  */
 import { allSelectOptions, leafFields, type FieldDef } from "./fields.ts";
-import { INT_EXT, LIGHT, SHOT_STATES, WEATHER, type Extra } from "./vocab.ts";
+import { CAMERA_SUPPORTS, INT_EXT, LIGHT, MOVEMENTS, SHOT_SIZES, SHOT_STATES, WEATHER, type Extra } from "./vocab.ts";
 
 /** "set" = multi-valued enum (the shot holds a list, e.g. light phases). */
 export type FieldKind = "enum" | "set" | "ref" | "text" | "number" | "date";
@@ -38,6 +38,10 @@ export const FILTER_FIELDS: readonly FilterField[] = [
   { id: "light", label: "Light", kind: "set", options: LIGHT },
   { id: "artificial", label: "Artificial light", kind: "enum", options: ["yes", "no"] },
   { id: "weather", label: "Weather", kind: "enum", options: WEATHER },
+  { id: "shot_size", label: "Shot size", kind: "enum", options: SHOT_SIZES },
+  { id: "camera_support", label: "Camera support", kind: "enum", options: CAMERA_SUPPORTS },
+  { id: "movement", label: "Movement", kind: "set", options: MOVEMENTS },
+  { id: "has_position", label: "Has position", kind: "enum", options: ["yes", "no"] },
   { id: "preset_id", label: "Rig", kind: "ref", ref: "preset" },
   { id: "lens_mm", label: "Lens (mm)", kind: "number" },
   { id: "ff_eq_mm", label: "FF-equivalent (mm)", kind: "number" },
@@ -85,6 +89,11 @@ export interface FilterableShot {
   light: readonly string[];
   artificial: "yes" | "no";
   weather: string | null;
+  shot_size: string | null;
+  camera_support: string | null;
+  movement: readonly string[];
+  /** "no" when the cover photo was captured without GPS. */
+  has_position: "yes" | "no";
   /** Rig and lens of the shot's first photo. */
   preset_id: string | null;
   lens_mm: number | null;

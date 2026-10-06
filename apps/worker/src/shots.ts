@@ -1,4 +1,4 @@
-import { INT_EXT, LIGHT, patchExtra, pruneExtra, SHOT_STATES, validateExtra, validateValues, WEATHER, type Extra, type FieldDef } from "@fielder/vocab";
+import { CAMERA_SUPPORTS, INT_EXT, isOneOf, LIGHT, MOVEMENTS, patchExtra, pruneExtra, SHOT_SIZES, SHOT_STATES, validateExtra, validateValues, WEATHER, type Extra, type FieldDef } from "@fielder/vocab";
 import { projectFieldDefs } from "./fields.ts";
 import { assertEnum, assertIsoTimestamp, assertNumber, assertString, assertUuid, HttpError, json, readJson, type Router } from "./http.ts";
 import type { Ctx } from "./index.ts";
@@ -13,6 +13,9 @@ interface ShotRow {
   light: string;
   artificial: number;
   weather: string | null;
+  shot_size: string | null;
+  camera_support: string | null;
+  movement: string;
   state: string;
   extra: string;
   captured_at: string;
@@ -27,8 +30,8 @@ interface PhotoRow {
   shot_id: string;
   ordinal: number;
   timestamp: string;
-  lat: number;
-  lon: number;
+  lat: number | null;
+  lon: number | null;
   gps_accuracy_m: number | null;
   position_corrected: number;
   preset_id: string | null;
@@ -89,6 +92,9 @@ function shotToApi(s: ShotRow, photos: PhotoRow[]) {
     light: JSON.parse(s.light) as string[],
     artificial: s.artificial === 1,
     weather: s.weather,
+    shot_size: s.shot_size,
+    camera_support: s.camera_support,
+    movement: JSON.parse(s.movement) as string[],
     state: s.state,
     extra: JSON.parse(s.extra) as Extra,
     captured_at: s.captured_at,
@@ -124,7 +130,10 @@ async function loadShot(env: Ctx["env"], id: string) {
  * shots can be uploaded untagged and completed later (PATCH). `all` = every key present (upload);
  * otherwise only the keys given are returned (patch), where null/"" clears a field.
  */
-interface Tags { name: string | null; light: string; artificial: number; weather: string | null; int_ext: string | null; location_id: string | null; extra: string }
+interface Tags {
+  name: string | null; light: string; artificial: number; weather: string | null; int_ext: string | null; location_id: string | null; extra: string;
+  shot_size: string | null; camera_support: string | null; movement: string;
+}
 
 function parseTags(m: Record<string, unknown>, all: true): Tags;
 function parseTags(m: Record<string, unknown>, all: false): Partial<Tags>;
@@ -145,6 +154,14 @@ function parseTags(m: Record<string, unknown>, all: boolean): Partial<Tags> {
   }
   if (want("weather")) out.weather = blank(m.weather) ? null : assertEnum(m.weather, "weather", WEATHER);
   if (want("int_ext")) out.int_ext = blank(m.int_ext) ? null : assertEnum(m.int_ext, "int_ext", INT_EXT);
+  if (want("shot_size")) out.shot_size = blank(m.shot_size) ? null : assertEnum(m.shot_size, "shot_size", SHOT_SIZES);
+  if (want("camera_support")) out.camera_support = blank(m.camera_support) ? null : assertEnum(m.camera_support, "camera_support", CAMERA_SUPPORTS);
+  if (want("movement")) {
+    const v = blank(m.movement) ? [] : m.movement;
+    if (!Array.isArray(v)) throw new HttpError(400, "movement must be an array");
+    for (const x of v) assertEnum(x, "movement", MOVEMENTS);
+    out.movement = JSON.stringify(MOVEMENTS.filter((x) => v.includes(x)));
+  }
   if (want("location_id")) out.location_id = blank(m.location_id) ? null : assertUuid(m.location_id, "location_id");
   if (want("extra")) {
     const extra = blank(m.extra) ? {} : m.extra;
@@ -164,7 +181,7 @@ function optionalJson(v: unknown, field: string): string | null {
 }
 
 interface PhotoInput {
-  id: string; ordinal: number; timestamp: string; lat: number; lon: number; gps_accuracy_m: number | null;
+  id: string; ordinal: number; timestamp: string; lat: number | null; lon: number | null; gps_accuracy_m: number | null; position_corrected: number;
   preset_id: string | null; lens_mm: number; width: number | null; height: number | null; framing: string | null; device: string | null;
 }
 
@@ -172,13 +189,19 @@ function parsePhoto(v: unknown, i: number): PhotoInput {
   if (typeof v !== "object" || v === null) throw new HttpError(400, `photos[${i}] must be an object`);
   const p = v as Record<string, unknown>;
   const optNum = (x: unknown, f: string, o: { min: number; max: number }) => (x === undefined || x === null ? null : assertNumber(x, f, o));
+  // Captured without GPS: no position at all (half a position is dropped too).
+  const lat = optNum(p.lat, `photos[${i}].lat`, { min: -90, max: 90 });
+  const lon = optNum(p.lon, `photos[${i}].lon`, { min: -180, max: 180 });
+  const located = lat !== null && lon !== null;
   return {
     id: assertUuid(p.id, `photos[${i}].id`),
     ordinal: assertNumber(p.ordinal, `photos[${i}].ordinal`, { min: 0, max: 10_000 }),
     timestamp: assertIsoTimestamp(p.timestamp, `photos[${i}].timestamp`),
-    lat: assertNumber(p.lat, `photos[${i}].lat`, { min: -90, max: 90 }),
-    lon: assertNumber(p.lon, `photos[${i}].lon`, { min: -180, max: 180 }),
-    gps_accuracy_m: optNum(p.gps_accuracy_m, `photos[${i}].gps_accuracy_m`, { min: 0, max: 100_000 }),
+    lat: located ? lat : null,
+    lon: located ? lon : null,
+    gps_accuracy_m: located ? optNum(p.gps_accuracy_m, `photos[${i}].gps_accuracy_m`, { min: 0, max: 100_000 }) : null,
+    // Set on the phone before the upload (a queued shot corrected by hand).
+    position_corrected: located && p.position_corrected === true ? 1 : 0,
     preset_id: p.preset_id == null ? null : assertUuid(p.preset_id, `photos[${i}].preset_id`),
     lens_mm: assertNumber(p.lens_mm, `photos[${i}].lens_mm`, { min: 1, max: 2000 }),
     width: optNum(p.width, `photos[${i}].width`, { min: 1, max: 20_000 }),
@@ -243,8 +266,10 @@ export function registerShotRoutes(r: Router<Ctx>) {
   /**
    * multipart/form-data:
    *   metadata        JSON string:
-   *     { id, project_id, name?, location_id?, int_ext?, light?: string[], artificial?: boolean, weather?, extra?,
-   *       photos: [{ id, ordinal, timestamp, lat, lon, gps_accuracy_m?, preset_id?, lens_mm, width?, height?, framing?, device? }] }
+   *     { id, project_id, name?, location_id?, int_ext?, light?: string[], artificial?: boolean, weather?,
+   *       shot_size?, camera_support?, movement?: string[], extra?, state? (decided on the phone before upload),
+   *       photos: [{ id, ordinal, timestamp, lat?, lon? (both or neither), gps_accuracy_m?, position_corrected?,
+   *                  preset_id?, lens_mm, width?, height?, framing?, device? }] }
    *   photo.<photoId> one image file (jpeg/webp/png, <= 3 MB) per photo that is not stored yet
    * Creates the shot (state "unreviewed") with its photos. Idempotent: for an existing shot the
    * tags are left alone (they may have been edited since) and only photos not stored yet are added,
@@ -275,10 +300,12 @@ export function registerShotRoutes(r: Router<Ctx>) {
       await assertProjectExists(env, projectId);
       if (tags.location_id && !(await env.DB.prepare("SELECT 1 FROM locations WHERE id = ?1").bind(tags.location_id).first())) tags.location_id = null;
       const capturedAt = photos.map((p) => p.timestamp).sort()[0];
+      // A shot reviewed on the phone before it went out keeps that decision; anything else starts unreviewed.
+      const state = isOneOf(SHOT_STATES, m.state) ? m.state : "unreviewed";
       insertShot = env.DB.prepare(
-        `INSERT INTO shots (id, project_id, location_id, name, int_ext, light, artificial, weather, state, extra, captured_at)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, 'unreviewed', ?9, ?10)`,
-      ).bind(id, projectId, tags.location_id, tags.name, tags.int_ext, tags.light, tags.artificial, tags.weather, tags.extra, capturedAt);
+        `INSERT INTO shots (id, project_id, location_id, name, int_ext, light, artificial, weather, shot_size, camera_support, movement, state, extra, captured_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)`,
+      ).bind(id, projectId, tags.location_id, tags.name, tags.int_ext, tags.light, tags.artificial, tags.weather, tags.shot_size, tags.camera_support, tags.movement, state, tags.extra, capturedAt);
     }
 
     const stored = new Set(
@@ -308,9 +335,9 @@ export function registerShotRoutes(r: Router<Ctx>) {
       }
       // One batch = one transaction: the shot row and its photo rows land together or not at all.
       const stmts = files.map(({ photo: p, key }) => env.DB.prepare(
-        `INSERT INTO photos (id, shot_id, ordinal, timestamp, lat, lon, gps_accuracy_m, preset_id, lens_mm, r2_object_key, width, height, framing, device)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)`,
-      ).bind(p.id, id, p.ordinal, p.timestamp, p.lat, p.lon, p.gps_accuracy_m, p.preset_id, p.lens_mm, key, p.width, p.height, p.framing, p.device));
+        `INSERT INTO photos (id, shot_id, ordinal, timestamp, lat, lon, gps_accuracy_m, position_corrected, preset_id, lens_mm, r2_object_key, width, height, framing, device)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)`,
+      ).bind(p.id, id, p.ordinal, p.timestamp, p.lat, p.lon, p.gps_accuracy_m, p.position_corrected, p.preset_id, p.lens_mm, key, p.width, p.height, p.framing, p.device));
       if (insertShot) stmts.unshift(insertShot);
       // A continued sequence may start earlier than what is stored (upload order is not capture order).
       stmts.push(env.DB.prepare("UPDATE shots SET captured_at = (SELECT min(timestamp) FROM photos WHERE shot_id = ?1) WHERE id = ?1").bind(id));

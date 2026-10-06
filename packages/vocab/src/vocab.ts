@@ -19,13 +19,45 @@ export const INT_EXT = ["int", "ext"] as const;
 export type IntExt = (typeof INT_EXT)[number];
 
 export const SHOT_STATES = ["unreviewed", "approved", "archived"] as const;
+
+/**
+ * Camera language of a shot, in the terms used on set. Size and support are single choices,
+ * movement any subset (a Steadicam shot can pan and push in). Widest to tightest, then roughly
+ * from fixed to free.
+ */
+export const SHOT_SIZES = ["ews", "ws", "mws", "ms", "mcu", "cu", "ecu"] as const;
+export type ShotSize = (typeof SHOT_SIZES)[number];
+export const CAMERA_SUPPORTS = ["static", "handheld", "steadicam", "gimbal", "dolly", "slider", "crane", "drone", "vehicle"] as const;
+export type CameraSupport = (typeof CAMERA_SUPPORTS)[number];
+export const MOVEMENTS = ["pan", "tilt", "push_in", "pull_out", "tracking", "pedestal", "orbit", "zoom"] as const;
+export type Movement = (typeof MOVEMENTS)[number];
+/** The abbreviations a shot list uses ("MCU"). */
+export const SHOT_SIZE_ABBR: Record<ShotSize, string> = { ews: "EWS", ws: "WS", mws: "MWS", ms: "MS", mcu: "MCU", cu: "CU", ecu: "ECU" };
 export type ShotState = (typeof SHOT_STATES)[number];
 
 const LABELS: Record<string, string> = {
   partly_cloudy: "Partly cloudy",
   int: "INT",
   ext: "EXT",
+  ews: "Extreme wide",
+  ws: "Wide",
+  mws: "Medium wide",
+  ms: "Medium",
+  mcu: "Medium close-up",
+  cu: "Close-up",
+  ecu: "Extreme close-up",
+  static: "Static (locked-off)",
+  crane: "Crane / jib",
+  vehicle: "Vehicle mount",
+  pedestal: "Pedestal / boom",
 };
+
+/** "WS · Steadicam · Pan / Push in", or "" when none is set. */
+export function cameraLabel(s: { shot_size: string | null; camera_support: string | null; movement: readonly string[] | null | undefined }): string {
+  const size = s.shot_size ? SHOT_SIZE_ABBR[s.shot_size as ShotSize] ?? label(s.shot_size) : "";
+  const moves = MOVEMENTS.filter((m) => s.movement?.includes(m)).map(label).join(" / ");
+  return [size, label(s.camera_support), moves].filter(Boolean).join(" · ");
+}
 
 /** Display label for any vocabulary value ("partly_cloudy" -> "Partly cloudy", "dawn" -> "Dawn"). */
 export function label(value: string | null | undefined): string {
