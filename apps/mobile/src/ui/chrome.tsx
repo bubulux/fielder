@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { Pressable, ScrollView, Text, View, type StyleProp, type ViewStyle } from "react-native";
 import { useApp } from "../appState";
+import { isOfflineMode } from "../net";
 import { useSync, type Sync, type SyncState } from "../sync";
 import { BORDER, FIXED, makeStyles, num, type Palette, RADIUS, SIZE, type, useTheme } from "./theme";
 import { IconButton } from "./actions";
@@ -41,7 +42,9 @@ export function AppHeader({ title, sub, lead, trail, sync = true, offlineMeta }:
         {trail && <IconButton icon={trail.icon} label={trail.label} onPress={trail.onPress} />}
         {sync && <SyncIcon sync={st} onPress={() => app.push({ name: "uploads" })} />}
       </View>
-      {!st.online && <OfflineBanner meta={offlineMeta} />}
+      {!st.online && (isOfflineMode()
+        ? <OfflineBanner title="Offline mode" meta="Nothing is sent: captures, decisions and edits wait on the phone. Switch it off in Setup → Offline." />
+        : <OfflineBanner meta={offlineMeta} />)}
     </View>
   );
 }
@@ -69,13 +72,13 @@ export function Block({ children, style }: { children: ReactNode; style?: StyleP
   return <View style={[{ paddingHorizontal: 16, paddingVertical: 12, gap: 10 }, style]}>{children}</View>;
 }
 
-export function OfflineBanner({ meta }: { meta?: string }) {
+export function OfflineBanner({ meta, title = "Offline" }: { meta?: string; title?: string }) {
   const s = useStyles();
   return (
     <View style={s.offline} accessibilityRole="alert">
       <Icon name="cloud-off-outline" size={22} />
       <View style={{ flex: 1 }}>
-        <Text style={s.offlineTitle}>Offline</Text>
+        <Text style={s.offlineTitle}>{title}</Text>
         <Text style={s.offlineMeta}>{meta ?? "The server can't be reached. Captures queue on the phone."}</Text>
       </View>
     </View>

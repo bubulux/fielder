@@ -14,7 +14,7 @@ import { AppContext, type AppState, type Route, type ShotsView, type Tab } from 
 import { isSignedIn, onAuthChange } from "./src/auth";
 import { isConfigured } from "./src/config";
 import { setLogging } from "./src/log";
-import { useOnline } from "./src/net";
+import { setOfflineMode, useOnline } from "./src/net";
 import { useShots } from "./src/shots";
 import { store, usePref } from "./src/storage";
 import type { LocationEntry, ProjectEntry, Settings } from "./src/types";
@@ -23,6 +23,7 @@ import { ConfirmHost, Icon, makeStyles, PALETTES, resolveTheme, SIZE, ThemeProvi
 import { ProjectSheet } from "./src/components/ProjectSheet";
 import { Day } from "./src/screens/Day";
 import { LoginWeb, ProjectGate, SignInGate } from "./src/screens/Gates";
+import { Offline } from "./src/screens/Offline";
 import { Review } from "./src/screens/Review";
 import { RigEditor, RigList } from "./src/screens/Rigs";
 import { Setup } from "./src/screens/Setup";
@@ -64,7 +65,8 @@ function App() {
   const portrait = height >= width;
   const [tab, setTab] = useState<Tab>("shoot");
   const [stack, setStack] = useState<Route[]>([]);
-  const [settings, setSettingsState] = useState<Settings>(() => { const s = store.loadSettings(); setLogging(s.loggingEnabled); return s; });
+  // Logging and offline mode take effect before the first request.
+  const [settings, setSettingsState] = useState<Settings>(() => { const s = store.loadSettings(); setLogging(s.loggingEnabled); setOfflineMode(s.offlineMode); return s; });
   const setSettings = useCallback((u: Settings | ((s: Settings) => Settings)) => setSettingsState((cur) => (typeof u === "function" ? u(cur) : u)), []);
   const [locations, setLocations] = useState<LocationEntry[]>(() => store.loadLocations());
   const [projects, setProjects] = useState<ProjectEntry[]>(() => store.loadProjects());
@@ -92,6 +94,13 @@ function App() {
   useEffect(() => onAuthChange(() => { if (!isSignedIn()) setLogin("gate"); else { void refreshProjects(); void shots.load(); } }), [shots.load]);
   useEffect(() => { store.saveActiveProjectId(projectId); }, [projectId]);
   useEffect(() => { store.saveSettings(settings); }, [settings]);
+  // Offline mode switched off: send what waited and reload the lists.
+  const firstMode = useRef(true);
+  useEffect(() => {
+    if (firstMode.current) { firstMode.current = false; return; }
+    setOfflineMode(settings.offlineMode);
+    if (!settings.offlineMode && isSignedIn()) void flush().then(() => shots.load());
+  }, [settings.offlineMode]);
   useEffect(() => { store.saveLocations(locations); }, [locations]);
   // Refresh the lists when switching to a browsing tab, so new shots show up without a pull.
   useEffect(() => { if (tab !== "shoot") void shots.load(); }, [tab]);
@@ -205,6 +214,7 @@ function App() {
 function Screen({ route }: { route: Route }) {
   switch (route.name) {
     case "uploads": return <Uploads />;
+    case "offline": return <Offline />;
     case "shot": return <ShotDetails key={route.shotId} shotId={route.shotId} list={route.list} />;
     case "position": return <CorrectPosition shotId={route.shotId} photoId={route.photoId} />;
     case "mapFocus": return <MapFocus shotId={route.shotId} />;

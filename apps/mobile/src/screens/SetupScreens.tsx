@@ -10,7 +10,7 @@ import { clearLog, logCount, logText, setLogging } from "../log";
 import { PHONE } from "../phone";
 import { useRigs } from "../rigs";
 import { store } from "../storage";
-import type { HudChips, Settings } from "../types";
+import type { GpsMode, HudChips, Settings } from "../types";
 import { Block, BORDER, Button, Chip, ChipCell, ChipGrid, ChipRow, confirm, ErrorText, FIXED, Hint, Input, makeStyles, num, PushScreen, SectionLabel, Seg, toast, Toggle, type } from "../ui";
 import { HudChip } from "../components/Hud";
 import { Overlay } from "../components/Overlay";
@@ -98,12 +98,23 @@ export function ViewfinderSettings() {
   );
 }
 
+const GPS_HINTS: Record<GpsMode, string> = {
+  high: "A fresh, precise fix for every capture. With a poor signal the shutter can wait up to 8 s for it.",
+  low: "Takes whatever position the phone has right now, however rough; the shutter never waits. Uses less battery.",
+  off: "No location at all: the GPS is not used and photos carry no position. Set one later by hand if needed.",
+};
+
 export function CaptureSettings() {
   const st = useApp().settings;
   const set = useSet();
   return (
     <PushScreen title="Capture">
       <Toggle icon="cloud-upload-outline" label="Direct upload" meta="Skip the Tag screen: shots queue untagged; tag them later in Review or the dashboard." value={st.directUpload} onChange={(v) => set("directUpload", v)} />
+      <Block>
+        <SectionLabel>GPS</SectionLabel>
+        <Seg size="lg" block accessibilityLabel="GPS mode" value={st.gpsMode} onChange={(v) => set("gpsMode", v)} options={[{ id: "high", icon: "crosshairs-gps", label: "High" }, { id: "low", icon: "crosshairs", label: "Low" }, { id: "off", icon: "crosshairs-off", label: "Off" }]} />
+        <Hint>{GPS_HINTS[st.gpsMode]} In a sequence every photo after the first takes the first one's position, in every mode.</Hint>
+      </Block>
       <Block>
         <SectionLabel>Rig orientation</SectionLabel>
         <Seg size="lg" block accessibilityLabel="Rig orientation" value={st.rigOrientation} onChange={(v) => set("rigOrientation", v)} options={[{ id: "landscape", icon: "crop-landscape", label: "Landscape" }, { id: "portrait", icon: "crop-portrait", label: "Portrait" }]} />

@@ -2,7 +2,10 @@ import { useEffect, useState } from "react";
 import { Modal, Text, useWindowDimensions, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { label } from "@fielder/vocab";
-import { api, type Photo, type Shot } from "../api";
+import { api, positionOf, type Photo, type Shot } from "../api";
+import { editShot, isWaiting } from "../localShots";
+import { isOfflineMode, isOnline } from "../net";
+import { discardPending } from "../uploads";
 import { useApp } from "../appState";
 import type { Settings } from "../types";
 import { extraLine, placeLabel, rigLabel, shortTime, shotTitle, tagsLabel } from "../shots";
@@ -12,20 +15,34 @@ import { fitWidth, FrameModeSeg, ShotFrame, type FrameMode } from "./ShotFrame";
 
 const PAST: Record<Shot["state"], string> = { approved: "Approved", archived: "Archived", unreviewed: "Back to review" };
 
-/** Review decisions and deletes, the same everywhere: PATCH, update the list, a toast with Undo. */
+/**
+ * Review decisions and deletes, the same everywhere: a toast with Undo. Works offline and on
+ * queued shots too (editShot keeps the change on the phone until it can be sent).
+ */
 export function useShotActions() {
   const app = useApp();
   const setState = async (shot: Shot, state: Shot["state"]) => {
     const before = shot.state;
     try {
-      app.shots.update(await api.patchShot(shot.id, { state }));
-      toast(PAST[state], "ok", { label: "Undo", run: () => { void api.patchShot(shot.id, { state: before }).then(app.shots.update).catch((e) => notice("Undo failed", String(e))); } });
+      const updated = await editShot(shot, { state });
+      app.shots.update(updated);
+      const where = updated.queued ? " · uploads with the shot" : isWaiting(shot.id) ? " · syncs when online" : "";
+      toast(PAST[state] + where, "ok", { label: "Undo", run: () => { void editShot(updated, { state: before }).then(app.shots.update).catch((e) => notice("Undo failed", String(e))); } });
     } catch (e) {
       void notice("Not saved", `${e instanceof Error ? e.message : String(e)}. The shot keeps its state.`);
     }
   };
   /** Resolves true when the shot is gone. Archive is offered as the safe alternative. */
   const remove = async (shot: Shot): Promise<boolean> => {
+    if (shot.queued) {
+      const r = await confirm({ title: "Discard this shot?", body: `It is not uploaded yet: the ${shot.photos.length === 1 ? "photo is" : `${shot.photos.length} photos are`} deleted from the phone. Archive keeps it.`, confirmLabel: "Discard", danger: true, altLabel: shot.state === "archived" ? undefined : "Archive" });
+      if (r === "alt") { await setState(shot, "archived"); return false; }
+      if (r !== true) return false;
+      discardPending(shot.id);
+      toast("Discarded", "neutral");
+      return true;
+    }
+    if (isOfflineMode() || !isOnline()) { void notice("Delete needs a connection", "Deleting removes the shot from the server. Archive it now, or delete it when you are online."); return false; }
     const r = await confirm({ title: "Delete this shot?", body: "Removes the image and its metadata from the server permanently. Archive keeps them.", confirmLabel: "Delete", danger: true, altLabel: shot.state === "archived" ? undefined : "Archive" });
     if (r === "alt") { await setState(shot, "archived"); return false; }
     if (r !== true) return false;
@@ -45,10 +62,10 @@ export function MoreSheet({ shot, photo, visible, onClose, onDeleted, details = 
     <Sheet visible={visible} title={shotTitle(shot)} onClose={onClose}>
       <SheetList>
         {details && <ListRow icon="information-outline" title="Shot details" onPress={() => { onClose(); app.push({ name: "shot", shotId: shot.id, list }); }} />}
-        <ListRow icon="map-marker-outline" title="Show on map" onPress={() => { onClose(); app.push({ name: "mapFocus", shotId: shot.id }); }} />
-        <ListRow icon="crosshairs-gps" title="Correct position" meta={shot.photos.length > 1 ? "Of the photo on screen, or all of them" : undefined} onPress={() => { onClose(); app.push({ name: "position", shotId: shot.id, photoId: photo.id }); }} />
+        <ListRow icon="map-marker-outline" title="Show on map" meta={positionOf(shot) ? undefined : "No position yet"} disabled={!positionOf(shot)} onPress={() => { onClose(); app.push({ name: "mapFocus", shotId: shot.id }); }} />
+        <ListRow icon="crosshairs-gps" title={photo.lat === null ? "Set position" : "Correct position"} meta={shot.photos.length > 1 ? "Of the photo on screen, or all of them" : undefined} onPress={() => { onClose(); app.push({ name: "position", shotId: shot.id, photoId: photo.id }); }} />
         <View style={{ height: 16 }} />
-        <ListRow icon="delete-outline" iconColor={c.danger} titleColor={c.danger} title="Delete shot" trailing={null} onPress={() => { onClose(); void remove(shot).then((gone) => { if (gone) onDeleted?.(); }); }} />
+        <ListRow icon="delete-outline" iconColor={c.danger} titleColor={c.danger} title={shot.queued ? "Discard shot" : "Delete shot"} trailing={null} onPress={() => { onClose(); void remove(shot).then((gone) => { if (gone) onDeleted?.(); }); }} />
       </SheetList>
     </Sheet>
   );
@@ -64,6 +81,7 @@ export function ShotSummary({ shot, photo }: { shot: Shot; photo: Photo }) {
       <Text style={s.title}>{shotTitle(shot)}</Text>
       <View style={{ flexDirection: "row", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
         <StateMarker state={shot.state} lg />
+        {shot.queued && <PhotoTag icon="cloud-upload-outline">Queued</PhotoTag>}
         <Text style={s.place}>{placeLabel(shot) || (tags ? "No location" : "No location · untagged")}</Text>
       </View>
       {!!tags && <Text style={s.line}>{tags}</Text>}

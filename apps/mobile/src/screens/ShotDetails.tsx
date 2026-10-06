@@ -1,14 +1,16 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
+import * as Location from "expo-location";
 import { ScrollView, Text, useWindowDimensions, View } from "react-native";
-import { extraSummary, label, lightLabel, STATE_ICONS, type FieldDef } from "@fielder/vocab";
-import { api, cover, type Photo, type Shot } from "../api";
+import { extraSummary, label, lightLabel, MOVEMENTS, SHOT_SIZE_ABBR, STATE_ICONS, type FieldDef } from "@fielder/vocab";
+import { cover, positionOf, type Photo, type Shot } from "../api";
+import { isWaiting, setPosition } from "../localShots";
 import { useApp } from "../appState";
 import { useOnline } from "../net";
 import { fovLabel, placeLabel, rigLabel, shortTime, shotTitle } from "../shots";
 import { store } from "../storage";
 import { ActionBar, AppHeader, BORDER, Button, Empty, FONT, IconButton, makeStyles, notice, num, PushScreen, SectionLabel, SideBySide, toast, Toggle, type, useLayoutSize, useTheme } from "../ui";
 import { EditTagsSheet } from "../components/EditTagsSheet";
-import { LeafletView } from "../components/LeafletView";
+import { LeafletView, type MapHandle } from "../components/LeafletView";
 import { focusScript, positionScript } from "../components/mapHtml";
 import { PhotoStrip } from "../components/PhotoStrip";
 import { FRAME_MODES, FrameModeSeg, type FrameMode } from "../components/ShotFrame";
@@ -58,15 +60,17 @@ export function ShotDetails({ shotId, list }: { shotId: string; list: string[] }
         <FrameModeSeg block value={mode} onChange={setMode} />
         <ShotSummary shot={shot} photo={photo} />
       </View>
-      <Head title="Tags" action={online ? { label: "Edit", onPress: () => setSheet("edit") } : undefined} />
+      <Head title="Tags" action={{ label: "Edit", onPress: () => setSheet("edit") }} />
       <Facts rows={tagRows(shot, fields)} />
       <Head title={shot.photos.length > 1 ? `Position · photo ${photoIndex + 1}` : "Position"} />
       <View style={s.section}>
-        <Text style={s.value}>{photo.lat.toFixed(5)}, {photo.lon.toFixed(5)}</Text>
-        <Text style={s.meta}>{photo.position_corrected ? "Corrected by hand" : photo.gps_accuracy_m != null ? `GPS ±${Math.round(photo.gps_accuracy_m)} m` : "GPS accuracy unknown"}</Text>
+        {photo.lat === null || photo.lon === null
+          ? <><Text style={s.value}>No position</Text><Text style={s.meta}>Captured without GPS. Set one by hand.</Text></>
+          : <><Text style={s.value}>{photo.lat.toFixed(5)}, {photo.lon.toFixed(5)}</Text>
+              <Text style={s.meta}>{photo.position_corrected ? "Corrected by hand" : photo.gps_accuracy_m != null ? `GPS ±${Math.round(photo.gps_accuracy_m)} m` : "GPS accuracy unknown"}</Text></>}
         <SideBySide>
-          <Button style={{ flex: 1 }} kind="secondary" icon="map-marker-outline" label="Show on map" onPress={() => app.push({ name: "mapFocus", shotId: shot.id })} />
-          <Button style={{ flex: 1 }} kind="secondary" icon="crosshairs-gps" label="Correct" onPress={() => app.push({ name: "position", shotId: shot.id, photoId: photo.id })} disabled={!online} />
+          <Button style={{ flex: 1 }} kind="secondary" icon="map-marker-outline" label="Show on map" onPress={() => app.push({ name: "mapFocus", shotId: shot.id })} disabled={!positionOf(shot) || !online} />
+          <Button style={{ flex: 1 }} kind="secondary" icon="crosshairs-gps" label={photo.lat === null ? "Set position" : "Correct"} onPress={() => app.push({ name: "position", shotId: shot.id, photoId: photo.id })} disabled={!online} />
         </SideBySide>
       </View>
       <Head title={shot.photos.length > 1 ? `Camera · photo ${photoIndex + 1}` : "Camera"} />
@@ -76,7 +80,7 @@ export function ShotDetails({ shotId, list }: { shotId: string; list: string[] }
     </>
   );
   const stateBar = stateActions(shot.state).map((a) => (
-    <Button key={a.state} style={portrait ? { flex: 1 } : undefined} kind={a.kind} icon={a.icon} label={a.label} onPress={() => void setState(shot, a.state)} disabled={!online} />
+    <Button key={a.state} style={portrait ? { flex: 1 } : undefined} kind={a.kind} icon={a.icon} label={a.label} onPress={() => void setState(shot, a.state)} />
   ));
   const sheets = (
     <>
@@ -110,7 +114,7 @@ export function ShotDetails({ shotId, list }: { shotId: string; list: string[] }
   return (
     <View style={s.root}>
       <AppHeader title={shotTitle(shot)} sub={sub} lead={{ icon: "arrow-left", label: "Back", onPress: app.pop }} trail={{ icon: "dots-horizontal", label: "More", onPress: () => setSheet("more") }} sync={false}
-        offlineMeta="Changes need the server; what is loaded stays readable." />
+        offlineMeta="Changes are kept on the phone and sent when you are online." />
       <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 16 }}>
         <ShotPhoto shot={shot} index={photoIndex} mode={mode} settings={app.settings} maxW={width} maxH={Math.min(width * 0.75, 300)} onNext={() => step(1)} onPrev={() => step(-1)} onOpen={() => setFull(true)} />
         <View style={{ paddingHorizontal: 12 }}><PhotoStrip shot={shot} index={photoIndex} onPick={setPhotoIndex} /></View>
@@ -128,6 +132,9 @@ function tagRows(shot: Shot, fields: readonly FieldDef[]): [string, string][] {
     ["INT / EXT", label(shot.int_ext) || "Not set"],
     ["Light", lightLabel(shot.light, shot.artificial) || "Any"],
     ["Weather", label(shot.weather) || "Not set"],
+    ["Shot size", shot.shot_size ? `${SHOT_SIZE_ABBR[shot.shot_size as keyof typeof SHOT_SIZE_ABBR] ?? ""} · ${label(shot.shot_size)}` : "Not set"],
+    ["Support", label(shot.camera_support) || "Not set"],
+    ["Movement", MOVEMENTS.filter((m) => shot.movement?.includes(m)).map(label).join(" / ") || "None"],
   ];
   for (const f of fields) {
     const v = shot.extra?.[f.key];
@@ -182,36 +189,71 @@ const distanceM = (a: [number, number], b: [number, number]) => {
   return 2 * R * Math.asin(Math.sqrt(h));
 };
 
-/** Drag the pin (or tap the map) to where the photo was taken; PATCH /api/photos/:id. */
+/** Where the map opens for a photo without a position when no other photo of the shot has one. */
+const BERLIN: [number, number] = [52.52, 13.405];
+
+/**
+ * Drag the pin (or tap the map) to where the photo was taken, or set a first position for one
+ * captured without GPS ("Use my location" asks the phone once). Saved on the server, in the
+ * upload queue, or kept on the phone until online (localShots.setPosition).
+ */
 export function CorrectPosition({ shotId, photoId }: { shotId: string; photoId: string }) {
   const s = useStyles();
   const { c } = useTheme();
   const app = useApp();
+  const map = useRef<MapHandle | null>(null);
   const shot = app.shots.shots?.find((x) => x.id === shotId);
   const photo = shot?.photos.find((p) => p.id === photoId) ?? (shot ? cover(shot) : null);
-  const [pos, setPos] = useState<[number, number] | null>(photo ? [photo.lat, photo.lon] : null);
+  const had = !!photo && photo.lat !== null && photo.lon !== null;
+  const start = useState<[number, number] | null>(() => {
+    if (!photo || !shot) return null;
+    if (had) return [photo.lat!, photo.lon!];
+    const p = positionOf(shot);
+    return p ? [p.lat, p.lon] : BERLIN;
+  })[0];
+  const [pos, setPos] = useState<[number, number] | null>(start);
   const [all, setAll] = useState((shot?.photos.length ?? 0) > 1);
   const [busy, setBusy] = useState(false);
-  const script = useState(() => (photo ? positionScript(photo.lat, photo.lon, photo.gps_accuracy_m, c.accent) : ""))[0];
-  if (!shot || !photo || !pos) return <PushScreen title="Correct position"><Empty icon="image-off-outline" title="This shot is gone" /></PushScreen>;
-  const moved = distanceM([photo.lat, photo.lon], pos);
+  const [locating, setLocating] = useState(false);
+  const script = useState(() => (start ? positionScript(start[0], start[1], had ? photo!.gps_accuracy_m : null, c.accent) : ""))[0];
+  if (!shot || !photo || !pos || !start) return <PushScreen title="Correct position"><Empty icon="image-off-outline" title="This shot is gone" /></PushScreen>;
+  const moved = distanceM(start, pos);
+  const title = had ? "Correct position" : "Set position";
+  const moveTo = (lat: number, lon: number) => { setPos([lat, lon]); map.current?.run(`mk.setLatLng([${lat},${lon}]);map.setView([${lat},${lon}],18);`); };
+  const here = async () => {
+    setLocating(true);
+    try {
+      const perm = await Location.requestForegroundPermissionsAsync();
+      if (!perm.granted) { void notice("No location permission", "Allow location for Fielder to use where you are now."); return; }
+      const timeout = new Promise<null>((res) => setTimeout(() => res(null), 8000));
+      const p = await Promise.race([Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced }).catch(() => null), timeout])
+        ?? await Location.getLastKnownPositionAsync();
+      if (p) moveTo(p.coords.latitude, p.coords.longitude); else toast("No location fix right now", "neutral");
+    } finally { setLocating(false); }
+  };
   const save = async () => {
     setBusy(true);
-    try { app.shots.update(await api.patchPhotoPosition(photo.id, pos[0], pos[1], all)); toast("Position saved"); app.pop(); }
+    try {
+      const updated = await setPosition(shot, photo.id, pos[0], pos[1], all);
+      app.shots.update(updated);
+      toast(updated.queued ? "Position saved · uploads with the shot" : isWaiting(shot.id) ? "Position saved · syncs when online" : "Position saved");
+      app.pop();
+    }
     catch (e) { void notice("Position not saved", e instanceof Error ? e.message : String(e)); }
     finally { setBusy(false); }
   };
   return (
-    <PushScreen title="Correct position" sub={photo.gps_accuracy_m != null ? `Reported ±${Math.round(photo.gps_accuracy_m)} m · drag the pin or tap the map` : "Drag the pin or tap the map"} scroll={false}
+    <PushScreen title={title} sub={had ? (photo.gps_accuracy_m != null ? `Reported ±${Math.round(photo.gps_accuracy_m)} m · drag the pin or tap the map` : "Drag the pin or tap the map") : "Captured without GPS · put the pin where it was taken"} scroll={false}
       footer={<View style={{ flex: 1, gap: 8 }}>
         {shot.photos.length > 1 && <View style={{ marginHorizontal: -16 }}><Toggle label={`All ${shot.photos.length} photos of this shot`} value={all} onChange={setAll} /></View>}
-        <Text style={s.coords}>{pos[0].toFixed(5)}, {pos[1].toFixed(5)} · moved {moved < 1 ? "0" : Math.round(moved)} m</Text>
+        <Text style={s.coords}>{pos[0].toFixed(5)}, {pos[1].toFixed(5)}{had ? ` · moved ${moved < 1 ? "0" : Math.round(moved)} m` : ""}</Text>
+        {!had && <Button kind="secondary" icon="crosshairs-gps" label="Use my location" onPress={() => void here()} busy={locating} />}
         <SideBySide>
           <Button style={{ flex: 1 }} kind="secondary" label="Cancel" onPress={app.pop} />
-          <Button style={{ flex: 2 }} icon="crosshairs-gps" label="Save position" onPress={() => void save()} disabled={moved < 0.5} busy={busy} />
+          <Button style={{ flex: 2 }} icon="map-marker-check-outline" label="Save position" onPress={() => void save()} disabled={had && moved < 0.5} busy={busy} />
         </SideBySide>
       </View>}>
-      <LeafletView script={script} fitLabel="Back to the pin" onMessage={(m) => { if (typeof m.lat === "number" && typeof m.lon === "number") setPos([m.lat, m.lon]); }} />
+      <LeafletView script={script} handle={map} fitLabel="Back to the pin" onMessage={(m) => { if (typeof m.lat === "number" && typeof m.lon === "number") setPos([m.lat, m.lon]); }} />
     </PushScreen>
   );
 }
@@ -221,11 +263,12 @@ export function MapFocus({ shotId }: { shotId: string }) {
   const app = useApp();
   const shot = app.shots.shots?.find((x) => x.id === shotId);
   const script = useState(() => {
-    if (!shot) return "";
-    const p = cover(shot);
+    const p = shot ? positionOf(shot) : null;
+    if (!shot || !p) return "";
     return focusScript({ id: shot.id, lat: p.lat, lon: p.lon, state: shot.state, icon: STATE_ICONS[shot.state] }, shotTitle(shot));
   })[0];
   if (!shot) return <PushScreen title="Map"><Empty icon="image-off-outline" title="This shot is gone" /></PushScreen>;
+  if (!script) return <PushScreen title="Map"><Empty icon="map-marker-off-outline" title="No position" body="This shot was captured without GPS. Set a position in its details." /></PushScreen>;
   return (
     <PushScreen title={shotTitle(shot)} sub={[placeLabel(shot), shortTime(shot.captured_at)].filter(Boolean).join(" · ")} scroll={false}
       footer={<Button style={{ flex: 1 }} kind="secondary" icon="map-outline" label="See all shots on the map" onPress={() => app.showOnMap(shot.id)} />}>

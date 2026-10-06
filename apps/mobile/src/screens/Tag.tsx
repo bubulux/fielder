@@ -34,6 +34,7 @@ function remembered(projectId: string | null): { tags: ShotTags; keys: Set<strin
   if (tags.int_ext) keys.add("int_ext");
   if (tags.light.length || tags.artificial) keys.add("light");
   if (tags.weather) keys.add("weather");
+  if (tags.camera_support) keys.add("camera_support");
   for (const k of Object.keys(tags.extra)) keys.add(`extra.${k}`);
   return { tags, keys };
 }
@@ -63,11 +64,13 @@ export function Tag({ draft, settings, project, locations, countAt, fields, onUp
   const seq = n > 1;
   const current = draft.photos[Math.min(index, n - 1)];
   const m = current.meta;
-  const facts = [hhmm(m.timestamp), `${m.lens_mm} mm`, m.gps_accuracy_m != null ? `GPS ±${Math.round(m.gps_accuracy_m)} m` : "no GPS accuracy"].join(" · ");
+  const facts = [hhmm(m.timestamp), `${m.lens_mm} mm`, m.lat === null ? "no position" : m.gps_accuracy_m != null ? `GPS ±${Math.round(m.gps_accuracy_m)} m` : "no GPS accuracy"].join(" · ");
 
   const upload = () => {
     const tags = { ...value.tags, name: value.tags.name?.trim() || null, extra: pruneExtra(value.tags.extra) };
-    if (project) store.saveLastTags({ projectId: project.id, tags: { light: tags.light, artificial: tags.artificial, weather: tags.weather, int_ext: tags.int_ext, location_id: tags.location_id, extra: tags.extra } });
+    if (project) store.saveLastTags({ projectId: project.id, tags: { light: tags.light, artificial: tags.artificial, weather: tags.weather, int_ext: tags.int_ext, location_id: tags.location_id, extra: tags.extra,
+      // The support usually stays for a while (a Steadicam day); size and movement change shot to shot.
+      camera_support: tags.camera_support, shot_size: null, movement: [] } });
     onUpload(tags, value.newLocation);
   };
   const discard = async () => {

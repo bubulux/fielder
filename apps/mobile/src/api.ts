@@ -2,7 +2,7 @@ import { File } from "expo-file-system";
 import { getToken, setToken } from "./auth";
 import { API_URL, isConfigured } from "./config";
 import { log } from "./log";
-import { markOnline } from "./net";
+import { isOfflineMode, markOnline } from "./net";
 import type { Extra, FieldDefinition } from "@fielder/vocab";
 import type { LocationEntry, Preset, ProjectEntry, ShotMetadata, ShotTags } from "./types";
 
@@ -20,6 +20,7 @@ function headers(extra: Record<string, string> = {}): Record<string, string> {
 
 async function call<T>(path: string, init: RequestInit = {}): Promise<T> {
   if (!isConfigured) throw new ApiError(0, "API not configured in this build");
+  if (isOfflineMode()) throw new ApiError(0, "offline mode is on");
   if (!getToken()) throw new ApiError(401, "not signed in");
   const started = Date.now();
   const method = init.method ?? "GET";
@@ -83,8 +84,9 @@ export interface Photo {
   shot_id: string;
   ordinal: number;
   timestamp: string;
-  lat: number;
-  lon: number;
+  /** Both null when captured without a position. */
+  lat: number | null;
+  lon: number | null;
   gps_accuracy_m: number | null;
   /** Moved by hand after capture. */
   position_corrected: boolean;
@@ -97,6 +99,8 @@ export interface Photo {
   device: Record<string, unknown> | null;
   image_url: string;
   created_at: string;
+  /** A file on the phone (queued shots, which have no image on the server yet). */
+  local_uri?: string;
 }
 
 /** The unit of scouting metadata: one photo, or a whole sequence. */
@@ -111,6 +115,9 @@ export interface Shot {
   light: string[];
   artificial: boolean;
   weather: string | null;
+  shot_size: string | null;
+  camera_support: string | null;
+  movement: string[];
   state: "unreviewed" | "approved" | "archived";
   extra: Extra;
   captured_at: string;
@@ -118,6 +125,8 @@ export interface Shot {
   updated_at: string | null;
   /** Ordered; never empty. */
   photos: Photo[];
+  /** Only on the phone: still in the upload queue (see localShots.ts). */
+  queued?: boolean;
 }
 
 /** A shooting day of a project with its planned shots in order (planned in the dashboard). */
@@ -126,6 +135,11 @@ export interface ShootingDay { id: string; project_id: string; date: string; tit
 
 /** The photo that stands for the shot in lists, maps and filters: the first one. */
 export const cover = (s: Shot): Photo => s.photos[0];
+/** Where a shot is on a map: the cover photo, else the first photo with a position; null when none has one. */
+export function positionOf(s: Shot): { lat: number; lon: number } | null {
+  const p = [cover(s), ...s.photos].find((x) => x.lat !== null && x.lon !== null);
+  return p ? { lat: p.lat!, lon: p.lon! } : null;
+}
 
 /** Locations and projects share this shape as far as the app is concerned. */
 interface ServerNamed { id: string; name: string; created_at: string; field_ids?: string[] }
@@ -222,6 +236,6 @@ export const api = {
     // Expo's global fetch is the WinterCG implementation: it rejects React Native's
     // {uri,name,type} descriptors but accepts an expo-file-system File directly.
     for (const p of metadata.photos) form.append(`photo.${p.id}`, new File(files[p.id]) as unknown as Blob, `${p.id}.jpg`);
-    return call<{ shot: { id: string }; duplicate?: boolean }>("/api/shots", { method: "POST", body: form });
+    return call<{ shot: Shot; duplicate?: boolean }>("/api/shots", { method: "POST", body: form });
   },
 };

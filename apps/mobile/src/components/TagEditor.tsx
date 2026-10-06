@@ -1,7 +1,7 @@
 import { useMemo, useState, type ReactNode } from "react";
 import { FlatList, Pressable, Text, View } from "react-native";
 import * as Crypto from "expo-crypto";
-import { extraSummary, label, LIGHT, PHASE_ICONS, selectOptions, WEATHER, type Extra, type ExtraValue, type FieldDef } from "@fielder/vocab";
+import { CAMERA_SUPPORTS, extraSummary, label, LIGHT, MOVEMENTS, PHASE_ICONS, selectOptions, SHOT_SIZE_ABBR, SHOT_SIZES, WEATHER, type Extra, type ExtraValue, type FieldDef } from "@fielder/vocab";
 import type { LocationEntry, ShotTags } from "../types";
 import { BORDER, Button, Chip, ChipRow, ErrorText, FieldRow, Hint, Icon, Input, makeStyles, SectionHeading, Seg, Sheet, SheetSearch, Switch, type, useTheme } from "../ui";
 import { OptionSheet, rankMatches } from "./OptionSheet";
@@ -9,7 +9,14 @@ import { OptionSheet, rankMatches } from "./OptionSheet";
 /** The tags being edited, plus a location typed in the sheet that does not exist yet (created on save). */
 export interface TagDraft { tags: ShotTags; newLocation: LocationEntry | null }
 
-export const EMPTY_TAGS: ShotTags = { name: null, light: [], artificial: false, weather: null, int_ext: null, location_id: null, extra: {} };
+export const EMPTY_TAGS: ShotTags = { name: null, light: [], artificial: false, weather: null, int_ext: null, location_id: null, shot_size: null, camera_support: null, movement: [], extra: {} };
+
+const SUPPORT_ICONS: Record<string, string> = {
+  static: "tripod", handheld: "hand-back-right-outline", steadicam: "human-handsdown", gimbal: "axis-arrow", dolly: "car-pickup",
+  slider: "arrow-left-right", crane: "crane", drone: "quadcopter", vehicle: "car-outline",
+};
+/** "WS · Wide" */
+const sizeLabel = (v: string) => `${SHOT_SIZE_ABBR[v as keyof typeof SHOT_SIZE_ABBR] ?? v} · ${label(v)}`;
 
 export const WEATHER_ICONS: Record<string, string> = {
   none: "minus-circle-outline", sunny: "weather-sunny", partly_cloudy: "weather-partly-cloudy", cloudy: "weather-cloudy",
@@ -36,6 +43,8 @@ interface Props {
 type Open =
   | { kind: "location" }
   | { kind: "weather" }
+  | { kind: "size" }
+  | { kind: "support" }
   | { kind: "select"; path: string[]; def: FieldDef; siblings: Extra; parentLabel?: string }
   | { kind: "value"; path: string[]; def: FieldDef }
   | null;
@@ -148,6 +157,15 @@ export function TagEditor({ value, onChange, locations, countAt, fields, project
       </View>
       <FieldRow icon="map-marker-outline" label="Location" value={locationText} remembered={last("location_id")} onPress={() => setOpen({ kind: "location" })} />
       <FieldRow icon={WEATHER_ICONS[tags.weather ?? ""] ?? "weather-partly-cloudy"} label="Weather" value={tags.weather ? label(tags.weather) : null} remembered={last("weather")} onPress={() => setOpen({ kind: "weather" })} />
+      <SectionHeading>Camera</SectionHeading>
+      <FieldRow icon="crop" label="Shot size" value={tags.shot_size ? sizeLabel(tags.shot_size) : null} onPress={() => setOpen({ kind: "size" })} />
+      <FieldRow icon={SUPPORT_ICONS[tags.camera_support ?? ""] ?? "video-outline"} label="Camera support" value={tags.camera_support ? label(tags.camera_support) : null} remembered={last("camera_support")} onPress={() => setOpen({ kind: "support" })} />
+      <View style={s.block}>
+        <Text style={s.label}>Movement · any number</Text>
+        <ChipRow>
+          {MOVEMENTS.map((m) => <Chip key={m} label={label(m)} selected={tags.movement.includes(m)} onPress={() => set({ movement: MOVEMENTS.filter((x) => (x === m ? !tags.movement.includes(x) : tags.movement.includes(x))) }, "movement")} />)}
+        </ChipRow>
+      </View>
       {fields.length > 0 && (
         <>
           <SectionHeading>{projectName ? `${projectName} fields` : "Project fields"}</SectionHeading>
@@ -160,6 +178,10 @@ export function TagEditor({ value, onChange, locations, countAt, fields, project
         onPick={(l, created) => set({ location_id: l?.id ?? null }, "location_id", l && (created || l.id === newLocation?.id) ? l : null)} extra={newLocation} />
       <OptionSheet visible={open?.kind === "weather"} title="Weather" columns={2} options={WEATHER.map((w) => ({ id: w, label: label(w), icon: WEATHER_ICONS[w] }))}
         value={tags.weather ? [tags.weather] : []} onChange={(ids) => set({ weather: ids[0] ?? null }, "weather")} onClose={() => setOpen(null)} />
+      <OptionSheet visible={open?.kind === "size"} title="Shot size" sub="Widest to tightest" options={SHOT_SIZES.map((v) => ({ id: v, label: sizeLabel(v) }))}
+        value={tags.shot_size ? [tags.shot_size] : []} onChange={(ids) => set({ shot_size: ids[0] ?? null }, "shot_size")} onClose={() => setOpen(null)} />
+      <OptionSheet visible={open?.kind === "support"} title="Camera support" columns={2} options={CAMERA_SUPPORTS.map((v) => ({ id: v, label: label(v), icon: SUPPORT_ICONS[v] }))}
+        value={tags.camera_support ? [tags.camera_support] : []} onChange={(ids) => set({ camera_support: ids[0] ?? null }, "camera_support")} onClose={() => setOpen(null)} />
       {sel && (
         <OptionSheet visible title={sel.parentLabel ? `${sel.def.label} · ${sel.parentLabel}` : sel.def.label} multiple={sel.def.multiple}
           options={selectOptions(sel.def, sel.siblings).map((o) => ({ id: o, label: o }))}

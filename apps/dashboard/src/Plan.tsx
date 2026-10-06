@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "preact/hooks";
 import { dayLight, lightLabel, localDay, PHASE_ICONS, shootableWindows, type DayLight, type Interval } from "@fielder/vocab";
 import { deleteDay, fetchDays, putDay, type DayShot, type Project, type Shot, type ShootingDay } from "./api";
-import { cover, shotTitle } from "./format";
+import { cover, positionOf, shotTitle } from "./format";
 import { Framed, type MaskMode } from "./Framed";
 import { invalidateDays } from "./Inspector";
 import { useKeys } from "./keys";
@@ -32,10 +32,10 @@ function nextSaturday(): string {
   d.setDate(d.getDate() + ((6 - d.getDay() + 7) % 7 || 7));
   return isoDate(d);
 }
-/** Centre of the shots' cover photos (for sun and weather), Berlin when there are none. */
+/** Centre of the shots' positions (for sun and weather), Berlin when none has one. */
 function centroid(shots: Shot[]): { lat: number; lon: number } {
-  if (shots.length === 0) return BERLIN;
-  const ps = shots.map(cover);
+  const ps = shots.map(positionOf).filter((p): p is { lat: number; lon: number } => !!p);
+  if (ps.length === 0) return BERLIN;
   return { lat: ps.reduce((a, p) => a + p.lat, 0) / ps.length, lon: ps.reduce((a, p) => a + p.lon, 0) / ps.length };
 }
 function mergeIntervals(list: Interval[]): Interval[] {

@@ -9,8 +9,9 @@ export interface Photo {
   shot_id: string;
   ordinal: number;
   timestamp: string;
-  lat: number;
-  lon: number;
+  /** Both null when captured without GPS. */
+  lat: number | null;
+  lon: number | null;
   gps_accuracy_m: number | null;
   /** Moved by hand after capture. */
   position_corrected: boolean;
@@ -36,6 +37,9 @@ export interface Shot {
   light: string[];
   artificial: boolean;
   weather: string | null;
+  shot_size: string | null;
+  camera_support: string | null;
+  movement: string[];
   state: ShotState;
   extra: Extra;
   captured_at: string;
@@ -68,7 +72,10 @@ export interface Location {
 }
 export interface SavedView { id: string; name: string; filter: FilterGroup; created_at: string; updated_at: string | null }
 /** null / [] / false = not specified. */
-export interface ShotTags { name: string | null; light: string[]; artificial: boolean; weather: string | null; int_ext: string | null; location_id: string | null; extra: Extra }
+export interface ShotTags {
+  name: string | null; light: string[]; artificial: boolean; weather: string | null; int_ext: string | null; location_id: string | null; extra: Extra;
+  shot_size: string | null; camera_support: string | null; movement: string[];
+}
 
 export class ApiError extends Error {
   constructor(public status: number, message: string, public body: unknown = null) { super(message); }

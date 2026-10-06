@@ -1,6 +1,6 @@
 import type { ComponentChildren } from "preact";
 import { useEffect, useMemo, useState } from "preact/hooks";
-import { extraSummary, INT_EXT, label, LIGHT, lightLabel, patchExtra, PHASE_ICONS, SHOT_STATES, WEATHER, type Extra, type ExtraValue, type FieldDef } from "@fielder/vocab";
+import { CAMERA_SUPPORTS, extraSummary, INT_EXT, label, LIGHT, lightLabel, MOVEMENTS, patchExtra, PHASE_ICONS, SHOT_SIZE_ABBR, SHOT_SIZES, SHOT_STATES, WEATHER, type Extra, type ExtraValue, type FieldDef } from "@fielder/vocab";
 import { existingIdOf, patchShot, patchShots, putLocation, type BulkSet, type Location, type Project, type Shot } from "./api";
 import { ExtraEditor } from "./ExtraEditor";
 import { cover, shotTitle } from "./format";
@@ -29,6 +29,8 @@ function valueText(def: FieldDef, v: unknown): string {
   return Array.isArray(v) ? v.join(", ") : String(v);
 }
 
+const sizeText = (v: unknown) => `${SHOT_SIZE_ABBR[v as keyof typeof SHOT_SIZE_ABBR] ?? v} · ${label(v as string)}`;
+
 function columns(projects: Project[], locations: Location[], defs: readonly FieldDef[]): Col[] {
   const nameIn = (list: { id: string; name: string }[], id: unknown) => list.find((x) => x.id === id)?.name ?? "deleted";
   return [
@@ -40,6 +42,9 @@ function columns(projects: Project[], locations: Location[], defs: readonly Fiel
     { id: "light", label: "Light", get: (s) => s.light, text: (v) => lightLabel(v as string[], false), nullable: true },
     { id: "artificial", label: "Artificial light", get: (s) => s.artificial, text: (v) => (v ? "Yes" : "No"), nullable: false },
     { id: "weather", label: "Weather", get: (s) => s.weather, text: (v) => label(v as string), nullable: true },
+    { id: "shot_size", label: "Shot size", get: (s) => s.shot_size, text: sizeText, nullable: true },
+    { id: "camera_support", label: "Camera support", get: (s) => s.camera_support, text: (v) => label(v as string), nullable: true },
+    { id: "movement", label: "Movement", get: (s) => s.movement, text: (v) => (v as string[]).map(label).join(" / "), nullable: true },
     ...defs.map((d): Col => ({ id: `extra.${d.key}`, label: d.label, get: (s) => s.extra[d.key] ?? null, text: (v) => valueText(d, v), nullable: true, def: d })),
   ];
 }
@@ -61,7 +66,7 @@ function requestOf(draft: BulkDraft): { set: BulkSet; extra: Extra } {
   const set: Record<string, unknown> = {};
   for (const [id, v] of Object.entries(draft)) {
     if (id.startsWith("extra.")) continue;
-    if (id === "light") set.light = v ?? [];
+    if (id === "light" || id === "movement") set[id] = v ?? [];
     else if (id === "name") set.name = String(v ?? "").trim() || null;
     else set[id] = v ?? null;
   }
@@ -215,6 +220,7 @@ export function BulkEditPanel({ shots, draft, onDraft, projects, locations, onLo
   const mixedHint = (c: Col) => (common(c).mixed && !(c.id in draft) ? "Mixed: pick to set for all" : "—");
   const light = (shown(col("light")) as string[] | null) ?? [];
   const artificial = shown(col("artificial"));
+  const movement = (shown(col("movement")) as string[] | null) ?? [];
   const leave = target ? leaving(shots, counts, target) : [];
   const extraShown: Extra = Object.fromEntries(defs.map((d) => [d.key, (shown(col(`extra.${d.key}`)) ?? null) as ExtraValue]));
 
@@ -251,6 +257,16 @@ export function BulkEditPanel({ shots, draft, onDraft, projects, locations, onLo
                 options={[{ id: "yes", label: "Yes" }, { id: "no", label: "No" }]} />)}
             {field(col("weather"),
               <Combobox small options={WEATHER.map((v) => ({ value: v, label: label(v) }))} value={(shown(col("weather")) as string | null) ?? null} placeholder={mixedHint(col("weather"))} onChange={(v) => set("weather", v)} />)}
+            {field(col("shot_size"),
+              <Combobox small options={SHOT_SIZES.map((v) => ({ value: v, label: sizeText(v) }))} value={(shown(col("shot_size")) as string | null) ?? null} placeholder={mixedHint(col("shot_size"))} onChange={(v) => set("shot_size", v)} />)}
+            {field(col("camera_support"),
+              <Combobox small options={CAMERA_SUPPORTS.map((v) => ({ value: v, label: label(v) }))} value={(shown(col("camera_support")) as string | null) ?? null} placeholder={mixedHint(col("camera_support"))} onChange={(v) => set("camera_support", v)} />)}
+            {field(col("movement"),
+              <div class="f-chips" role="group" aria-label="Movement">
+                {MOVEMENTS.map((m) => (
+                  <Chip key={m} selected={movement.includes(m)} onClick={() => set("movement", MOVEMENTS.filter((x) => (x === m ? !movement.includes(x) : movement.includes(x))))}>{label(m)}</Chip>
+                ))}
+              </div>)}
             {(defs.length > 0 || hidden > 0) && <div class="bulk__sub">Extra fields{hidden > 0 && <span class="meta"> · {plural(hidden, "field")} hidden: not used by every project in the selection</span>}</div>}
             {defs.map((d) => field(col(`extra.${d.key}`),
               <ExtraEditor bare defs={[d]} value={extraShown} onChange={(next) => set(`extra.${d.key}`, next[d.key] ?? null)} />))}

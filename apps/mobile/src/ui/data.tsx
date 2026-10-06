@@ -31,9 +31,14 @@ export function SeqBadge({ count, recording }: { count: number; recording?: bool
 }
 
 /** Solid black label over a photo ("Photo 2 / 5", "3 / 9"). */
-export function PhotoTag({ children, big }: { children: ReactNode; big?: boolean }) {
+export function PhotoTag({ children, big, icon }: { children: ReactNode; big?: boolean; icon?: string }) {
   const s = useStyles();
-  return <View style={[s.photoTag, big && { height: 36, paddingHorizontal: 12 }]}><Text style={[s.photoTagText, big && { fontSize: 17 }]}>{children}</Text></View>;
+  return (
+    <View style={[s.photoTag, icon && { flexDirection: "row", gap: 4 }, big && { height: 36, paddingHorizontal: 12 }]}>
+      {icon && <Icon name={icon} size={16} color={FIXED.white} />}
+      <Text style={[s.photoTagText, big && { fontSize: 17 }]}>{children}</Text>
+    </View>
+  );
 }
 
 /** 64 dp list row: icon, title, meta, trailing (chevron by default). Hub rows, pickers, rig list. */

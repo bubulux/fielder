@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState } from "react";
 import { ScrollView, Text, useWindowDimensions, View } from "react-native";
 import type { Shot } from "../api";
 import { useApp } from "../appState";
-import { useOnline } from "../net";
 import { store, usePref } from "../storage";
 import { ActionBar, AppHeader, BORDER, Button, Empty, IconButton, makeStyles, num, RADIUS, SideBySide, Skeleton, type, useLayoutSize, useRefreshControl, useToastOffset } from "../ui";
 import { EditTagsSheet } from "../components/EditTagsSheet";
@@ -13,18 +12,21 @@ import { FullPhoto, MoreSheet, ShotPhoto, ShotSummary, useShotActions } from "..
 /** Portrait decision bar: Prev · n of m · Next, then Archive | Approve. */
 const BAR_H = 10 + 52 + 8 + 52 + 12 + 2;
 
+type ReviewOrder = "newest" | "oldest";
+
 /**
- * Unreviewed shots of the active project, oldest first, one at a time: photo first, the decision
+ * Unreviewed shots of the active project (queued ones included), newest first unless switched in
+ * the header (remembered), one at a time: photo first, the decision
  * pinned at the thumb. Approve/Archive take the shot out; the next one takes its position (no
  * skip). Edit opens the same tag editor as Tag; Delete lives in ⋯ with Archive as the safe choice.
  */
 export function Review() {
   const s = useStyles();
   const app = useApp();
-  const online = useOnline();
   const { width, height } = useWindowDimensions();
   const portrait = height >= width;
   const [mode, setMode] = usePref<FrameMode>("reviewMode.v1", "mask", FRAME_MODES);
+  const [order, setOrder] = usePref<ReviewOrder>("reviewOrder.v1", "newest", ["newest", "oldest"]);
   const [photoIndex, setPhotoIndex] = useState(0);
   const [sheet, setSheet] = useState<"edit" | "more" | null>(null);
   const [full, setFull] = useState(false);
@@ -37,12 +39,14 @@ export function Review() {
   const [box, onBox] = useLayoutSize();
   useToastOffset(portrait ? BAR_H : 0);
 
-  const queue = useMemo(() => (shots ?? []).filter((x) => x.state === "unreviewed").sort((a, b) => a.captured_at.localeCompare(b.captured_at)), [shots]);
+  const queue = useMemo(() => (shots ?? []).filter((x) => x.state === "unreviewed").sort((a, b) => (order === "newest" ? -1 : 1) * a.captured_at.localeCompare(b.captured_at)), [shots, order]);
   const found = queue.findIndex((x) => x.id === currentId);
   const index = found >= 0 ? found : Math.min(lastIndex, queue.length - 1);
   const current: Shot | null = index >= 0 ? queue[index] : null;
   useEffect(() => { if (current && current.id !== currentId) setCurrentId(current.id); setLastIndex(Math.max(0, index)); }, [current?.id, index]);
   useEffect(() => { setPhotoIndex(0); }, [current?.id]);
+  // A new order starts at its top (the newest or the oldest shot), not on the shot that was showing.
+  const switchOrder = () => { setOrder(order === "newest" ? "oldest" : "newest"); setCurrentId(null); setLastIndex(0); };
   const go = (delta: number) => { const nx = queue[index + delta]; if (nx) setCurrentId(nx.id); };
   const decide = async (state: Shot["state"]) => {
     if (!current || busy) return;
@@ -50,7 +54,8 @@ export function Review() {
     try { await setState(current, state); } finally { setBusy(false); }
   };
 
-  const header = <AppHeader offlineMeta="Decisions need the server. The loaded queue stays browsable." />;
+  const header = <AppHeader offlineMeta="Decisions and edits are kept on the phone and sent when you are online."
+    trail={{ icon: order === "newest" ? "sort-clock-descending-outline" : "sort-clock-ascending-outline", label: order === "newest" ? "Newest first, switch to oldest first" : "Oldest first, switch to newest first", onPress: switchOrder }} />;
   const refresh = useRefreshControl(refreshing, () => void load());
 
   if (error && !shots) {
@@ -83,7 +88,7 @@ export function Review() {
     return (
       <View style={s.root}>{header}
         <ScrollView refreshControl={refresh}>
-          <Empty icon="check-all" title="Nothing to review" body={shots.length ? `${approved} approved · ${archived} archived in ${app.project?.name ?? "this project"}. New shots show up here after they upload.` : "New shots show up here after they upload."}>
+          <Empty icon="check-all" title="Nothing to review" body={shots.length ? `${approved} approved · ${archived} archived in ${app.project?.name ?? "this project"}. New shots show up here right after capture.` : "New shots show up here right after capture."}>
             {shots.length > 0 && <Button kind="secondary" icon="view-grid-outline" label="Browse shots" onPress={() => { store.savePref("shotsFilter.v1", "all"); app.setShotsView("grid"); app.setTab("shots"); }} />}
           </Empty>
         </ScrollView>
@@ -92,12 +97,12 @@ export function Review() {
   }
 
   const photo = current.photos[Math.min(photoIndex, current.photos.length - 1)];
-  const disabled = busy || !online;
+  const disabled = busy;
   const nav = (big: boolean) => (
     <View style={s.navRow}>
       {big ? <Button style={{ flex: 1 }} kind="secondary" icon="chevron-left" label="Prev" onPress={() => go(-1)} disabled={index === 0} />
         : <IconButton icon="chevron-left" label="Previous shot" size={52} onPress={() => go(-1)} disabled={index === 0} />}
-      <Text style={s.pos}>{index + 1} of {queue.length}</Text>
+      <Text style={s.pos}>{index + 1} of {queue.length}{"\n"}<Text style={s.order}>{order} first</Text></Text>
       {big ? <Button style={{ flex: 1 }} kind="secondary" icon="chevron-right" label="Next" onPress={() => go(1)} disabled={index === queue.length - 1} />
         : <IconButton icon="chevron-right" label="Next shot" size={52} onPress={() => go(1)} disabled={index === queue.length - 1} />}
     </View>
@@ -110,7 +115,7 @@ export function Review() {
   );
   const tools = (
     <SideBySide>
-      <IconButton icon="pencil-outline" label="Edit details" size={52} onPress={() => setSheet("edit")} disabled={!online} />
+      <IconButton icon="pencil-outline" label="Edit details" size={52} onPress={() => setSheet("edit")} />
       <IconButton icon="dots-horizontal" label="More" size={52} onPress={() => setSheet("more")} />
     </SideBySide>
   );
@@ -166,6 +171,7 @@ const useStyles = makeStyles((c) => ({
   body: { padding: 16, gap: 16 },
   navRow: { flexDirection: "row", alignItems: "center", gap: 8 },
   pos: { ...type("body", "bold"), color: c.text, ...num, minWidth: 72, textAlign: "center" },
+  order: { ...type("caption"), color: c.textDim },
   floatMode: { position: "absolute", left: 8, bottom: 8, padding: 4, borderRadius: RADIUS.pill, backgroundColor: c.chromeBg, borderWidth: BORDER.badge, borderColor: c.chromeBorder },
   side: { width: 292, backgroundColor: c.surface, borderLeftWidth: BORDER.control, borderLeftColor: c.border },
   sideBar: { gap: 8, padding: 12, borderTopWidth: BORDER.control, borderTopColor: c.border },

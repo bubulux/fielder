@@ -2,7 +2,7 @@ import type { ComponentChildren } from "preact";
 import { useEffect, useState } from "preact/hooks";
 import { label, type FieldDef } from "@fielder/vocab";
 import { deleteShot, patchShot, type Location, type Preset, type Project, type Shot, type ShotState } from "./api";
-import { FRAME_MODES, rigLabel, when } from "./format";
+import { FRAME_MODES, positionOf, rigLabel, when } from "./format";
 import { downloadCrop, Framed, type MaskMode } from "./Framed";
 import { Inspector } from "./Inspector";
 import { afterG, useKeys } from "./keys";
@@ -14,7 +14,7 @@ import { Button, confirmDialog, cx, Icon, IconButton, Kbd, ProgressBar, Seg, toa
 
 export type ShotContext =
   | { kind: "shot"; line: string; onBack: () => void; backLabel: string }
-  | { kind: "review"; total: number };
+  | { kind: "review"; total: number; newestFirst: boolean; onOrder: () => void };
 
 interface Props {
   shot: Shot;
@@ -99,7 +99,7 @@ export function ShotView(p: Props) {
         ) : (
           <>
             <ToolbarTitle>Review</ToolbarTitle>
-            <ReviewProgress value={(index + 1) / Math.max(1, p.context.total)}><strong>{index + 1} of {p.context.total}</strong> · oldest first</ReviewProgress>
+            <ReviewProgress value={(index + 1) / Math.max(1, p.context.total)}><strong>{index + 1} of {p.context.total}</strong> · <button type="button" class="f-linkbtn" title="Change the order (O)" onClick={p.context.onOrder}>{p.context.newestFirst ? "newest first" : "oldest first"}</button></ReviewProgress>
           </>
         )}
         <div class="btn-row" style={{ gap: "4px" }}>
@@ -146,7 +146,7 @@ export function ShotView(p: Props) {
                 <div class="btn-row" style={{ gap: "6px", justifyContent: "flex-end" }}>
                   <Button kind="secondary" size="sm" icon="crop" title="Download the photo cropped to the rig frame" onClick={() => void downloadCrop(photo)}>Download crop</Button>
                   <a class="f-btn f-btn--secondary f-btn--sm" href={photo.image_url} download target="_blank" rel="noreferrer"><Icon name="download-outline" />Original</a>
-                  <Button kind="secondary" size="sm" icon="map-marker-outline" onClick={() => p.onShowOnMap(shot)}>Show on map</Button>
+                  <Button kind="secondary" size="sm" icon="map-marker-outline" disabled={!positionOf(shot)} title={positionOf(shot) ? undefined : "Captured without GPS: set a position first"} onClick={() => p.onShowOnMap(shot)}>Show on map</Button>
                   <IconButton kind="danger" icon="delete-outline" label="Delete shot…" title="Delete shot…" onClick={() => void remove()} />
                 </div>
               </div>
@@ -174,5 +174,5 @@ export function ReviewProgress({ value, children }: { value: number; children: C
 export function shotHints(stage: Stage, review: boolean): { k: string; t: string }[] {
   if (stage === "rigs") return [{ k: "←/→", t: "Lens" }, { k: "Tab", t: "Rig / lens pickers" }, { k: "Esc", t: "Back to photo" }];
   if (stage === "position") return [{ k: "Drag", t: "Move pin" }, { k: "↵", t: "Save position" }, { k: "Esc", t: "Cancel" }];
-  return [{ k: "←/→", t: review ? "Queue" : "Shots" }, { k: ", .", t: "Photos" }, { k: "A", t: "Approve" }, { k: "E", t: "Archive" }, { k: "R", t: "Rigs" }, { k: "M", t: "Frame mode" }, { k: "Esc", t: review ? "Leave field" : "Close" }];
+  return [{ k: "←/→", t: review ? "Queue" : "Shots" }, { k: ", .", t: "Photos" }, { k: "A", t: "Approve" }, { k: "E", t: "Archive" }, { k: "R", t: "Rigs" }, { k: "M", t: "Frame mode" }, ...(review ? [{ k: "O", t: "Order" }] : []), { k: "Esc", t: review ? "Leave field" : "Close" }];
 }

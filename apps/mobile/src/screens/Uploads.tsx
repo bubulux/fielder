@@ -2,7 +2,8 @@ import { useState } from "react";
 import { ActivityIndicator, SectionList, Text, View } from "react-native";
 import { File } from "expo-file-system";
 import { useApp } from "../appState";
-import { hhmm } from "../shots";
+import { isOfflineMode } from "../net";
+import { hhmm, shortTime } from "../shots";
 import { store } from "../storage";
 import { useSync } from "../sync";
 import type { PendingUpload } from "../types";
@@ -25,8 +26,9 @@ export async function retryAll() {
 
 /**
  * The upload queue: stuck shots first (with the server's error, Retry and Discard), then the
- * ones waiting, oldest first. Reached from the header sync button, the Setup status card and a
- * long-press on the Shoot Uploads button.
+ * ones waiting, oldest first, then what was uploaded in the last 7 days (with the time). Reached
+ * from the header sync button, the Setup status card, Setup → Offline and a long-press on the
+ * Shoot Uploads button.
  */
 export function Uploads() {
   const s = useStyles();
@@ -42,6 +44,9 @@ export function Uploads() {
     ...(waiting.length ? [{ key: "waiting", title: "Uploading · waiting", data: waiting }] : []),
   ];
   const locationName = (id: string | null) => (id ? app.locations.find((l) => l.id === id)?.name ?? null : null);
+  const history = store.loadHistory();
+  const projectName = (id: string) => app.projects.find((p) => p.id === id)?.name ?? null;
+  const paused = isOfflineMode();
 
   const run = async () => { setBusy(true); try { await retryAll(); } finally { setBusy(false); } };
   const discard = async (p: PendingUpload) => {
@@ -52,7 +57,7 @@ export function Uploads() {
   return (
     <PushScreen title="Uploads" sub={queue.length ? `${queue.length} on this phone` : "Nothing waiting"} scroll={false}
       offlineMeta="Uploads resume when the server is reachable again."
-      footer={queue.length ? <Button style={{ flex: 1 }} icon="refresh" label={sync.online ? `Retry all ${queue.length} now` : "Retry when online"} onPress={() => void run()} busy={busy || sync.state === "uploading"} disabled={!sync.online} /> : undefined}>
+      footer={queue.length ? <Button style={{ flex: 1 }} icon="refresh" label={paused ? "Offline mode is on" : sync.online ? `Retry all ${queue.length} now` : "Retry when online"} onPress={() => void run()} busy={busy || sync.state === "uploading"} disabled={!sync.online || paused} /> : undefined}>
       <SectionList
         sections={sections}
         keyExtractor={(p) => p.metadata.id}
@@ -64,6 +69,21 @@ export function Uploads() {
         ListEmptyComponent={
           <Empty icon="cloud-check-outline" title="All on the server" body="Nothing waiting on this phone. Every shot you took is uploaded." />
         }
+        ListFooterComponent={history.length ? (
+          <View>
+            <View style={s.sectionHead}><SectionLabel>Uploaded · last 7 days · {history.length}</SectionLabel></View>
+            {history.map((h) => (
+              <View key={h.id} style={s.done}>
+                <Icon name="cloud-check-outline" color={c.ok} />
+                <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
+                  <Text style={s.title} numberOfLines={1}>{h.name || "Untitled shot"}</Text>
+                  <Text style={s.meta} numberOfLines={1}>{[photoWord(h.photos), projectName(h.projectId), `taken ${hhmm(h.capturedAt)}`].filter(Boolean).join(" · ")}</Text>
+                </View>
+                <Text style={s.when}>{shortTime(h.uploadedAt)}</Text>
+              </View>
+            ))}
+          </View>
+        ) : null}
         renderItem={({ item }) => (
           <UploadRow entry={item} settings={app.settings} location={locationName(item.metadata.location_id)} uploading={sync.progress?.shotId === item.metadata.id ? sync.progress : null}
             onRetry={() => void run()} onDiscard={() => void discard(item)} retryDisabled={!sync.online || busy} />
@@ -124,5 +144,7 @@ const useStyles = makeStyles((c) => ({
   title: { ...type("body", "bold"), color: c.text },
   meta: { ...type("small"), color: c.textDim, ...num },
   state: { ...type("small", "bold"), ...num },
+  done: { flexDirection: "row", alignItems: "center", gap: 12, paddingHorizontal: 16, paddingVertical: 10, backgroundColor: c.surface, borderBottomWidth: 1, borderBottomColor: c.borderSubtle },
+  when: { ...type("small", "bold"), color: c.text, ...num },
   error: { ...type("small"), color: c.text, padding: 10, borderRadius: RADIUS.xs + 3, backgroundColor: c.dangerTint, ...num },
 }));

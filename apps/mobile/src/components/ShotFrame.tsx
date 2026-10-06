@@ -1,5 +1,6 @@
 import type { StyleProp, ViewStyle } from "react-native";
 import { imageHeaders, imageUri, type Photo } from "../api";
+import { isOfflineMode } from "../net";
 import { offlinePhotoUri } from "../offline";
 import type { Settings } from "../types";
 import { FramedImage, type FrameFractions, type FrameMode } from "./FramedImage";
@@ -23,12 +24,24 @@ interface Props {
   style?: StyleProp<ViewStyle>;
 }
 
-/** A stored photo rendered with its rig frame: the offline copy if there is one, else through the authenticated image proxy. */
+/**
+ * Where a photo's image comes from: the queued file or the offline copy if there is one, else the
+ * authenticated image proxy. In offline mode nothing is requested (an empty source stays black).
+ */
+export function photoSource(photo: Photo): { uri: string; headers?: Record<string, string> } {
+  const local = photo.local_uri ?? offlinePhotoUri(photo);
+  if (local) return { uri: local };
+  return isOfflineMode() ? { uri: "" } : { uri: imageUri(photo), headers: imageHeaders() };
+}
+
+/**
+ * A photo rendered with its rig frame: the queued file or the offline copy if there is one, else
+ * through the authenticated image proxy (not in offline mode: then it stays black).
+ */
 export function ShotFrame({ photo, width, settings, mode, style }: Props) {
-  const local = offlinePhotoUri(photo);
   return (
     <FramedImage
-      source={local ? { uri: local } : { uri: imageUri(photo), headers: imageHeaders() }}
+      source={photoSource(photo)}
       aspect={imageAspect(photo)}
       frame={frameOf(photo)}
       width={width}

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "preact/hooks";
-import { label, lightLabel, SHOT_STATES, STATE_ICONS, type FieldDef } from "@fielder/vocab";
+import { cameraLabel, label, lightLabel, SHOT_STATES, STATE_ICONS, type FieldDef } from "@fielder/vocab";
 import { deleteShot, type Location, type SavedView, type Shot } from "./api";
 import { BulkEditPanel, MoveDialog, type BulkDraft } from "./BulkEdit";
 import { FilterPanel } from "./FilterBuilder";
@@ -263,7 +263,7 @@ function ShotsList({ shots, isAll, mask, onOpen, onDeleted, bulk, onBulkOpen }: 
         <thead><tr>
           <th class="is-cell-check"><Checkbox checked={all} indeterminate={some} aria-label={all ? "Deselect all" : "Select all"} onClick={() => setSelected(all ? new Set() : new Set(shots.map((s) => s.id)))} /></th>
           <th style={{ width: "72px" }} />
-          <th>Name</th>{isAll && <th>Project</th>}<th>Location</th><th>State</th><th>INT/EXT</th><th>Light</th><th>Rig · lens</th><th class="is-num">Photos</th><th>Captured</th>
+          <th>Name</th>{isAll && <th>Project</th>}<th>Location</th><th>State</th><th>INT/EXT</th><th>Light</th><th>Camera</th><th>Rig · lens</th><th class="is-num">Photos</th><th>Captured</th>
         </tr></thead>
         <tbody ref={body}>
           {shots.map((s, i) => (
@@ -278,6 +278,7 @@ function ShotsList({ shots, isAll, mask, onOpen, onDeleted, bulk, onBulkOpen }: 
               <td><StateMarker state={s.state} /></td>
               <td>{label(s.int_ext).toUpperCase() || <span class="is-dim">—</span>}</td>
               <td>{lightLabel(s.light, s.artificial) || <span class="is-dim">—</span>}</td>
+              <td>{cameraLabel(s) || <span class="is-dim">—</span>}</td>
               <td class="is-dim">{rigLabel(cover(s))}</td>
               <td class="is-num">{s.photos.length}</td>
               <td class="is-dim">{when(s.captured_at)}</td>

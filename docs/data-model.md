@@ -10,6 +10,7 @@ D1 (SQLite) database `fielder-db`, schema in `apps/worker/migrations/`. Images l
 | `0002_photo_position_corrected.sql` | `photos.position_corrected` |
 | `0003_field_definitions.sql` | `field_definitions`, `project_fields` |
 | `0004_shooting_days.sql` | `shooting_days`, `day_shots` |
+| `0005_capture_flow.sql` | `shots.shot_size`, `camera_support`, `movement`; `photos` rebuilt with nullable `lat`/`lon` (copied row by row, both or neither set) |
 
 Add a new numbered file for every change; never edit one that was applied to production. Apply with `pnpm -C apps/worker migrate:local` / `migrate:remote` (see [development](development.md)).
 
@@ -21,14 +22,15 @@ Add a new numbered file for every change; never edit one that was applied to pro
 
 `locations(id, name UNIQUE NOCASE, created_at, updated_at)`: shared by all projects. No district (removed in the rework).
 
-`shots(id, project_id → projects RESTRICT, location_id → locations SET NULL, name, int_ext, light JSON array, artificial 0/1, weather, state, extra JSON object, captured_at, created_at, updated_at)`
+`shots(id, project_id → projects RESTRICT, location_id → locations SET NULL, name, int_ext, light JSON array, artificial 0/1, weather, shot_size, camera_support, movement JSON array, state, extra JSON object, captured_at, created_at, updated_at)`
 - `state`: `unreviewed` (on upload) → `approved` / `archived`.
 - `light`: subset of `dawn, day, dusk, night`, stored in that canonical order. Empty = no requirement.
+- Camera language (`packages/vocab`): `shot_size` one of `ews, ws, mws, ms, mcu, cu, ecu`; `camera_support` one of `static, handheld, steadicam, gimbal, dolly, slider, crane, drone, vehicle`; `movement` any subset of `pan, tilt, push_in, pull_out, tracking, pedestal, orbit, zoom` in that order. `cameraLabel()` gives "WS · Steadicam · Pan / Push in".
 - `artificial`: lit artificially, independent of phases and INT/EXT.
 - `captured_at`: earliest photo timestamp; recomputed when photos are added. Lists sort and paginate on `(captured_at, id)`.
 - `extra`: values of the project's extra fields ([extra fields](features/extra-fields.md)).
 
-`photos(id, shot_id → shots CASCADE, ordinal UNIQUE per shot, timestamp, lat, lon, gps_accuracy_m, position_corrected, preset_id → presets SET NULL, lens_mm, r2_object_key UNIQUE, width, height, framing JSON, device JSON, created_at)`
+`photos(id, shot_id → shots CASCADE, ordinal UNIQUE per shot, timestamp, lat, lon (both NULL when captured without GPS), gps_accuracy_m, position_corrected, preset_id → presets SET NULL, lens_mm, r2_object_key UNIQUE, width, height, framing JSON, device JSON, created_at)`
 
 `views(id, name, filter JSON, …)`: saved dashboard filters (model in `packages/vocab/src/filter.ts`).
 

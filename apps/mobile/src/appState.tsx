@@ -12,6 +12,7 @@ export type Tab = "shoot" | "review" | "shots" | "day" | "setup";
  */
 export type Route =
   | { name: "uploads" }
+  | { name: "offline" }
   | { name: "shot"; shotId: string; /** The list it was opened from, for swiping to the neighbours. */ list: string[] }
   | { name: "position"; shotId: string; photoId: string }
   | { name: "mapFocus"; shotId: string }
