@@ -60,7 +60,7 @@ button.f-check.is-indeterminate .f-check__box { background: var(--accent); borde
   .f-scrim {
     opacity: 1;
     background: color-mix(in srgb, var(--bg) 55%, transparent);
-    -webkit-backdrop-filter: blur(7px) saturate(150%);
-    backdrop-filter: blur(7px) saturate(150%);
+    -webkit-backdrop-filter: blur(14px) saturate(150%);
+    backdrop-filter: blur(14px) saturate(150%);
   }
 }
