@@ -45,6 +45,8 @@ export function Review() {
   const current: Shot | null = index >= 0 ? queue[index] : null;
   useEffect(() => { if (current && current.id !== currentId) setCurrentId(current.id); setLastIndex(Math.max(0, index)); }, [current?.id, index]);
   useEffect(() => { setPhotoIndex(0); }, [current?.id]);
+  // A new order starts at its top (the newest or the oldest shot), not on the shot that was showing.
+  const switchOrder = () => { setOrder(order === "newest" ? "oldest" : "newest"); setCurrentId(null); setLastIndex(0); };
   const go = (delta: number) => { const nx = queue[index + delta]; if (nx) setCurrentId(nx.id); };
   const decide = async (state: Shot["state"]) => {
     if (!current || busy) return;
@@ -53,7 +55,7 @@ export function Review() {
   };
 
   const header = <AppHeader offlineMeta="Decisions and edits are kept on the phone and sent when you are online."
-    trail={{ icon: order === "newest" ? "sort-clock-descending-outline" : "sort-clock-ascending-outline", label: order === "newest" ? "Newest first, switch to oldest first" : "Oldest first, switch to newest first", onPress: () => setOrder(order === "newest" ? "oldest" : "newest") }} />;
+    trail={{ icon: order === "newest" ? "sort-clock-descending-outline" : "sort-clock-ascending-outline", label: order === "newest" ? "Newest first, switch to oldest first" : "Oldest first, switch to newest first", onPress: switchOrder }} />;
   const refresh = useRefreshControl(refreshing, () => void load());
 
   if (error && !shots) {

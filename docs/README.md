@@ -11,6 +11,7 @@ Reference documentation for the whole app. Start with [architecture](architectur
 | [api.md](api.md) | Every Worker endpoint, with request and response shapes |
 | [development.md](development.md) | Local dev loops, checks, deploy, migrations, APK builds |
 | [infrastructure.md](infrastructure.md) | Cloudflare resources, Access, EAS, secrets |
+| [known-issues.md](known-issues.md) | Risks and untested cases we know about, with where they live |
 | [design.md](design.md) | Design system: Sun/Set themes, contrast rules, tokens, icons, where the styles live |
 
 ## Features

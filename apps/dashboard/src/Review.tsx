@@ -32,7 +32,14 @@ const loadOrder = () => { try { return localStorage.getItem("reviewOrder") !== "
 /** Unreviewed shots one at a time on the shot-view layout, newest first unless switched (O, remembered). No skip; ←/→ move through the queue. */
 export function ReviewPage(p: Props) {
   const [newestFirst, setNewestFirst] = useState(loadOrder);
-  const toggleOrder = () => { const v = !newestFirst; setNewestFirst(v); try { localStorage.setItem("reviewOrder", v ? "newest" : "oldest"); } catch { /* a preference */ } };
+  // A new order starts at its top (the newest or the oldest shot), not on the shot that was showing.
+  const toggleOrder = () => {
+    const v = !newestFirst;
+    setNewestFirst(v);
+    setCurrentId(null);
+    setLastIndex(0);
+    try { localStorage.setItem("reviewOrder", v ? "newest" : "oldest"); } catch { /* a preference */ }
+  };
   useKeys({ o: toggleOrder });
   const queue = useMemo(() => p.shots.filter((s) => s.state === "unreviewed").sort((a, b) => (newestFirst ? -1 : 1) * a.captured_at.localeCompare(b.captured_at)), [p.shots, newestFirst]);
   // Follow the shot, not the position, so edits don't jump; when it leaves the queue the next one takes its place.

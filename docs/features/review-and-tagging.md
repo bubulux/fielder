@@ -24,7 +24,7 @@ The shot view (`ShotView.tsx`) replaces the old dialog. It covers the main area 
 
 - **Toolbar**:
   - Shot view: back (Esc) to where it was opened from, "7 of 212" with the list's description (state · view or project · sort), and ←/→.
-  - Review: "3 of 14 · newest first" with a progress bar, and ←/→. The order is a link that switches to oldest first (also `O`), remembered in `localStorage["reviewOrder"]`.
+  - Review: "3 of 14 · newest first" with a progress bar, and ←/→. The order is a link that switches to oldest first (also `O`), remembered in `localStorage["reviewOrder"]`; switching starts at the top of the new order.
   - Both: the **stage switch** Photo · Rigs (`R`) · Position, and the frame-mode switch. The frame mode starts from the global mode; a change sticks for ←/→ until the view closes (`viewMode`/`reviewMode` in `App.tsx`). `M` cycles it.
 - **Stage**:
   - **Photo**: the photo as large as fits, with prev/next buttons beside it and nothing drawn over the picture (rig and lens are in the inspector). The foot has the photo strip for sequences (`,` `.`) and the actions Download crop (cropped in the browser), Original, Show on map, and Delete (confirm dialog, offering Archive instead).
@@ -50,7 +50,7 @@ The shot view (`ShotView.tsx`) replaces the old dialog. It covers the main area 
 
 ## Review on the phone
 
-The **Review** tab (`screens/Review.tsx`) takes the same queue (unreviewed, queued shots included, newest first; the header button switches to oldest first, remembered in `reviewOrder.v1`; no skip), photo first, with the decision at the thumb:
+The **Review** tab (`screens/Review.tsx`) takes the same queue (unreviewed, queued shots included, newest first; the header button switches to oldest first and starts at the top of that order, remembered in `reviewOrder.v1`; no skip), photo first, with the decision at the thumb:
 - The photo spans the width (up to 262 dp), with the SEQ badge and "Photo i / n" for sequences and the photo strip under it. **Swipe** on the photo = next/prev shot; the strip moves between photos. **Double-tap** opens the photo full screen (mode switch on an opaque card; swipe = photos).
 - The frame-view switch (remembered in `reviewMode.v1`).
 - The summary:

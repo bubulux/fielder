@@ -55,7 +55,7 @@ When the owner hands you an issue (a number or a link), that means: read it, cha
 3. **Branch** from an up-to-date `main`: `feat/<n>-<slug>` or `fix/<n>-<slug>`.
 4. **Implement**, update the docs in the same commits, run the checks below, commit per meaningful step.
 5. **Push and open a PR** that links the issue (`Closes #<n>` in the body). The body covers what changed, the decisions you made, what was checked, and what was not clicked through.
-6. **Report back** with the PR link, open points and what the owner should test. Merge only when asked (`gh pr merge <n> --merge`; that also closes the issue).
+6. **Report back** with the PR link, open points and what the owner should test. Risks you couldn't rule out go into `docs/known-issues.md`. Merge only when asked (`gh pr merge <n> --merge`; that also closes the issue).
 
 ## Verify before you say "done"
 
