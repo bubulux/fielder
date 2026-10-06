@@ -31,6 +31,8 @@ pnpm dev:dashboard
 
 Local D1 and R2 state lives in `apps/worker/.wrangler/state` (delete it to start fresh, then `pnpm -C apps/worker migrate:local`). Local data is separate from production: say which one you mean.
 
+Demo data: `pnpm dev:seed [count]` (worker running) uploads 40 shots by default with stock photos from picsum.photos into the projects "Stock demo" and "Stock demo B", with locations, random tags, review states and some sequences. Ids are derived from the seed, so a re-run adds nothing twice. It refuses any API other than localhost.
+
 API smoke tests work with plain `curl` against `localhost:8787` (no auth needed locally). Multipart uploads: `curl -F "metadata=…" -F "photo.<id>=@file.jpg;type=image/jpeg"`.
 
 ## Phone dev loop (Expo Go)

@@ -114,9 +114,13 @@ function validateValue(f: FieldDef, v: ExtraValue, siblings: Record<string, Extr
   }
 }
 
-/** Validates `extra` against the fields a project uses: known keys only, values of the right type. */
-export function validateValues(defs: readonly FieldDef[], extra: Record<string, ExtraValue>, path = "extra"): string | null {
+/**
+ * Validates `extra` against the fields a project uses: known keys only, values of the right type.
+ * `only` limits the check to those top-level keys (a bulk edit must not fail on values it leaves alone).
+ */
+export function validateValues(defs: readonly FieldDef[], extra: Record<string, ExtraValue>, path = "extra", only?: readonly string[]): string | null {
   for (const [k, v] of Object.entries(extra)) {
+    if (only && !only.includes(k)) continue;
     const f = defs.find((d) => d.key === k);
     if (!f) return `${path}.${k}: no such field in this project`;
     const err = validateValue(f, v, extra, `${path}.${k}`);
@@ -136,6 +140,29 @@ export function pruneExtra(extra: Record<string, ExtraValue>): Extra {
     } else out[k] = v;
   }
   return out;
+}
+
+const isObject = (v: ExtraValue | undefined): v is Extra => typeof v === "object" && v !== null && !Array.isArray(v);
+
+/**
+ * Applies a bulk edit to one shot's `extra`: each key in `patch` replaces that key, an empty value
+ * removes it, other keys stay. A group merges the same way, child by child, so editing one child
+ * keeps its siblings. Like the editor, a changed parent drops a dependent select whose value its
+ * new options no longer offer.
+ */
+export function patchExtra(defs: readonly FieldDef[], extra: Extra, patch: Record<string, ExtraValue>): Extra {
+  const next: Extra = { ...extra };
+  for (const [k, v] of Object.entries(patch)) {
+    const d = defs.find((x) => x.key === k);
+    next[k] = d?.type === "group" && isObject(v) ? patchExtra(d.fields ?? [], isObject(extra[k]) ? extra[k] : {}, v) : v;
+  }
+  for (const d of defs) {
+    if (!d.optionsBy || !(d.optionsBy.field in patch) || d.key in patch || isEmpty(next[d.key])) continue;
+    const opts = selectOptions(d, next);
+    const v = next[d.key];
+    if ((Array.isArray(v) ? v : [v]).some((x) => typeof x !== "string" || !opts.includes(x))) delete next[d.key];
+  }
+  return pruneExtra(next);
 }
 
 /** "U-Bahn: Line U4 · Station Nollendorfplatz"; unknown keys (field deleted) fall back to the raw key. */

@@ -46,6 +46,33 @@ button { font: inherit; }
 .selbar-wrap { position: sticky; bottom: 16px; display: flex; justify-content: center; padding: 0 var(--space-4); margin-top: var(--space-4); pointer-events: none; }
 .selbar-wrap .f-selbar { pointer-events: auto; }
 .f-app__body { position: relative; }
+
+/* Bulk edit of the list selection: edited fields get an accent bar, a bold label and "Edited". */
+.bulk { display: flex; flex-direction: column; }
+.bulk__intro { margin: 0; padding: var(--space-3) var(--space-4); border-bottom: var(--bw) solid var(--border-subtle); }
+.bulk__sub { padding: var(--space-4) var(--space-4) var(--space-1); font: var(--weight-bold) var(--text-micro)/1.3 var(--font-sans); letter-spacing: var(--tracking-caps); text-transform: uppercase; color: var(--text-dim); }
+.bulk__sub .meta { text-transform: none; letter-spacing: 0; font-weight: var(--weight-regular); }
+.bulk-field { display: flex; flex-direction: column; gap: var(--space-2); padding: 10px var(--space-4) 12px; border-bottom: var(--bw) solid var(--border-subtle); }
+.bulk-field.is-edited { background: var(--accent-tint); box-shadow: inset 4px 0 0 var(--accent); }
+.bulk-field__head { display: flex; align-items: center; gap: var(--space-2); min-height: 28px; }
+.bulk-field__label { font: var(--weight-semibold) var(--text-caption)/1.2 var(--font-sans); }
+.bulk-field.is-edited .bulk-field__label { font-weight: var(--weight-heavy); }
+.bulk-field__tag { display: inline-flex; align-items: center; gap: 4px; font: var(--weight-bold) var(--text-micro)/1 var(--font-sans); letter-spacing: var(--tracking-caps); text-transform: uppercase; color: var(--text); }
+.bulk-field__tag .mdi { color: var(--accent); }
+.bulk-field__diff { display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 10px; border: var(--bw-strong) solid var(--accent); border-radius: var(--radius-sm); background: var(--surface); color: var(--text); font: var(--weight-bold) var(--text-caption)/1 var(--font-sans); font-variant-numeric: tabular-nums; cursor: pointer; white-space: nowrap; }
+.bulk-field__diff:hover { background: var(--surface-sunken); }
+.bulk-field .f-seg { align-self: flex-start; }
+.bulk-field .f-chips .f-chip { height: 30px; padding: 0 10px; }
+.bulk-field .extra-editor { gap: 10px; }
+.bulk-warn { color: var(--warn-ink); font-weight: var(--weight-semibold); display: flex; gap: 4px; }
+.bulk-diff { display: flex; flex-direction: column; gap: var(--space-5); font-size: var(--text-body); }
+.bulk-diff__sec { display: flex; flex-direction: column; gap: var(--space-2); }
+.bulk-diff__head { display: flex; align-items: baseline; gap: var(--space-3); }
+.bulk-diff__head h3 { font-size: var(--text-title); }
+.bulk-diff .f-table tbody tr { cursor: default; }
+.bulk-diff .f-table td.is-wrap { max-width: 260px; }
+.bulk-diff__before { text-decoration: line-through; text-decoration-thickness: 1px; color: var(--text-dim); }
+.bulk-diff tr.is-same td { color: var(--text-dim); }
 .f-table__thumb .framed { width: 72px; height: 54px; aspect-ratio: auto !important; }
 .f-table__thumb .framed img { object-fit: cover; }
 
@@ -162,3 +189,6 @@ button { font: inherit; }
   .f-dayrow { --day-lead: 220px; }
   .shortcut-grid { grid-template-columns: 1fr; }
 }
+
+/* Move dialog: tall enough for the open project list (the list itself scrolls at its max height). */
+.move-dialog { display: flex; flex-direction: column; gap: 12px; min-height: 380px; }

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "preact/hooks";
-import { label, lightLabel, SHOT_STATES, STATE_ICONS } from "@fielder/vocab";
-import { deleteShot, type SavedView, type Shot } from "./api";
+import { label, lightLabel, SHOT_STATES, STATE_ICONS, type FieldDef } from "@fielder/vocab";
+import { deleteShot, type Location, type SavedView, type Shot } from "./api";
+import { BulkEditPanel, MoveDialog, type BulkDraft } from "./BulkEdit";
 import { FilterPanel } from "./FilterBuilder";
 import { cover, rigLabel, shotTitle, when } from "./format";
 import { Framed, type MaskMode } from "./Framed";
@@ -35,6 +36,9 @@ interface Props {
   mapSelected: string | null;
   onMapSelected: (id: string | null) => void;
   onDeleted: (ids: string[]) => void;
+  onUpdated: (shots: Shot[]) => void;
+  onLocations: (l: Location[]) => void;
+  fieldsOf: (projectId: string) => FieldDef[];
   onReload: () => void;
   onSwitchScope: () => void;
 }
@@ -140,7 +144,7 @@ export function ShotsPage(p: Props) {
         ) : p.layout === "map" ? (
           <ShotsMap shots={shots} mask={p.mask} selectedId={p.mapSelected} onSelect={p.onMapSelected} onOpen={(s) => p.onOpen(s, shots)} />
         ) : p.layout === "list" ? (
-          <ShotsList shots={shots} isAll={p.isAll} mask={p.mask} onOpen={(s) => p.onOpen(s, shots)} onDeleted={p.onDeleted} />
+          <ShotsList shots={shots} isAll={p.isAll} mask={p.mask} onOpen={(s) => p.onOpen(s, shots)} onDeleted={p.onDeleted} bulk={{ ...p, ctx }} onBulkOpen={() => p.onPanel(false)} />
         ) : (
           <ShotsGrid shots={shots} isAll={p.isAll} mask={p.mask} onOpen={(s) => p.onOpen(s, shots)} />
         )}
@@ -178,25 +182,35 @@ function ShotsGrid({ shots, isAll, mask, onOpen }: { shots: Shot[]; isAll: boole
   );
 }
 
-function ShotsList({ shots, isAll, mask, onOpen, onDeleted }: { shots: Shot[]; isAll: boolean; mask: MaskMode; onOpen: (s: Shot) => void; onDeleted: (ids: string[]) => void }) {
+type BulkProps = Pick<Props, "ctx" | "onUpdated" | "onLocations" | "fieldsOf">;
+
+function ShotsList({ shots, isAll, mask, onOpen, onDeleted, bulk, onBulkOpen }: { shots: Shot[]; isAll: boolean; mask: MaskMode; onOpen: (s: Shot) => void; onDeleted: (ids: string[]) => void; bulk: BulkProps; onBulkOpen: () => void }) {
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  /** The bulk edit panel's draft; null = closed. While it is open a row click selects instead of opening. */
+  const [draft, setDraft] = useState<BulkDraft | null>(null);
+  const [moving, setMoving] = useState(false);
   const [focus, setFocus] = useState(0);
-  const [anchor, setAnchor] = useState<number | null>(null);
+  /** Where a Shift range starts: the row last toggled (by id, so it survives re-sorting), else the focused row. */
+  const [anchor, setAnchor] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const body = useRef<HTMLTableSectionElement>(null);
   useEffect(() => { setSelected((cur) => new Set([...cur].filter((id) => shots.some((s) => s.id === id)))); }, [shots]);
   useEffect(() => { body.current?.children[focus]?.scrollIntoView({ block: "nearest" }); }, [focus]);
 
+  /** One row on/off; with `range` every row from the anchor to here takes the anchor's state (so a range can also deselect). */
   const toggle = (i: number, range: boolean) => {
     const id = shots[i]?.id;
     if (!id) return;
+    const from = anchor !== null && shots.some((s) => s.id === anchor) ? shots.findIndex((s) => s.id === anchor) : focus;
     setSelected((cur) => {
       const n = new Set(cur);
-      if (range && anchor !== null) { const [a, b] = [Math.min(anchor, i), Math.max(anchor, i)]; for (let k = a; k <= b; k++) n.add(shots[k].id); }
-      else if (n.has(id)) n.delete(id); else n.add(id);
+      if (range && from !== i && shots[from]) {
+        const on = anchor === null || cur.has(shots[from].id);
+        for (let k = Math.min(from, i); k <= Math.max(from, i); k++) { if (on) n.add(shots[k].id); else n.delete(shots[k].id); }
+      } else if (n.has(id)) n.delete(id); else n.add(id);
       return n;
     });
-    setAnchor(i);
+    setAnchor(id);
   };
   async function removeSelected() {
     const ids = shots.filter((s) => selected.has(s.id)).map((s) => s.id);
@@ -212,6 +226,14 @@ function ShotsList({ shots, isAll, mask, onOpen, onDeleted }: { shots: Shot[]; i
     if (failed.length) toast(`${failed.length} deletion(s) failed: ${failed[0]}`, "danger"); else toast(`Deleted ${done.length} shot${done.length === 1 ? "" : "s"}`);
   }
 
+  const picked = shots.filter((s) => selected.has(s.id));
+  const openEdit = () => { if (!picked.length) return false; onBulkOpen(); setDraft((d) => d ?? {}); };
+  async function closeEdit() {
+    const n = draft ? Object.keys(draft).length : 0;
+    if (n && !(await confirmDialog({ title: `Discard edits to ${n} field${n === 1 ? "" : "s"}?`, body: "No shot has changed yet.", confirmLabel: "Discard", cancelLabel: "Keep editing" }))) return;
+    setDraft(null);
+  }
+
   useKeys({
     j: () => setFocus((f) => Math.min(shots.length - 1, f + 1)),
     k: () => setFocus((f) => Math.max(0, f - 1)),
@@ -221,12 +243,21 @@ function ShotsList({ shots, isAll, mask, onOpen, onDeleted }: { shots: Shot[]; i
     "Shift+X": () => toggle(focus, true),
     Enter: () => { if (shots[focus]) onOpen(shots[focus]); },
     Delete: () => void removeSelected(),
-    Escape: () => { if (selected.size === 0) return false; setSelected(new Set()); },
+    e: () => openEdit(),
+    "Shift+M": () => { if (!picked.length) return false; setMoving(true); },
+    Escape: (e) => {
+      const t = e.target as HTMLElement | null;
+      if (t?.closest?.("[aria-label=\"Bulk edit\"]")) { t.blur(); return; }
+      if (draft !== null) { void closeEdit(); return; }
+      if (selected.size === 0) return false;
+      setSelected(new Set());
+    },
   });
 
   const all = shots.length > 0 && selected.size === shots.length;
   const some = selected.size > 0 && !all;
   return (
+    <>
     <div class="f-scroll" style={{ position: "relative" }}>
       <table class="f-table">
         <thead><tr>
@@ -236,7 +267,7 @@ function ShotsList({ shots, isAll, mask, onOpen, onDeleted }: { shots: Shot[]; i
         </tr></thead>
         <tbody ref={body}>
           {shots.map((s, i) => (
-            <tr key={s.id} class={cx(selected.has(s.id) && "is-selected", i === focus && "is-focus")} onClick={(e) => { setFocus(i); if (e.shiftKey || e.metaKey || e.ctrlKey) toggle(i, e.shiftKey); else onOpen(s); }}>
+            <tr key={s.id} class={cx(selected.has(s.id) && "is-selected", i === focus && "is-focus")} onMouseDown={(e) => { if (e.shiftKey) e.preventDefault(); }} onClick={(e) => { setFocus(i); if (draft !== null || e.shiftKey || e.metaKey || e.ctrlKey) toggle(i, e.shiftKey); else onOpen(s); }}>
               <td class="is-cell-check" onClick={(e) => { e.stopPropagation(); setFocus(i); toggle(i, e.shiftKey); }}>
                 <Checkbox as="span" checked={selected.has(s.id)} role="checkbox" aria-checked={selected.has(s.id)} aria-label={`Select ${shotTitle(s)}`} />
               </td>
@@ -261,11 +292,19 @@ function ShotsList({ shots, isAll, mask, onOpen, onDeleted }: { shots: Shot[]; i
             <span>{selected.size} selected</span>
             {!all && <LinkButton size="small" onClick={() => setSelected(new Set(shots.map((s) => s.id)))}>Select all {shots.length}</LinkButton>}
             <span class="f-selbar__sp" />
-            <Button kind="ghost" size="sm" kbd="Esc" onClick={() => setSelected(new Set())}>Clear</Button>
+            <Button kind="ghost" size="sm" kbd={draft === null && "Esc"} onClick={() => setSelected(new Set())}>Clear</Button>
+            <Button kind="secondary" size="sm" icon="folder-move-outline" kbd="⇧M" onClick={() => setMoving(true)}>Move to project…</Button>
+            <Button kind={draft === null ? "secondary" : "primary"} size="sm" icon="pencil-outline" kbd="E" aria-pressed={draft !== null} onClick={() => (draft === null ? openEdit() : void closeEdit())}>Edit…</Button>
             <Button kind="danger" size="sm" icon="delete-outline" disabled={busy} onClick={() => void removeSelected()}>{busy ? "Deleting…" : `Delete ${selected.size} shot${selected.size === 1 ? "" : "s"}…`}</Button>
           </div>
         </div>
       )}
     </div>
+    {draft !== null && (
+      <BulkEditPanel shots={picked} draft={draft} onDraft={setDraft} projects={bulk.ctx.projects} locations={bulk.ctx.locations} onLocations={bulk.onLocations}
+        fieldsOf={bulk.fieldsOf} mask={mask} onClose={() => void closeEdit()} onUpdated={bulk.onUpdated} />
+    )}
+    {moving && <MoveDialog shots={picked} projects={bulk.ctx.projects} onClose={() => setMoving(false)} onUpdated={bulk.onUpdated} />}
+    </>
   );
 }

@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { extraSummary, pruneExtra, selectOptions, validateFieldDef, validateValues, type FieldDef } from "./fields.ts";
+import { extraSummary, patchExtra, pruneExtra, selectOptions, validateFieldDef, validateValues, type FieldDef } from "./fields.ts";
 import { evaluateFilter, extraFilterFields, type FilterableShot } from "./filter.ts";
 
 const ubahn: FieldDef = {
@@ -46,4 +46,30 @@ test("filters reach nested extra values", () => {
   const shot = { extra: { ubahn: { line: "U4", station: "Nollendorfplatz" } } } as unknown as FilterableShot;
   assert.equal(evaluateFilter({ match: "all", rules: [{ field: "extra.ubahn.station", op: "is", value: "Nollendorfplatz" }] }, shot, extra), true);
   assert.equal(evaluateFilter({ match: "all", rules: [{ field: "extra.ubahn.line", op: "is", value: "U1" }] }, shot, extra), false);
+});
+
+test("a bulk patch replaces only its keys and drops invalidated dependents", () => {
+  const line: FieldDef = { key: "line", label: "Line", type: "select", options: ["U1", "U4"] };
+  const stop: FieldDef = { key: "stop", label: "Stop", type: "select", optionsBy: { field: "line", options: { U1: ["Kurfürstendamm"], U4: ["Nollendorfplatz"] } } };
+  const defs = [line, stop, notes];
+  const shot = { line: "U4", stop: "Nollendorfplatz", access: "gate" };
+  assert.deepEqual(patchExtra(defs, shot, { access: "side door" }), { line: "U4", stop: "Nollendorfplatz", access: "side door" });
+  assert.deepEqual(patchExtra(defs, shot, { access: null }), { line: "U4", stop: "Nollendorfplatz" });
+  assert.deepEqual(patchExtra(defs, shot, { line: "U1" }), { line: "U1", access: "gate" });
+  assert.deepEqual(patchExtra(defs, shot, { line: "U1", stop: "Kurfürstendamm" }), { line: "U1", stop: "Kurfürstendamm", access: "gate" });
+});
+
+test("a bulk patch merges groups child by child", () => {
+  const access: FieldDef = { key: "access", label: "Access", type: "group", fields: [{ key: "parking", label: "Parking", type: "text" }, { key: "power", label: "Power", type: "boolean" }] };
+  const shot = { access: { parking: "street", power: true }, ubahn: { line: "U4", station: "Nollendorfplatz" } };
+  assert.deepEqual(patchExtra([access, ubahn], shot, { access: { parking: "yard" } }), { access: { parking: "yard", power: true }, ubahn: shot.ubahn });
+  assert.deepEqual(patchExtra([access, ubahn], shot, { access: { parking: "" } }), { access: { power: true }, ubahn: shot.ubahn });
+  assert.deepEqual(patchExtra([access, ubahn], shot, { access: null }), { ubahn: shot.ubahn });
+  assert.deepEqual(patchExtra([access, ubahn], shot, { ubahn: { line: "U1" } }), { access: shot.access, ubahn: { line: "U1" } });
+});
+
+test("validation can be limited to the edited keys", () => {
+  const stale = { gone: "field removed from the project", access: "ok" };
+  assert.match(validateValues([notes], stale) ?? "", /no such field/);
+  assert.equal(validateValues([notes], stale, "extra", ["access"]), null);
 });
