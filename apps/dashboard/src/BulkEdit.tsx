@@ -219,7 +219,7 @@ export function BulkEditPanel({ shots, draft, onDraft, projects, locations, onLo
   const extraShown: Extra = Object.fromEntries(defs.map((d) => [d.key, (shown(col(`extra.${d.key}`)) ?? null) as ExtraValue]));
 
   return (
-    <Panel label="Bulk edit" width="400px">
+    <Panel label="Bulk edit" width="500px">
       <PanelHead title={`Edit ${plural(shots.length, "shot")}`}><IconButton icon="close" label="Close bulk edit" onClick={onClose} /></PanelHead>
       <PanelBody flush>
         {shots.length === 0 ? <p class="meta" style={{ padding: "16px", margin: 0 }}>Select shots in the list to edit them together.</p> : (
@@ -346,7 +346,7 @@ export function MoveDialog({ shots, projects, onClose, onUpdated }: { shots: Sho
 
   return (
     <Modal title={`Move ${plural(shots.length, "shot")}`} width="480px" onClose={onClose} onKeyDown={(e) => { if (e.key === "Escape") { e.stopPropagation(); onClose(); } }}>
-      <div class="f-modal__body" style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+      <div class="f-modal__body move-dialog">
         <span class="meta">Now in {from.map(([p, n]) => `${nameOf(p)} (${n})`).join(" · ")}</span>
         <Combobox autoFocus options={projects.map((p) => ({ value: p.id, label: p.name, hint: `${p.shot_count}` }))} value={to} clearable={false} placeholder="Project…" onChange={setTo} />
         {to && moving.length < shots.length && <span class="meta">{plural(shots.length - moving.length, "shot")} already in {nameOf(to)}.</span>}

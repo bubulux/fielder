@@ -190,22 +190,27 @@ function ShotsList({ shots, isAll, mask, onOpen, onDeleted, bulk, onBulkOpen }: 
   const [draft, setDraft] = useState<BulkDraft | null>(null);
   const [moving, setMoving] = useState(false);
   const [focus, setFocus] = useState(0);
-  const [anchor, setAnchor] = useState<number | null>(null);
+  /** Where a Shift range starts: the row last toggled (by id, so it survives re-sorting), else the focused row. */
+  const [anchor, setAnchor] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const body = useRef<HTMLTableSectionElement>(null);
   useEffect(() => { setSelected((cur) => new Set([...cur].filter((id) => shots.some((s) => s.id === id)))); }, [shots]);
   useEffect(() => { body.current?.children[focus]?.scrollIntoView({ block: "nearest" }); }, [focus]);
 
+  /** One row on/off; with `range` every row from the anchor to here takes the anchor's state (so a range can also deselect). */
   const toggle = (i: number, range: boolean) => {
     const id = shots[i]?.id;
     if (!id) return;
+    const from = anchor !== null && shots.some((s) => s.id === anchor) ? shots.findIndex((s) => s.id === anchor) : focus;
     setSelected((cur) => {
       const n = new Set(cur);
-      if (range && anchor !== null) { const [a, b] = [Math.min(anchor, i), Math.max(anchor, i)]; for (let k = a; k <= b; k++) n.add(shots[k].id); }
-      else if (n.has(id)) n.delete(id); else n.add(id);
+      if (range && from !== i && shots[from]) {
+        const on = anchor === null || cur.has(shots[from].id);
+        for (let k = Math.min(from, i); k <= Math.max(from, i); k++) { if (on) n.add(shots[k].id); else n.delete(shots[k].id); }
+      } else if (n.has(id)) n.delete(id); else n.add(id);
       return n;
     });
-    setAnchor(i);
+    setAnchor(id);
   };
   async function removeSelected() {
     const ids = shots.filter((s) => selected.has(s.id)).map((s) => s.id);
@@ -262,7 +267,7 @@ function ShotsList({ shots, isAll, mask, onOpen, onDeleted, bulk, onBulkOpen }: 
         </tr></thead>
         <tbody ref={body}>
           {shots.map((s, i) => (
-            <tr key={s.id} class={cx(selected.has(s.id) && "is-selected", i === focus && "is-focus")} onClick={(e) => { setFocus(i); if (draft !== null || e.shiftKey || e.metaKey || e.ctrlKey) toggle(i, e.shiftKey); else onOpen(s); }}>
+            <tr key={s.id} class={cx(selected.has(s.id) && "is-selected", i === focus && "is-focus")} onMouseDown={(e) => { if (e.shiftKey) e.preventDefault(); }} onClick={(e) => { setFocus(i); if (draft !== null || e.shiftKey || e.metaKey || e.ctrlKey) toggle(i, e.shiftKey); else onOpen(s); }}>
               <td class="is-cell-check" onClick={(e) => { e.stopPropagation(); setFocus(i); toggle(i, e.shiftKey); }}>
                 <Checkbox as="span" checked={selected.has(s.id)} role="checkbox" aria-checked={selected.has(s.id)} aria-label={`Select ${shotTitle(s)}`} />
               </td>

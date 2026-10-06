@@ -189,3 +189,6 @@ button { font: inherit; }
   .f-dayrow { --day-lead: 220px; }
   .shortcut-grid { grid-template-columns: 1fr; }
 }
+
+/* Move dialog: tall enough for the open project list (the list itself scrolls at its max height). */
+.move-dialog { display: flex; flex-direction: column; gap: 12px; min-height: 380px; }
