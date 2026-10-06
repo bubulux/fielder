@@ -11,6 +11,9 @@ All optional, editable at any time (`PATCH /api/shots/:id`). The vocabularies ar
 | INT/EXT | `int`, `ext` |
 | Light | any subset of `dawn`, `day`, `dusk`, `night`: every phase the shot works in. Plus the separate **Artificial** flag (lit artificially, independent of INT/EXT; an INT shot looking out of a window can still need dusk). No phase set means any time works. Display via `lightLabel()`, e.g. "Dusk / Night + Artificial". |
 | Weather | `none, sunny, partly_cloudy, cloudy, rainy, stormy, foggy, snow` |
+| Shot size | one of `ews, ws, mws, ms, mcu, cu, ecu` (Extreme wide … Extreme close-up; lists show the abbreviation) |
+| Camera support | one of `static` (locked-off) `, handheld, steadicam, gimbal, dolly, slider, crane` (jib) `, drone, vehicle` (mount) |
+| Movement | any subset of `pan, tilt, push_in, pull_out, tracking, pedestal` (boom) `, orbit, zoom`. Support and movement are separate on purpose: a Steadicam shot can pan and push in. `cameraLabel()` gives "WS · Steadicam · Pan / Push in". |
 | Extra | the project's [extra fields](extra-fields.md) |
 
 The light model feeds the [schedule](schedule.md): phases are defined by sun elevation.
@@ -21,7 +24,7 @@ The shot view (`ShotView.tsx`) replaces the old dialog. It covers the main area 
 
 - **Toolbar**:
   - Shot view: back (Esc) to where it was opened from, "7 of 212" with the list's description (state · view or project · sort), and ←/→.
-  - Review: "3 of 14 · oldest first" with a progress bar, and ←/→.
+  - Review: "3 of 14 · newest first" with a progress bar, and ←/→. The order is a link that switches to oldest first (also `O`), remembered in `localStorage["reviewOrder"]`.
   - Both: the **stage switch** Photo · Rigs (`R`) · Position, and the frame-mode switch. The frame mode starts from the global mode; a change sticks for ←/→ until the view closes (`viewMode`/`reviewMode` in `App.tsx`). `M` cycles it.
 - **Stage**:
   - **Photo**: the photo as large as fits, with prev/next buttons beside it and nothing drawn over the picture (rig and lens are in the inspector). The foot has the photo strip for sequences (`,` `.`) and the actions Download crop (cropped in the browser), Original, Show on map, and Delete (confirm dialog, offering Archive instead).
@@ -37,12 +40,13 @@ The shot view (`ShotView.tsx`) replaces the old dialog. It covers the main area 
     - INT/EXT: INT · EXT · –.
     - Light: chips plus Artificial.
     - Weather: a combobox.
+    - Shot size and Support: comboboxes; Movement: chips (any number).
     - Extra fields: saved 0.7 s after the last change.
-  - **Position** of the photo on stage, with "Correct".
+  - **Position** of the photo on stage, with "Correct". A photo captured without GPS says "No position · captured without GPS" and offers "Set position" (the same map stage, starting at another photo of the shot or Berlin).
   - **Shot**: captured, photos, uploaded, and the **shooting days** it is planned on, which link to Plan.
   - **Camera** of the photo on stage: rig, body, format, sensor, lens + FF-equivalent, FOV, time, GPS accuracy, fix age and altitude, phone.
   - **Raw metadata**: collapsed, with Copy.
-- **Review queue**: unreviewed shots of the scope, oldest first; ←/→ step, there is no Skip. After Approve/Archive the next shot takes the same position. Ends on "Nothing to review" (Browse approved shots · Plan a day).
+- **Review queue**: unreviewed shots of the scope, newest first (switchable); ←/→ step, there is no Skip. After Approve/Archive the next shot takes the same position. Ends on "Nothing to review" (Browse approved shots · Plan a day).
 
 ## Review on the phone
 

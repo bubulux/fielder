@@ -1,5 +1,5 @@
 import type { RigLens } from "@fielder/fov-math";
-import { extraLabel, label, lightLabel, type FilterableShot } from "@fielder/vocab";
+import { cameraLabel, extraLabel, label, lightLabel, type FilterableShot } from "@fielder/vocab";
 import type { Photo, Shot } from "./api";
 
 /** The photo that stands for the shot in lists, maps and filters: the first one. */
@@ -16,7 +16,12 @@ export function rigLabel(p: Photo): string {
 export const shotTitle = (s: Shot): string => s.name?.trim() || rigLabel(cover(s));
 export const placeLabel = (s: Shot): string => s.location_name ?? "";
 export const tagsLabel = (s: Shot): string =>
-  [label(s.int_ext), lightLabel(s.light, s.artificial), label(s.weather), extraLabel(s.extra)].filter(Boolean).join(" · ");
+  [label(s.int_ext), lightLabel(s.light, s.artificial), label(s.weather), cameraLabel(s), extraLabel(s.extra)].filter(Boolean).join(" · ");
+/** Where a shot is on a map: the cover photo, else the first photo with a position; null when none has one (GPS off). */
+export function positionOf(s: Shot): { lat: number; lon: number } | null {
+  const p = [cover(s), ...s.photos].find((x) => x.lat !== null && x.lon !== null);
+  return p ? { lat: p.lat!, lon: p.lon! } : null;
+}
 /** "3 photos" for sequences, "" for single shots. */
 export const photoCountLabel = (s: Shot): string => (s.photos.length > 1 ? `${s.photos.length} photos` : "");
 
@@ -31,7 +36,7 @@ export function fovLabel(p: Photo): string {
 
 const fmt = new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" });
 export const when = (iso: string) => fmt.format(new Date(iso));
-export const coords = (p: Photo) => `${p.lat.toFixed(5)}, ${p.lon.toFixed(5)}`;
+export const coords = (p: Photo) => (p.lat === null || p.lon === null ? "No position" : `${p.lat.toFixed(5)}, ${p.lon.toFixed(5)}`);
 
 export interface FrameGeometry { width_fraction: number; height_fraction: number }
 
@@ -96,6 +101,7 @@ export function filterable(s: Shot): FilterableShot {
   return {
     state: s.state, project_id: s.project_id, name: s.name, location_id: s.location_id, int_ext: s.int_ext,
     light: s.light, artificial: s.artificial ? "yes" : "no", weather: s.weather,
+    shot_size: s.shot_size, camera_support: s.camera_support, movement: s.movement, has_position: positionOf(s) ? "yes" : "no",
     preset_id: p.preset_id, lens_mm: p.lens_mm, ff_eq_mm: typeof ffEq === "number" ? ffEq : null,
     photo_count: s.photos.length, timestamp: s.captured_at, extra: s.extra,
   };

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "preact/hooks";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { patchPhotoPosition, type Photo, type Shot } from "./api";
+import { positionOf } from "./format";
 import { useKeys } from "./keys";
 import { Button, Checkbox, Icon, Spinner, ToolbarSpacer } from "./ui";
 
@@ -15,22 +16,27 @@ function metres(a: [number, number], b: [number, number]): number {
   return 2 * 6_371_000 * Math.asin(Math.sqrt(h));
 }
 
-/** Stage mode "Position": drag the pin (or click the map) to where the photo was really taken. */
+/** Where the map opens for a photo without a position: another photo of the shot, else Berlin. */
+const BERLIN: [number, number] = [52.52, 13.405];
+
+/** Stage mode "Position": drag the pin (or click the map) to where the photo was really taken, or set one for a photo captured without GPS. */
 export function PositionStage({ shot, photo, onSaved, onCancel, onError }: Props) {
   const el = useRef<HTMLDivElement>(null);
-  const [pos, setPos] = useState<[number, number]>([photo.lat, photo.lon]);
+  const had = photo.lat !== null && photo.lon !== null;
+  const start: [number, number] = had ? [photo.lat!, photo.lon!] : (() => { const p = positionOf(shot); return p ? [p.lat, p.lon] : BERLIN; })();
+  const [pos, setPos] = useState<[number, number]>(start);
   const [all, setAll] = useState(shot.photos.length > 1);
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
     if (!el.current) return;
-    const map = L.map(el.current, { zoomControl: false }).setView([photo.lat, photo.lon], 18);
+    const map = L.map(el.current, { zoomControl: false }).setView(start, had || positionOf(shot) ? 18 : 12);
     L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 19, attribution: "&copy; OpenStreetMap contributors" }).addTo(map);
     L.control.zoom({ position: "topleft" }).addTo(map);
     // Reported accuracy: dashed ring with a faint accent fill, readable on light and (filtered) dark tiles.
-    if (photo.gps_accuracy_m) L.circle([photo.lat, photo.lon], { radius: photo.gps_accuracy_m, color: "#0B0B0C", weight: 2, dashArray: "6 4", fillColor: "#0040D8", fillOpacity: 0.12 }).addTo(map);
-    L.marker([photo.lat, photo.lon], { icon: L.divIcon({ className: "f-pin-icon", html: '<span class="f-pin__origin" style="position:static;transform:none;display:block"></span>', iconSize: [12, 12], iconAnchor: [6, 6] }), interactive: false }).addTo(map);
-    const marker = L.marker([photo.lat, photo.lon], {
+    if (had && photo.gps_accuracy_m) L.circle(start, { radius: photo.gps_accuracy_m, color: "#0B0B0C", weight: 2, dashArray: "6 4", fillColor: "#0040D8", fillOpacity: 0.12 }).addTo(map);
+    if (had) L.marker(start, { icon: L.divIcon({ className: "f-pin-icon", html: '<span class="f-pin__origin" style="position:static;transform:none;display:block"></span>', iconSize: [12, 12], iconAnchor: [6, 6] }), interactive: false }).addTo(map);
+    const marker = L.marker(start, {
       draggable: true,
       icon: L.divIcon({ className: "f-pin-icon", html: '<span class="f-pin f-pin--drag" title="Drag to correct"><i class="mdi mdi-crosshairs-gps"></i></span>', iconSize: [40, 40], iconAnchor: [20, 20] }),
     }).addTo(map);
@@ -39,8 +45,9 @@ export function PositionStage({ shot, photo, onSaved, onCancel, onError }: Props
     return () => { map.remove(); };
   }, [photo.id]);
 
-  const moved = metres([photo.lat, photo.lon], pos);
-  const changed = moved > 0.05;
+  const moved = metres(start, pos);
+  // Without a position yet, the starting point itself is a valid choice.
+  const changed = !had || moved > 0.05;
   async function save() {
     if (!changed || busy) return;
     setBusy(true);
@@ -51,8 +58,8 @@ export function PositionStage({ shot, photo, onSaved, onCancel, onError }: Props
   return (
     <>
       <div class="f-stage__bar">
-        <Icon name="cursor-move" size={18} /><span style={{ fontSize: "var(--text-small)" }}>Drag the pin or click the map</span>
-        <span class="meta num">{pos[0].toFixed(5)}, {pos[1].toFixed(5)}{changed ? ` · moved ${Math.round(moved)} m` : ""}</span>
+        <Icon name="cursor-move" size={18} /><span style={{ fontSize: "var(--text-small)" }}>{had ? "Drag the pin or click the map" : "No GPS position: put the pin where the photo was taken"}</span>
+        <span class="meta num">{pos[0].toFixed(5)}, {pos[1].toFixed(5)}{had && moved > 0.05 ? ` · moved ${Math.round(moved)} m` : ""}</span>
         <ToolbarSpacer />
         {shot.photos.length > 1 && (
           <Checkbox checked={all} role="checkbox" aria-checked={all} onClick={() => setAll(!all)}>

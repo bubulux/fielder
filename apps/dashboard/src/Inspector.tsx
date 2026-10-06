@@ -1,10 +1,10 @@
 import { Fragment } from "preact";
 import { useEffect, useRef, useState } from "preact/hooks";
-import { INT_EXT, label, lightLabel, WEATHER, type Extra, type FieldDef } from "@fielder/vocab";
+import { CAMERA_SUPPORTS, cameraLabel, INT_EXT, label, lightLabel, MOVEMENTS, SHOT_SIZE_ABBR, SHOT_SIZES, WEATHER, type Extra, type FieldDef } from "@fielder/vocab";
 import { existingIdOf, fetchDays, patchShot, putLocation, type Location, type Photo, type Project, type Shot, type ShootingDay, type ShotState } from "./api";
 import { ExtraEditor } from "./ExtraEditor";
 import { coords, fovLabel, placeLabel, rigDescription, shotTitle } from "./format";
-import { Button, Combobox, Icon, Input, LightChips, SaveStatus, Seg, StateMarker, type SaveState } from "./ui";
+import { Button, Chip, Combobox, Icon, Input, LightChips, SaveStatus, Seg, StateMarker, type SaveState } from "./ui";
 
 // Shooting days per project, fetched on demand for the "Days" fact and the move warning.
 const daysCache = new Map<string, Promise<ShootingDay[]>>();
@@ -94,7 +94,7 @@ export function Inspector({ shot, photo, projects, fields, locations, onLocation
       <div class="f-panel__body f-panel__body--flush">
         <div class="f-sec" style={{ gap: "10px" }}>
           <div class="inspector__title"><h1>{shotTitle(shot)}</h1><StateMarker state={shot.state} lg /></div>
-          <span class="meta" style={{ fontSize: "var(--text-small)" }}>{[placeLabel(shot) || "No location", label(shot.int_ext).toUpperCase(), lightLabel(shot.light, shot.artificial)].filter(Boolean).join(" · ")}</span>
+          <span class="meta" style={{ fontSize: "var(--text-small)" }}>{[placeLabel(shot) || "No location", label(shot.int_ext).toUpperCase(), lightLabel(shot.light, shot.artificial), cameraLabel(shot)].filter(Boolean).join(" · ")}</span>
           <div class="btn-row" style={{ flexWrap: "nowrap" }}>
             {unrev ? (
               <>
@@ -138,6 +138,14 @@ export function Inspector({ shot, photo, projects, fields, locations, onLocation
             <LightChips light={shot.light} artificial={shot.artificial} onChange={(l, a) => void patch({ light: l, artificial: a })} />
             <label>Weather</label>
             <Combobox small options={WEATHER.map((v) => ({ value: v, label: label(v) }))} value={shot.weather} placeholder="—" onChange={(v) => void patch({ weather: v })} />
+            <label>Shot size</label>
+            <Combobox small options={SHOT_SIZES.map((v) => ({ value: v, label: `${SHOT_SIZE_ABBR[v]} · ${label(v)}` }))} value={shot.shot_size} placeholder="—" onChange={(v) => void patch({ shot_size: v })} />
+            <label>Support</label>
+            <Combobox small options={CAMERA_SUPPORTS.map((v) => ({ value: v, label: label(v) }))} value={shot.camera_support} placeholder="—" onChange={(v) => void patch({ camera_support: v })} />
+            <label style={{ alignSelf: "start", paddingTop: "8px" }}>Movement</label>
+            <div class="f-chips" role="group" aria-label="Movement">
+              {MOVEMENTS.map((m) => <Chip key={m} selected={shot.movement.includes(m)} onClick={() => void patch({ movement: MOVEMENTS.filter((x) => (x === m ? !shot.movement.includes(x) : shot.movement.includes(x))) })}>{label(m)}</Chip>)}
+            </div>
           </div>
           {fields.length > 0 && (
             <>
@@ -148,11 +156,12 @@ export function Inspector({ shot, photo, projects, fields, locations, onLocation
         </div>
 
         <div class="f-sec">
-          <div class="f-sec__head"><Icon name="crosshairs-gps" />Position<span class="f-sec__aside"><Button kind="secondary" size="sm" style={{ height: "26px" }} onClick={onCorrect}>Correct</Button></span></div>
+          <div class="f-sec__head"><Icon name="crosshairs-gps" />Position<span class="f-sec__aside"><Button kind="secondary" size="sm" style={{ height: "26px" }} onClick={onCorrect}>{photo.lat === null ? "Set position" : "Correct"}</Button></span></div>
           <dl class="f-facts">
             <dt>{shot.photos.length > 1 ? `Photo ${photo.ordinal + 1}` : "Photo"}</dt>
-            <dd><a href={`https://www.openstreetmap.org/?mlat=${photo.lat}&mlon=${photo.lon}#map=17/${photo.lat}/${photo.lon}`} target="_blank" rel="noreferrer">{coords(photo)}</a></dd>
-            <dt>Accuracy</dt><dd>{photo.position_corrected ? "corrected by hand" : photo.gps_accuracy_m != null ? `±${Math.round(photo.gps_accuracy_m)} m` : "unknown"}</dd>
+            <dd>{photo.lat === null ? <span class="meta">No position · captured without GPS</span>
+              : <a href={`https://www.openstreetmap.org/?mlat=${photo.lat}&mlon=${photo.lon}#map=17/${photo.lat}/${photo.lon}`} target="_blank" rel="noreferrer">{coords(photo)}</a>}</dd>
+            {photo.lat !== null && <><dt>Accuracy</dt><dd>{photo.position_corrected ? "corrected by hand" : photo.gps_accuracy_m != null ? `±${Math.round(photo.gps_accuracy_m)} m` : "unknown"}</dd></>}
           </dl>
         </div>
 

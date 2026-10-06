@@ -4,7 +4,7 @@ import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { label, STATE_ICONS } from "@fielder/vocab";
 import type { Shot } from "./api";
-import { cover, shotTitle } from "./format";
+import { cover, positionOf, shotTitle } from "./format";
 import { Framed, FramedThumb, type MaskMode } from "./Framed";
 import { shotSub } from "./ShotCard";
 import { Button, cx, SeqBadge, StateMarker } from "./ui";
@@ -39,7 +39,7 @@ export function ShotsMap({ shots, mask, selectedId, onSelect, onOpen }: Props) {
           {shots.map((s) => (
             <button key={s.id} type="button" role="option" aria-selected={s.id === selectedId} class={cx("f-row f-row--dense", s.id === selectedId && "is-selected")} onClick={() => onSelect(s.id)} onDblClick={() => onOpen(s)}>
               <div class="f-row__thumb" style={{ width: "64px" }}><FramedThumb photo={cover(s)} mode={mask} /></div>
-              <div class="f-row__main"><span class="f-row__title">{shotTitle(s)}</span><span class="f-row__meta">{shotSub(s)}</span></div>
+              <div class="f-row__main"><span class="f-row__title">{shotTitle(s)}</span><span class="f-row__meta">{positionOf(s) ? shotSub(s) : "No position · not on the map"}</span></div>
               <StateMarker state={s.state} iconOnly />
             </button>
           ))}
@@ -58,7 +58,7 @@ function LeafletMap({ shots, mask, selectedId, onSelect, onOpen }: Props) {
   const markers = useRef(new Map<string, L.Marker>());
   const fit = () => {
     const m = map.current;
-    const b = shots.map((s) => [cover(s).lat, cover(s).lon] as L.LatLngTuple);
+    const b = shots.map(positionOf).filter((p) => !!p).map((p) => [p!.lat, p!.lon] as L.LatLngTuple);
     if (!m) return;
     if (b.length === 1) m.setView(b[0], 15); else if (b.length > 1) m.fitBounds(b, { padding: [40, 40] }); else m.setView([51, 10], 5);
   };
@@ -79,7 +79,8 @@ function LeafletMap({ shots, mask, selectedId, onSelect, onOpen }: Props) {
     for (const mk of markers.current.values()) mk.remove();
     markers.current.clear();
     for (const s of shots) {
-      const p = cover(s);
+      const p = positionOf(s);
+      if (!p) continue; // captured without GPS: listed, but no pin
       const mk = L.marker([p.lat, p.lon], { icon: pinIcon(s, s.id === selectedId), title: shotTitle(s), keyboard: false });
       mk.bindPopup(() => popupContent(s, mask, () => onOpen(s)), { maxWidth: 260, minWidth: 248, className: "f-leaflet-popup" });
       mk.on("click", () => onSelect(s.id));
