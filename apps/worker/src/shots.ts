@@ -1,4 +1,5 @@
-import { CAMERA_SUPPORTS, INT_EXT, isOneOf, LIGHT, MOVEMENTS, patchExtra, pruneExtra, SHOT_SIZES, SHOT_STATES, validateExtra, validateValues, WEATHER, type Extra, type FieldDef } from "@fielder/vocab";
+import { CAMERA_SUPPORTS, INT_EXT, isOneOf, LIGHT, MAX_DESCRIPTION, MOVEMENTS, patchExtra, pruneExtra, SHOT_SIZES, SHOT_STATES, validateExtra, validateValues, WEATHER, type Extra, type FieldDef } from "@fielder/vocab";
+import { composeFor, renderKeysOf, type OverlayApi, type SketchApi } from "./compose.ts";
 import { projectFieldDefs } from "./fields.ts";
 import { assertEnum, assertIsoTimestamp, assertNumber, assertString, assertUuid, HttpError, json, readJson, type Router } from "./http.ts";
 import type { Ctx } from "./index.ts";
@@ -18,6 +19,7 @@ interface ShotRow {
   movement: string;
   state: string;
   extra: string;
+  description: string | null;
   captured_at: string;
   created_at: string;
   updated_at: string | null;
@@ -80,7 +82,9 @@ function photoToApi(p: PhotoRow) {
   };
 }
 
-function shotToApi(s: ShotRow, photos: PhotoRow[]) {
+type Compose = Awaited<ReturnType<typeof composeFor>>;
+
+function shotToApi(s: ShotRow, photos: PhotoRow[], compose: Compose) {
   return {
     id: s.id,
     project_id: s.project_id,
@@ -97,10 +101,13 @@ function shotToApi(s: ShotRow, photos: PhotoRow[]) {
     movement: JSON.parse(s.movement) as string[],
     state: s.state,
     extra: JSON.parse(s.extra) as Extra,
+    description: s.description,
     captured_at: s.captured_at,
     created_at: s.created_at,
     updated_at: s.updated_at,
     photos: photos.map(photoToApi),
+    overlays: (compose.overlays.get(s.id) ?? []) as OverlayApi[],
+    sketches: (compose.sketches.get(s.id) ?? []) as SketchApi[],
   };
 }
 
@@ -119,10 +126,10 @@ async function photosFor(env: Ctx["env"], shotIds: string[]): Promise<Map<string
   return out;
 }
 
-async function loadShot(env: Ctx["env"], id: string) {
+export async function loadShot(env: Ctx["env"], id: string) {
   const row = await env.DB.prepare(`${SHOT_SQL} WHERE s.id = ?1`).bind(id).first<ShotRow>();
   if (!row) return null;
-  return shotToApi(row, (await photosFor(env, [id])).get(id) ?? []);
+  return shotToApi(row, (await photosFor(env, [id])).get(id) ?? [], await composeFor(env, [id]));
 }
 
 /**
@@ -132,7 +139,7 @@ async function loadShot(env: Ctx["env"], id: string) {
  */
 interface Tags {
   name: string | null; light: string; artificial: number; weather: string | null; int_ext: string | null; location_id: string | null; extra: string;
-  shot_size: string | null; camera_support: string | null; movement: string;
+  shot_size: string | null; camera_support: string | null; movement: string; description: string | null;
 }
 
 function parseTags(m: Record<string, unknown>, all: true): Tags;
@@ -161,6 +168,11 @@ function parseTags(m: Record<string, unknown>, all: boolean): Partial<Tags> {
     if (!Array.isArray(v)) throw new HttpError(400, "movement must be an array");
     for (const x of v) assertEnum(x, "movement", MOVEMENTS);
     out.movement = JSON.stringify(MOVEMENTS.filter((x) => v.includes(x)));
+  }
+  if (want("description")) {
+    if (!blank(m.description) && typeof m.description !== "string") throw new HttpError(400, "description must be a string");
+    if (typeof m.description === "string" && m.description.length > MAX_DESCRIPTION) throw new HttpError(400, `description too long (max ${MAX_DESCRIPTION})`);
+    out.description = blank(m.description) ? null : (m.description as string);
   }
   if (want("location_id")) out.location_id = blank(m.location_id) ? null : assertUuid(m.location_id, "location_id");
   if (want("extra")) {
@@ -234,10 +246,11 @@ export function registerShotRoutes(r: Router<Ctx>) {
     if (loc) { args.push(assertUuid(loc, "location_id")); where.push(`s.location_id = ?${args.length}`); }
     args.push(limit);
     const { results } = await env.DB.prepare(`${SHOT_SQL}${where.length ? ` WHERE ${where.join(" AND ")}` : ""} ORDER BY s.captured_at DESC, s.id DESC LIMIT ?${args.length}`).bind(...args).all<ShotRow>();
-    const photos = await photosFor(env, results.map((s) => s.id));
+    const ids = results.map((s) => s.id);
+    const [photos, compose] = await Promise.all([photosFor(env, ids), composeFor(env, ids)]);
     const last = results.at(-1);
     return json({
-      shots: results.map((s) => shotToApi(s, photos.get(s.id) ?? [])),
+      shots: results.map((s) => shotToApi(s, photos.get(s.id) ?? [], compose)),
       next: results.length === limit && last ? { before: last.captured_at, before_id: last.id } : null,
     });
   });
@@ -448,8 +461,8 @@ export function registerShotRoutes(r: Router<Ctx>) {
     await env.DB.batch(stmts);
 
     const { results } = await env.DB.prepare(`${SHOT_SQL} WHERE s.id IN (SELECT value FROM json_each(?1))`).bind(list).all<ShotRow>();
-    const photos = await photosFor(env, ids);
-    return json({ shots: results.map((s) => shotToApi(s, photos.get(s.id) ?? [])) });
+    const [photos, compose] = await Promise.all([photosFor(env, ids), composeFor(env, ids)]);
+    return json({ shots: results.map((s) => shotToApi(s, photos.get(s.id) ?? [], compose)) });
   });
 
   /** Correct a position by hand: JSON { lat, lon, all_in_shot? }. all_in_shot moves every photo of the shot (a sequence taken on one spot). */
@@ -468,9 +481,11 @@ export function registerShotRoutes(r: Router<Ctx>) {
   r.on("DELETE", "/api/shots/:id", async ({ env }, { id }) => {
     const sid = assertUuid(id, "id");
     const { results } = await env.DB.prepare("SELECT r2_object_key FROM photos WHERE shot_id = ?1").bind(sid).all<{ r2_object_key: string }>();
-    const res = await env.DB.prepare("DELETE FROM shots WHERE id = ?1").bind(sid).run(); // photos cascade
+    const renders = await renderKeysOf(env, sid);
+    const res = await env.DB.prepare("DELETE FROM shots WHERE id = ?1").bind(sid).run(); // photos, overlays and sketches cascade
     if (!res.meta.changes) throw new HttpError(404, "shot not found");
-    if (results.length) await env.SHOTS_BUCKET.delete(results.map((r) => r.r2_object_key));
+    const keys = [...results.map((r) => r.r2_object_key), ...renders];
+    if (keys.length) await env.SHOTS_BUCKET.delete(keys);
     return json({ deleted: sid });
   });
 }
