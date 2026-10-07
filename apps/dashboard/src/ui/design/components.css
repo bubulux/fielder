@@ -48,6 +48,10 @@ button.f-row { width: 100%; }
 /* Menus anchored under a button. */
 .menu-anchor { position: relative; }
 .popover { position: absolute; top: calc(100% + 4px); z-index: 70; }
+
+/* Context menu at the pointer (right-click on a resource, issue #31). */
+.ctx { position: fixed; inset: 0; z-index: 2000; }
+.ctx__menu { position: fixed; max-height: calc(100vh - 16px); overflow-y: auto; }
 .f-menu__item .mdi-blank { width: 18px; }
 
 /* Checkbox. */

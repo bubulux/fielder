@@ -3,7 +3,7 @@
  * anchored popover menu, and the confirm/prompt dialog hosted once in App.
  */
 import type { ComponentChildren, Ref } from "preact";
-import { useEffect, useRef, useState } from "preact/hooks";
+import { useEffect, useLayoutEffect, useRef, useState } from "preact/hooks";
 import { Button } from "./actions";
 import { cx } from "./core";
 import { Field, Input } from "./forms";
@@ -51,6 +51,48 @@ export function Popover({ children, onClose, right }: { children: ComponentChild
     return () => window.removeEventListener("keydown", esc, true);
   }, []);
   return <div ref={box} class="f-menu popover" style={right ? { right: 0 } : { left: 0 }}>{children}</div>;
+}
+
+// ---------- Context menu (issue #31) ----------
+
+/** Right-click state: where to open and what was clicked. Spread `openMenu` into onContextMenu handlers. */
+export function useCtxMenu<T>() {
+  const [menu, setMenu] = useState<{ x: number; y: number; ctx: T } | null>(null);
+  const openMenu = (e: MouseEvent, ctx: T) => { e.preventDefault(); e.stopPropagation(); setMenu({ x: e.clientX, y: e.clientY, ctx }); };
+  return { menu, openMenu, closeMenu: () => setMenu(null) };
+}
+
+/**
+ * An app context menu at the pointer (like a media pool's right-click), suppressing the browser's.
+ * MenuItems as children; any click inside closes it, as do Esc, an outside press and a second
+ * right-click. ↑/↓ move between items. `data-overlay` pauses the page's shortcuts while open.
+ */
+export function ContextMenu({ x, y, label, onClose, children }: { x: number; y: number; label?: string; onClose: () => void; children: ComponentChildren }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [pos, setPos] = useState({ left: x, top: y });
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const r = el.getBoundingClientRect();
+    setPos({ left: Math.max(8, Math.min(x, window.innerWidth - r.width - 8)), top: Math.max(8, Math.min(y, window.innerHeight - r.height - 8)) });
+    el.querySelector("button")?.focus();
+  }, [x, y]);
+  const onKey = (e: KeyboardEvent) => {
+    if (e.key === "Escape") { e.stopPropagation(); onClose(); return; }
+    if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
+    e.preventDefault();
+    const items = [...(ref.current?.querySelectorAll<HTMLButtonElement>(".f-menu__item:not(:disabled)") ?? [])];
+    if (items.length === 0) return;
+    const i = items.indexOf(document.activeElement as HTMLButtonElement);
+    items[(i + (e.key === "ArrowDown" ? 1 : items.length - 1)) % items.length]?.focus();
+  };
+  return (
+    <div class="ctx" data-overlay onContextMenu={(e) => { e.preventDefault(); onClose(); }} onMouseDown={(e) => { if (!ref.current?.contains(e.target as Node)) onClose(); }}>
+      <div ref={ref} class="f-menu ctx__menu" role="menu" aria-label={label ?? "Actions"} style={{ left: `${pos.left}px`, top: `${pos.top}px` }} onKeyDown={onKey} onClick={onClose}>
+        {children}
+      </div>
+    </div>
+  );
 }
 
 // ---------- Confirm dialog + toasts (hosted once in App) ----------
