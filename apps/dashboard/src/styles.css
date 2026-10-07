@@ -249,7 +249,7 @@ button { font: inherit; }
 .tl-strip { position: relative; min-width: 100%; }
 .tl-ruler { position: relative; height: 18px; border-bottom: var(--bw) solid var(--border); margin-bottom: 4px; }
 .tl-ruler span { position: absolute; top: 0; height: 100%; border-left: 1px solid var(--border); padding-left: 3px; font: var(--weight-semibold) var(--text-micro)/18px var(--font-sans); color: var(--text-dim); font-variant-numeric: tabular-nums; white-space: nowrap; }
-.tl-clips { display: flex; gap: 2px; }
+.tl-clips { display: flex; gap: 2px; position: relative; }
 .tl-clip { position: relative; flex: none; display: flex; flex-direction: column; gap: 2px; padding: 4px; border: var(--bw) solid var(--border); border-radius: var(--radius-sm); background: var(--surface); color: var(--text); cursor: pointer; text-align: left; overflow: hidden; }
 .tl-clip:hover { border-color: var(--border-strong); }
 .tl-clip.is-sel { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent); background: var(--accent-tint); }
@@ -259,6 +259,16 @@ button { font: inherit; }
 .tl-clip__name { font: var(--weight-semibold) var(--text-micro)/1.2 var(--font-sans); display: flex; align-items: center; gap: 3px; }
 .tl-clip__dur { font: var(--weight-bold) var(--text-micro)/1.2 var(--font-sans); color: var(--text-dim); }
 .tl-clip__head { position: absolute; top: 0; bottom: 0; width: 2px; background: var(--danger); pointer-events: none; }
+/* Placeholder clips and drag targets (issue #31). */
+.tl-clip--ph { border-style: dashed; color: var(--text-dim); background: transparent; }
+.tl-clip__thumb--ph { align-items: center; justify-content: center; background: transparent; border: 1px dashed var(--border); border-radius: 3px; font-size: 22px; }
+.tl-clip.is-fill { border-style: solid; border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent); background: var(--accent-tint); color: var(--text); }
+.tl-dropline { position: absolute; top: 0; bottom: 0; width: 3px; border-radius: 2px; background: var(--accent); z-index: 1; pointer-events: none; }
+.tl-empty { border: var(--bw) dashed var(--border); border-radius: var(--radius-md); padding: 28px 16px; text-align: center; }
+.tl-empty.is-drop { border-color: var(--accent); background: var(--accent-tint); }
+.tl-ph-view { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; color: #fff; padding: 48px 24px; text-align: center; font-size: var(--text-body); }
+.tl-ph-view .mdi { font-size: 40px; }
+.tl-ph-view__notes { max-width: 460px; white-space: pre-wrap; opacity: 0.85; font-size: var(--text-caption); }
 
 /* New shot dialog (NewShot.tsx). */
 .newshot { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: var(--space-4); align-items: start; }

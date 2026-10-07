@@ -1,6 +1,6 @@
 # Timeline
 
-Second half of [GitHub issue #12](https://github.com/bubulux/fielder/issues/12). A **timeline** is a rough cut of a project out of its scouted photos: clips in order, each with a hold time ("Vorstopp"), played back to see which shots carry a sequence. Dashboard only; the phone does not read timelines.
+Second half of [GitHub issue #12](https://github.com/bubulux/fielder/issues/12). A **timeline** is a rough cut of a project out of its scouted photos: clips in order, each with a hold time ("Vorstopp"), played back to see which shots carry a sequence. Dashboard only; the phone does not read timelines. The [Review workspace](review-and-tagging.md) edits the same timelines with a shot browser beside them (issue #31).
 
 ## Model
 
@@ -11,6 +11,8 @@ A project has any number of named timelines. A **clip** holds:
 - `duration_ms` (100 ms .. 1 h), entered in seconds with one decimal
 - notes
 
+A **placeholder** clip (issue #31) has no photo: it reserves time for a shot that does not exist yet, carrying a title ("Wanted shot"), the hold time and notes. It renders as a dashed block in the strip and the preview, plays like any clip, and is filled by dropping a shot onto it (the hold time is kept).
+
 The same photo can be in a timeline several times. Deleting a shot removes its clips everywhere (the shot's delete dialog says "Used in n timelines"); deleting an overlay keeps the clip, which then shows the photo as is. A shot moved to another project leaves that project's timelines, like it leaves its shooting days.
 
 ## Using it (`apps/dashboard/src/Timeline.tsx`, route `#/timeline/<id>`)
@@ -19,10 +21,10 @@ The same photo can be in a timeline several times. Deleting a shot removes its c
 - **Head**: name, total length, save status, menu (Delete timeline…). Changes **autosave** 600 ms after the last edit and at once when leaving the page; the server's answer replaces the clip list, so clips of deleted photos disappear on the next save.
 - **Preview**: the selected clip, large, in its presentation (the overlay's render when one is chosen). Transport: first · previous · **Play/Pause** (`Space`) · next · last, the playhead clock over the total, "clip n of m · 3.0 s", and **Add shots** (`N`).
   Playback steps through the clips at their hold times (100 ms ticks) and stops at the end; Play at the end starts over.
-- **Strip**: one block per clip, its width proportional to the hold time (44 px a second, at least 64 px), with a thumbnail, the shot's title (and photo number for sequences; a layers icon marks an overlay), the hold time, and a red playhead on the current clip. A ruler marks the seconds. Click selects, double-click opens the shot view with the timeline's shots as its list.
-- **Clip panel** (right, for the selected clip): thumbnail, **Hold time** (−0.5 s · field · +0.5 s; `D` focuses it), **Show as** (Photo as is, or one of the photo's overlays; picking an overlay adopts the presentation it was drawn in), **Presentation** (frame mode and a **Framing**: As captured or a saved framing of the photo, see [framing](rig-explorer.md); a clip follows its framing's edits and starts on the root), notes, Move earlier/later (`Alt+←/→`), Duplicate, Open shot (`↵`), Remove (`Del`).
-- **Add shots** panel: the project's shots grouped by location, "Approved only" ticked by default, "Add all" per location. Each added clip starts at 3.0 s in the view's current frame mode with the rig the photo was shot with.
-- Keys: `←/→` clip, `Home`/`End`, `Space`, `Alt+←/→`, `D`, `Del`, `N`, `⇧N`, `↵`. `G T` goes to Timeline from anywhere.
+- **Strip**: one block per clip, its width proportional to the hold time (44 px a second, at least 64 px), with a thumbnail, the shot's title (and photo number for sequences; a layers icon marks an overlay), the hold time, and a red playhead on the current clip. Placeholders are dashed. A ruler marks the seconds. Click selects, double-click opens the shot view with the timeline's shots as its list. **Drag a clip** to reorder (an accent line marks the drop position); in the Review workspace shots drop in from the browser.
+- **Clip panel** (right, for the selected clip): thumbnail, **Hold time** (−0.5 s · field · +0.5 s; `D` focuses it), **Show as** (Photo as is, or one of the photo's overlays; picking an overlay adopts the presentation it was drawn in), **Presentation** (frame mode and a **Framing**: As captured or a saved framing of the photo, see [framing](rig-explorer.md); a clip follows its framing's edits and starts on the root), notes, Move earlier/later (`Alt+←/→`), Duplicate, Open shot (`↵`), Remove (`Del`). A placeholder's panel has the wanted-shot title, hold time and notes instead.
+- **Add shots** panel: the project's shots grouped by location, "Approved only" ticked by default, "Add all" per location. Each added clip starts at 3.0 s in the view's current frame mode with the rig the photo was shot with. **Placeholder** (`P`) appends a placeholder clip.
+- Keys: `←/→` clip, `Home`/`End`, `Space`, `Alt+←/→`, `D`, `Del`, `N`, `P`, `⇧N`, `↵`. `G T` goes to Timeline from anywhere.
 
 The inspector's **Shot** section lists the timelines a shot is in (links).
 
@@ -30,7 +32,8 @@ The inspector's **Shot** section lists the timelines a shot is in (links).
 
 `timelines` + `timeline_clips` (`apps/worker/src/timelines.ts`). `PUT /api/timelines/:id` replaces the whole timeline; clips whose photo is not in the project are dropped silently, an overlay that does not belong to the clip's photo is nulled. See [api](../api.md) and [data model](../data-model.md).
 
+The strip, preview, clip panel, playback and autosave live in `apps/dashboard/src/TimelineParts.tsx`, shared with the Review workspace.
+
 ## Not done
 
 - No export (video or image sequence) and no transitions or audio: the timeline is for deciding, not for delivery.
-- No drag-and-drop in the strip; reordering is by keys and buttons.
