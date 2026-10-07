@@ -18,7 +18,7 @@ All routes live in `apps/worker/src/` and are registered in `index.ts`. Every re
 | GET | `/api/shots?project_id=&state=&location_id=&limit=&before=&before_id=` | Newest first, keyset pagination on `(captured_at, id)`, `next` cursor. Photos embedded. |
 | GET | `/api/shots/:id` | |
 | POST | `/api/shots` | Multipart: `metadata` (JSON) + one `photo.<photoId>` file per photo not yet stored. See below. |
-| PATCH | `/api/shots/:id` | Any of `name, light, artificial, weather, int_ext, shot_size, camera_support, movement, location_id, extra, description, state, project_id`. `extra` is validated against the project's fields. Moving to another project removes the shot from the old project's shooting days and timelines. |
+| PATCH | `/api/shots/:id` | Any of `name, light, artificial, weather, int_ext, shot_size, camera_support, movement, location_id, extra, description, position_from_location, state, project_id`. `extra` is validated against the project's fields. Moving to another project removes the shot from the old project's shooting days and timelines. |
 | PATCH | `/api/shots` | Bulk edit: `{ ids: uuid[] (≤ 500), set?: { any single-PATCH field except extra }, extra?: { key: value \| null } }`. Only the given fields change. `extra` is per key and merged into each shot's values (groups child by child, null clears, dependent selects that no longer fit are dropped), then the edited keys are checked against each shot's (new) project. Unknown ids → 404, any error → nothing written (one transaction). Moving removes the shots from the old project's shooting days. Returns `{ shots }`. |
 | DELETE | `/api/shots/:id` | Deletes photos, overlays and sketches (cascade) and their R2 objects |
 | GET | `/api/photos/:id/image` | Image from R2, immutable caching, supports conditional requests |
@@ -66,7 +66,7 @@ Shots embed both lists without the drawing; see [compose](features/compose.md) f
 
 | Method | Path | Notes |
 | --- | --- | --- |
-| GET / PUT / DELETE | `/api/locations[/:id]` | `{ name }`; `shot_count`, `approved_count`; clash → `409 { existing_id }`; delete nulls `shots.location_id` |
+| GET / PUT / DELETE | `/api/locations[/:id]` | `{ name, lat?, lon? }`: without `lat`/`lon` the stored pin is kept, `null` for both removes it; `shot_count`, `approved_count`; clash → `409 { existing_id }`; delete nulls `shots.location_id` |
 | GET / PUT / DELETE | `/api/presets[/:id]` | Rigs: `name, camera_id, format_id, sensor_width_mm, sensor_height_mm, speedbooster_factor, lens_min_mm, lens_max_mm` |
 | GET / PUT / DELETE | `/api/views[/:id]` | `{ name, filter }`, filter validated by `validateFilter` |
 

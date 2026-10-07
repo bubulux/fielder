@@ -122,6 +122,10 @@ export interface Shot {
   extra: Extra;
   /** Markdown subset, written on the dashboard. */
   description: string | null;
+  /** Maps use the location's pin instead of the photos' GPS (set on the dashboard; the photos keep theirs). */
+  position_from_location: boolean;
+  /** The location's pin, null when it has none. */
+  location_position: { lat: number; lon: number } | null;
   captured_at: string;
   created_at: string;
   updated_at: string | null;
@@ -147,8 +151,12 @@ export interface ShootingDay { id: string; project_id: string; date: string; tit
 
 /** The photo that stands for the shot in lists, maps and filters: the first one. */
 export const cover = (s: Shot): Photo => s.photos[0];
-/** Where a shot is on a map: the cover photo, else the first photo with a position; null when none has one. */
+/**
+ * Where a shot is on a map: the location's pin when the shot is synced to it (and the pin is set),
+ * else the cover photo, else the first photo with a position; null when none has one.
+ */
 export function positionOf(s: Shot): { lat: number; lon: number } | null {
+  if (s.position_from_location && s.location_position) return s.location_position;
   const p = [cover(s), ...s.photos].find((x) => x.lat !== null && x.lon !== null);
   return p ? { lat: p.lat!, lon: p.lon! } : null;
 }

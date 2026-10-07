@@ -1,9 +1,12 @@
-import { assertString, assertUuid, HttpError, json, readJson, type Router } from "./http.ts";
+import { assertNumber, assertString, assertUuid, HttpError, json, readJson, type Router } from "./http.ts";
 import type { Ctx } from "./index.ts";
 
 export interface LocationRow {
   id: string;
   name: string;
+  /** The location's pin; both null when none is set. */
+  lat: number | null;
+  lon: number | null;
   created_at: string;
   updated_at: string | null;
   shot_count?: number;
@@ -20,19 +23,26 @@ export function registerLocationRoutes(r: Router<Ctx>) {
   });
 
   // Upsert; the client owns the id so offline-created locations can be synced later.
+  // lat/lon are optional: absent keeps the stored pin (the phone only sends the name), null clears it.
   // Names are unique case-insensitively: a clash with another location answers 409 + existing_id
   // so the client can adopt that location instead.
   r.on("PUT", "/api/locations/:id", async ({ env, request }, { id }) => {
     const lid = assertUuid(id, "id");
     const b = await readJson<Record<string, unknown>>(request);
     const name = assertString(b.name, "name", 80);
+    const hasPos = b.lat !== undefined || b.lon !== undefined;
+    let lat: number | null = null, lon: number | null = null;
+    if (hasPos && !(b.lat === null && b.lon === null)) {
+      lat = assertNumber(b.lat, "lat", { min: -90, max: 90 });
+      lon = assertNumber(b.lon, "lon", { min: -180, max: 180 });
+    }
     const clash = await env.DB.prepare("SELECT id FROM locations WHERE name = ?1 COLLATE NOCASE AND id != ?2").bind(name, lid).first<{ id: string }>();
     if (clash) return json({ error: "a location with this name already exists", existing_id: clash.id }, 409);
     const now = new Date().toISOString();
     await env.DB.prepare(
-      `INSERT INTO locations (id, name, updated_at) VALUES (?1, ?2, ?3)
-       ON CONFLICT(id) DO UPDATE SET name = ?2, updated_at = ?3`,
-    ).bind(lid, name, now).run();
+      `INSERT INTO locations (id, name, updated_at, lat, lon) VALUES (?1, ?2, ?3, ?4, ?5)
+       ON CONFLICT(id) DO UPDATE SET name = ?2, updated_at = ?3${hasPos ? ", lat = ?4, lon = ?5" : ""}`,
+    ).bind(lid, name, now, lat, lon).run();
     const row = await env.DB.prepare(`${LIST_SQL} WHERE l.id = ?1 GROUP BY l.id`).bind(lid).first<LocationRow>();
     return json({ location: row });
   });

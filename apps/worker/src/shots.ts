@@ -20,11 +20,14 @@ interface ShotRow {
   state: string;
   extra: string;
   description: string | null;
+  position_from_location: number;
   captured_at: string;
   created_at: string;
   updated_at: string | null;
   project_name: string | null;
   location_name: string | null;
+  location_lat: number | null;
+  location_lon: number | null;
 }
 
 interface PhotoRow {
@@ -102,6 +105,9 @@ function shotToApi(s: ShotRow, photos: PhotoRow[], compose: Compose) {
     state: s.state,
     extra: JSON.parse(s.extra) as Extra,
     description: s.description,
+    position_from_location: s.position_from_location === 1,
+    /** The location's pin (null when it has none); clients use it when position_from_location is on. */
+    location_position: s.location_lat !== null && s.location_lat !== undefined && s.location_lon !== null ? { lat: s.location_lat, lon: s.location_lon } : null,
     captured_at: s.captured_at,
     created_at: s.created_at,
     updated_at: s.updated_at,
@@ -111,7 +117,7 @@ function shotToApi(s: ShotRow, photos: PhotoRow[], compose: Compose) {
   };
 }
 
-const SHOT_SQL = `SELECT s.*, pr.name AS project_name, l.name AS location_name
+const SHOT_SQL = `SELECT s.*, pr.name AS project_name, l.name AS location_name, l.lat AS location_lat, l.lon AS location_lon
   FROM shots s JOIN projects pr ON pr.id = s.project_id LEFT JOIN locations l ON l.id = s.location_id`;
 
 /** Photos for many shots in one query (json_each keeps it to one bound parameter; D1 caps those at 100). */
@@ -139,7 +145,7 @@ export async function loadShot(env: Ctx["env"], id: string) {
  */
 interface Tags {
   name: string | null; light: string; artificial: number; weather: string | null; int_ext: string | null; location_id: string | null; extra: string;
-  shot_size: string | null; camera_support: string | null; movement: string; description: string | null;
+  shot_size: string | null; camera_support: string | null; movement: string; description: string | null; position_from_location: number;
 }
 
 function parseTags(m: Record<string, unknown>, all: true): Tags;
@@ -168,6 +174,10 @@ function parseTags(m: Record<string, unknown>, all: boolean): Partial<Tags> {
     if (!Array.isArray(v)) throw new HttpError(400, "movement must be an array");
     for (const x of v) assertEnum(x, "movement", MOVEMENTS);
     out.movement = JSON.stringify(MOVEMENTS.filter((x) => v.includes(x)));
+  }
+  if (want("position_from_location")) {
+    if (!blank(m.position_from_location) && typeof m.position_from_location !== "boolean") throw new HttpError(400, "position_from_location must be a boolean");
+    out.position_from_location = m.position_from_location === true ? 1 : 0;
   }
   if (want("description")) {
     if (!blank(m.description) && typeof m.description !== "string") throw new HttpError(400, "description must be a string");
