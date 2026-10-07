@@ -4,6 +4,7 @@ import { createShot, existingIdOf, putLocation, putSketch, type Location, type N
 import { defaultStyle, DrawSurface, TOOLS, WIDTHS, type Style, type TextEdit, type Tool } from "./compose/DrawSurface";
 import { renderSketch } from "./compose/render";
 import { useKeys } from "./keys";
+import { getSettings } from "./settings";
 import { Button, Chip, Combobox, cx, Field, Icon, IconButton, Input, MarkdownField, Modal, Seg, toast } from "./ui";
 
 /**
@@ -46,7 +47,7 @@ export function NewShotDialog({ projectId, projects, locations, onLocations, onC
   const [project, setProject] = useState<string | null>(projectId ?? projects[0]?.id ?? null);
   const [name, setName] = useState("");
   const [location, setLocation] = useState<string | null>(null);
-  const [state, setState] = useState<ShotState>("approved");
+  const [state, setState] = useState<ShotState>(() => getSettings().newShotState);
   const [description, setDescription] = useState("");
   const [files, setFiles] = useState<Picked[]>([]);
   const [split, setSplit] = useState(false);
@@ -175,7 +176,7 @@ export function NewShotDialog({ projectId, projects, locations, onLocations, onC
           <Field label="Location" as="div"><Combobox small icon="map-marker-outline" options={locations.map((l) => ({ value: l.id, label: l.name }))} value={location} placeholder="Search or create…" onChange={(v) => void pickLocation(v)} onCreate={(t) => void pickLocation(null, t)} /></Field>
           <Field label="Review state" as="div"><Seg label="Review state" value={state} onChange={setState} options={[{ id: "approved", label: "Approved" }, { id: "unreviewed", label: "To review" }]} /></Field>
           <Field label="Description" as="div"><MarkdownField value={description} onChange={setDescription} rows={4} placeholder="Where it comes from, what it is for…" /></Field>
-          <span class="meta">No position and no rig: set a location (with a pin) or a position later. Tags, overlays and timelines work as for any shot.</span>
+          <span class="meta">The default review state is in Settings. No position and no rig: set a location (with a pin) or a position later. Tags, overlays and timelines work as for any shot.</span>
         </div>
       </div>
       <div class="f-modal__foot">

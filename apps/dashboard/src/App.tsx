@@ -14,6 +14,7 @@ import { ReviewPage } from "./Review";
 import { RigsPage } from "./Rigs";
 import { DEFAULT_ROUTE, useRoute, type Route, type Stage } from "./router";
 import { NewShotDialog } from "./NewShot";
+import { SettingsPage } from "./SettingsPage";
 import { ShotsPage } from "./ShotsPage";
 import { TimelinePage } from "./Timeline";
 import { decodeView, emptyQuery, encodeView, runQuery, type Layout, type ShotsQuery } from "./shotsQuery";
@@ -238,6 +239,9 @@ export function App() {
   } else if (route.page === "timeline") {
     main = <TimelinePage project={scopeProject} projects={projects!} onPickProject={setScope} shots={scoped} presets={presets!} mask={mask} timelineId={route.timelineId} onTimeline={(id) => replace({ page: "timeline", timelineId: id })} onOpen={openShot} />;
     hints = [{ k: "←/→", t: "Clip" }, { k: "Space", t: "Play / pause" }, { k: "Alt ←/→", t: "Reorder" }, { k: "D", t: "Hold time" }, { k: "Del", t: "Remove" }, { k: "N", t: "Add shots" }, { k: "⇧N", t: "New timeline" }, { k: "↵", t: "Open shot" }];
+  } else if (route.page === "settings") {
+    main = <SettingsPage theme={theme} onTheme={setTheme} mask={mask} onMask={setMask} />;
+    hints = [{ k: "G S", t: "Back to Shots" }];
   } else if (route.page === "library") {
     const sel = route.id;
     const setSel = (id: string | null) => replace({ page: "library", section: route.section, id });
@@ -279,6 +283,7 @@ export function App() {
     { id: "a-day", group: "Actions", icon: "calendar-plus", title: "New shooting day", sub: "In Plan", keys: "⇧N", run: () => void navigate({ page: "plan", dayId: null }) },
     { id: "a-rig", group: "Actions", icon: "camera-plus-outline", title: "New rig", sub: "Library › Rigs", run: () => navigateRaw({ page: "library", section: "rigs", id: null }) },
     { id: "a-theme", group: "Actions", icon: "theme-light-dark", title: "Toggle theme", sub: `Now ${theme === "auto" ? "Auto" : theme === "sun" ? "Sun" : "Set"}`, run: () => setTheme(theme === "set" ? "sun" : "set") },
+    { id: "a-settings", group: "Go to", icon: "cog-outline", title: "Settings", sub: "Theme, frame mode, new shots", run: () => void navigate({ page: "settings" }) },
     { id: "a-reload", group: "Actions", icon: "refresh", title: "Reload data", run: reload },
     { id: "a-side", group: "Actions", icon: rail ? "chevron-double-right" : "chevron-double-left", title: rail ? "Expand the sidebar" : "Collapse the sidebar", keys: "Ctrl B", run: toggleSidebar },
     { id: "a-keys", group: "Actions", icon: "keyboard-outline", title: "Keyboard shortcuts", keys: "?", run: () => setSheet(true) },
