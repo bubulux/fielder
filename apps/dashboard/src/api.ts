@@ -191,13 +191,16 @@ export const putDay = (d: Omit<ShootingDay, "created_at" | "updated_at">) =>
   send<{ day: ShootingDay }>("PUT", `/api/days/${d.id}`, { project_id: d.project_id, date: d.date, title: d.title, notes: d.notes, shots: d.shots }).then((r) => r.day);
 export const deleteDay = (id: string) => send<{ deleted: string }>("DELETE", `/api/days/${id}`).then(() => undefined);
 
-/** A rough cut of a project out of its photos (issue #12, part 2). */
-export interface TimelineClip { id: string; photo_id: string; shot_id: string; /** Seen through this overlay's render; null = the photo as is. */ overlay_id: string | null; presentation: Presentation; duration_ms: number; notes: string | null }
+/**
+ * A rough cut of a project out of its photos (issue #12, part 2). A clip without a photo is a
+ * placeholder (issue #31): `title` says what is wanted there; overlay and presentation are null.
+ */
+export interface TimelineClip { id: string; photo_id: string | null; shot_id: string | null; /** Seen through this overlay's render; null = the photo as is. */ overlay_id: string | null; presentation: Presentation | null; duration_ms: number; notes: string | null; title: string | null }
 export interface Timeline { id: string; project_id: string; name: string; notes: string | null; created_at: string; updated_at: string | null; clips: TimelineClip[] }
 export const fetchTimelines = (projectId: string) => get<{ timelines: Timeline[] }>(`/api/timelines?project_id=${projectId}`).then((r) => r.timelines);
 /** Replaces the whole timeline. Clips of photos that left the project are dropped by the server. */
 export const putTimeline = (t: Omit<Timeline, "created_at" | "updated_at">) =>
-  send<{ timeline: Timeline }>("PUT", `/api/timelines/${t.id}`, { project_id: t.project_id, name: t.name, notes: t.notes, clips: t.clips.map((c) => ({ id: c.id, photo_id: c.photo_id, overlay_id: c.overlay_id, presentation: c.presentation, duration_ms: c.duration_ms, notes: c.notes })) }).then((r) => r.timeline);
+  send<{ timeline: Timeline }>("PUT", `/api/timelines/${t.id}`, { project_id: t.project_id, name: t.name, notes: t.notes, clips: t.clips.map((c) => ({ id: c.id, photo_id: c.photo_id, overlay_id: c.overlay_id, presentation: c.presentation, duration_ms: c.duration_ms, notes: c.notes, title: c.title })) }).then((r) => r.timeline);
 export const deleteTimeline = (id: string) => send<{ deleted: string }>("DELETE", `/api/timelines/${id}`).then(() => undefined);
 
 export const fetchPresets = () => get<{ presets: Preset[] }>("/api/presets").then((r) => r.presets);
