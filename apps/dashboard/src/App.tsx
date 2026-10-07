@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "preact/hooks";
 import { extraFilterFields, type FieldDef } from "@fielder/vocab";
-import { deleteView, fetchAllShots, fetchFields, fetchLocations, fetchPresets, fetchProjects, fetchViews, putView, type FieldDefinition, type Location, type Preset, type Project, type SavedView, type Shot, type ShootingDay } from "./api";
+import { deleteView, onProjectCreated, fetchAllShots, fetchFields, fetchLocations, fetchPresets, fetchProjects, fetchViews, putView, type FieldDefinition, type Location, type Preset, type Project, type SavedView, type Shot, type ShootingDay } from "./api";
 import { CommandPalette, ShortcutSheet, type Command } from "./CommandPalette";
 import { FieldsPage } from "./Fields";
 import { FRAME_MODES, isFrameMode } from "./format";
@@ -78,6 +78,8 @@ export function App() {
   const reload = () => { void load().then(() => toast("Reloaded", "info")); };
   const refreshCounts = () => { void fetchLocations().then(setLocations).catch(() => {}); void fetchProjects().then(setProjects).catch(() => {}); };
   useEffect(() => { void load(); }, []);
+  // A project created inline (move, bulk edit) joins the list at once; counts follow with the next refresh.
+  useEffect(() => onProjectCreated((p) => setProjects((cur) => (cur ?? []).some((x) => x.id === p.id) ? cur : [...(cur ?? []), p].sort((a, b) => a.name.localeCompare(b.name)))), []);
 
   // A remembered project that no longer exists counts as "not chosen".
   const scope: Scope | null = storedScope === ALL_PROJECTS || (storedScope && projects?.some((p) => p.id === storedScope)) ? storedScope : null;

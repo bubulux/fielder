@@ -10,6 +10,7 @@ Every shot belongs to exactly one project (a film, a commercial). Locations, rig
   - The sidebar's scope switcher lists the projects, "All projects" and "Manage projects…"; ⌘K → a project name switches too.
   - "All projects" is the global explorer: every shot, with a Project column in the list and a project tag on cards and map popups. Plan needs a single project.
   - Library › Projects: a list (shots, fields, "can be deleted") and a detail with name and notes (saved when leaving the field), the project's [extra fields](extra-fields.md) in order (add, reorder, remove), "Show n shots" and "Make active". Only empty projects can be deleted.
+  - **Inline creation** when moving shots: the inspector's Project box, the Move to project dialog and the bulk-edit panel offer "Create “…”" for a new name (`createProjectNamed` in `api.ts`). A name that exists already is taken instead (the 409 carries its id), so nothing is duplicated.
   - A shot moves to another project via the Project box in the shot view's inspector. When it is planned on shooting days, a warning says how many it leaves, and Move confirms.
 - **Phone:**
   - After sign-in (or skipping it), a full-screen gate asks for a project if none is active (`screens/Gates.tsx`). You switch with the **project pill** in every header, the HUD project chip on Shoot or Setup → Project; all open the Project sheet (`components/ProjectSheet.tsx`, a search above 8 projects, "New project" by name, works offline). A switch says "Now shooting for …".

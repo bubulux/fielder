@@ -1,10 +1,10 @@
 import { Fragment } from "preact";
 import { useEffect, useRef, useState } from "preact/hooks";
 import { CAMERA_SUPPORTS, cameraLabel, INT_EXT, label, lightLabel, MOVEMENTS, SHOT_SIZE_ABBR, SHOT_SIZES, WEATHER, type Extra, type FieldDef } from "@fielder/vocab";
-import { existingIdOf, fetchDays, fetchTimelines, patchShot, putLocation, type Location, type Photo, type Project, type Shot, type ShootingDay, type ShotState, type Timeline } from "./api";
+import { createProjectNamed, existingIdOf, fetchDays, fetchTimelines, patchShot, putLocation, type Location, type Photo, type Project, type Shot, type ShootingDay, type ShotState, type Timeline } from "./api";
 import { ExtraEditor } from "./ExtraEditor";
 import { coords, fovLabel, placeLabel, rigDescription, shotTitle } from "./format";
-import { Button, Chip, Combobox, Icon, Input, LightChips, MarkdownField, SaveStatus, Seg, StateMarker, type SaveState } from "./ui";
+import { Button, Chip, Combobox, Icon, Input, LightChips, MarkdownField, SaveStatus, Seg, StateMarker, toast, type SaveState } from "./ui";
 
 // Shooting days per project, fetched on demand for the "Days" fact and the move warning.
 const daysCache = new Map<string, Promise<ShootingDay[]>>();
@@ -101,6 +101,10 @@ export function Inspector({ shot, photo, projects, fields, locations, onLocation
     }
     void patch({ location_id: id });
   }
+  async function createProject(name: string) {
+    setSave("saving");
+    try { pickProject((await createProjectNamed(name)).id); } catch (e) { setSave("error"); toast(`Could not create the project: ${(e as Error).message}`, "danger"); }
+  }
   const pickProject = (v: string | null) => {
     if (!v || v === shot.project_id) { setMoveTo(null); return; }
     if (days.length === 0) void patch({ project_id: v });
@@ -141,7 +145,7 @@ export function Inspector({ shot, photo, projects, fields, locations, onLocation
           <div class="f-formgrid">
             <label>Project</label>
             <div class="f-field">
-              <Combobox small options={projects.map((p) => ({ value: p.id, label: p.name }))} value={moveTo ?? shot.project_id} clearable={false} onChange={pickProject} onCancel={() => setMoveTo(null)} />
+              <Combobox small options={projects.map((p) => ({ value: p.id, label: p.name }))} value={moveTo ?? shot.project_id} clearable={false} onChange={pickProject} onCreate={(t) => void createProject(t)} onCancel={() => setMoveTo(null)} />
               {moveTo && (
                 <div class="move-warn">
                   <span class="f-field__help" style={{ color: "var(--warn-ink)", fontWeight: 600, display: "flex", gap: "4px" }}><Icon name="alert" />Leaves {days.length} shooting day{days.length === 1 ? "" : "s"} in {projectName}.</span>
