@@ -2,14 +2,16 @@ import { useRef, useState } from "react";
 import * as Location from "expo-location";
 import { ScrollView, Text, useWindowDimensions, View } from "react-native";
 import { extraSummary, label, lightLabel, MOVEMENTS, SHOT_SIZE_ABBR, STATE_ICONS, type FieldDef } from "@fielder/vocab";
-import { cover, positionOf, type Photo, type Shot } from "../api";
+import { cover, positionOf, type Composed, type Photo, type Shot } from "../api";
 import { isWaiting, setPosition } from "../localShots";
 import { useApp } from "../appState";
 import { useOnline } from "../net";
 import { fovLabel, placeLabel, rigLabel, shortTime, shotTitle } from "../shots";
 import { store } from "../storage";
 import { ActionBar, AppHeader, BORDER, Button, Empty, FONT, IconButton, makeStyles, notice, num, PushScreen, SectionLabel, SideBySide, toast, Toggle, type, useLayoutSize, useTheme } from "../ui";
+import { ComposeStrip, ComposeViewer } from "../components/ComposeParts";
 import { EditTagsSheet } from "../components/EditTagsSheet";
+import { MarkdownText } from "../components/Markdown";
 import { LeafletView, type MapHandle } from "../components/LeafletView";
 import { focusScript, positionScript } from "../components/mapHtml";
 import { PhotoStrip } from "../components/PhotoStrip";
@@ -42,6 +44,7 @@ export function ShotDetails({ shotId, list }: { shotId: string; list: string[] }
   const [mode, setMode] = useState<FrameMode>(() => store.loadPref("shotsMode.v1", "mask", FRAME_MODES));
   const [sheet, setSheet] = useState<"edit" | "more" | null>(null);
   const [full, setFull] = useState(false);
+  const [viewing, setViewing] = useState<Composed | null>(null);
   const [raw, setRaw] = useState(false);
   const { setState } = useShotActions();
   const [box, onBox] = useLayoutSize();
@@ -60,6 +63,8 @@ export function ShotDetails({ shotId, list }: { shotId: string; list: string[] }
         <FrameModeSeg block value={mode} onChange={setMode} />
         <ShotSummary shot={shot} photo={photo} />
       </View>
+      {!!shot.description && <><Head title="Description" /><View style={s.section}><MarkdownText source={shot.description} /></View></>}
+      <ComposeStrip shot={shot} photo={photo} onOpen={setViewing} />
       <Head title="Tags" action={{ label: "Edit", onPress: () => setSheet("edit") }} />
       <Facts rows={tagRows(shot, fields)} />
       <Head title={shot.photos.length > 1 ? `Position · photo ${photoIndex + 1}` : "Position"} />
@@ -87,6 +92,7 @@ export function ShotDetails({ shotId, list }: { shotId: string; list: string[] }
       <EditTagsSheet shot={shot} visible={sheet === "edit"} onClose={() => setSheet(null)} />
       <MoreSheet shot={shot} photo={photo} details={false} visible={sheet === "more"} onClose={() => setSheet(null)} onDeleted={app.pop} />
       {full && <FullPhoto shot={shot} index={photoIndex} mode={mode} onMode={setMode} settings={app.settings} onClose={() => setFull(false)} />}
+      {viewing && <ComposeViewer item={viewing} photo={photo} settings={app.settings} onClose={() => setViewing(null)} />}
     </>
   );
   const sub = [shot.photos.length > 1 ? `${shot.photos.length} photos` : null, shortTime(shot.captured_at)].filter(Boolean).join(" · ");

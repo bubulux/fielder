@@ -34,6 +34,7 @@ export function queuedToShot(entry: PendingUpload): Shot {
     movement: m.movement ?? [],
     state: m.state ?? "unreviewed",
     extra: m.extra ?? {},
+    description: null,
     captured_at: at,
     created_at: at,
     updated_at: null,
@@ -43,6 +44,8 @@ export function queuedToShot(entry: PendingUpload): Shot {
       lens_mm: p.lens_mm, width: p.width, height: p.height, framing: p.framing, device: p.device, image_url: "", created_at: p.timestamp,
       local_uri: entry.files[p.id],
     })),
+    overlays: [],
+    sketches: [],
     queued: true,
   };
 }

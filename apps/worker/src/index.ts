@@ -5,6 +5,7 @@
  */
 import { AccessError, verifyAccessJwt, type AccessIdentity } from "./access.ts";
 import { registerAuthRoutes } from "./auth.ts";
+import { registerComposeRoutes } from "./compose.ts";
 import { registerDayRoutes } from "./days.ts";
 import { registerFieldRoutes } from "./fields.ts";
 import { HttpError, json, Router } from "./http.ts";
@@ -60,6 +61,7 @@ registerDayRoutes(router);
 registerLocationRoutes(router);
 registerShotRoutes(router);
 registerViewRoutes(router);
+registerComposeRoutes(router);
 
 async function authenticate(request: Request, env: Env): Promise<AccessIdentity> {
   if (env.ACCESS_DEV_BYPASS === "true") return { email: "dev@localhost", kind: "user" };

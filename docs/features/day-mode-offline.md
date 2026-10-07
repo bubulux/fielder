@@ -19,13 +19,13 @@ The **Day** tab (`apps/mobile/src/screens/Day.tsx`, step-through in `StepThrough
    - The photo (fit mode by default; the mode is in the Details sheet and remembered in `stepMode.v1`) with a "3 / 9" badge. Sequences have a "Photo 2 / 5 ›" button that cycles. Swipe on the photo = prev/next shot.
    - The info panel: name, location, planned time, window and light requirement (green, or red with an alert when the plan falls outside).
    - Portrait: the photo on top, the info below, and Prev | Next as a 120 dp bar at the bottom (1 : 1.4).
-   - **Details** (ⓘ sheet): planned time and window, location, tags, rig, extra fields, the planned shot's notes, the frame mode, Show on map (online only), Leave step-through. Android back also leaves.
+   - **Details** (ⓘ sheet): planned time and window, location, tags, rig, extra fields, the planned shot's notes, the shot's description and a row per overlay and sketch (tap = full-screen viewer, [compose](compose.md)), the frame mode, Show on map (online only), Leave step-through. Android back also leaves.
 
 Light is computed on the phone (`@fielder/vocab` `dayLight`), so it works offline.
 
 ## Offline
 
-- **Make offline** (the overview's control, or long-press in the list) stores the day and its shots with all metadata, and downloads every photo to `Documents/offline-photos/` (`apps/mobile/src/offline.ts`, `File.downloadFileAsync` with the auth header). The control shows:
+- **Make offline** (the overview's control, or long-press in the list) stores the day and its shots with all metadata, and downloads every photo and every overlay/sketch render to `Documents/offline-photos/` (`apps/mobile/src/offline.ts`, `File.downloadFileAsync` with the auth header; renders as `r-<id>-<version>.jpg`, older versions replaced). The control shows:
   - progress (n / m photos) while it runs; the rest of the screen stays usable
   - "Offline · up to date" with **Remove** (photos shared with another offline day stay; Remove confirms)
   - "Offline copy out of date" with **Update offline** when the plan changed on the server (`updated_at` differs)
@@ -40,6 +40,6 @@ Storage: kv key `offlineDays.v1` (day id → `{ day, shots, projectName, savedAt
 
 - **Offline mode** (a switch, `settings.offlineMode`): the app makes no request at all (`net.ts` `setOfflineMode`, checked in `api.ts`), photos load only from the phone, and the header banner says "Offline mode". Captures, decisions and edits wait on the phone. Switching it off flushes and reloads.
 - **Waiting on this phone**: shots to upload and edited shots to sync, with Open Uploads.
-- **Keep <project> on this phone** (`offline.ts` `saveProjectOffline`): stores every shot of the active project and downloads every photo into the same `offline-photos/` folder as offline days (an estimate is shown first, about 250 KB a photo). While online, every load of the project's shots refreshes the copy in the background (new photos only; photos of shots that left the project are deleted unless a day uses them). **Update now** and **Remove** (confirms; photos of offline days stay). Storage: `offlineProjects.v1` (project id → `{ shots, projectName, savedAt, bytes }`).
+- **Keep <project> on this phone** (`offline.ts` `saveProjectOffline`): stores every shot of the active project and downloads every photo (and render) into the same `offline-photos/` folder as offline days (an estimate is shown first, about 250 KB a photo). While online, every load of the project's shots refreshes the copy in the background (new photos only; photos of shots that left the project are deleted unless a day uses them). **Update now** and **Remove** (confirms; photos of offline days stay). Storage: `offlineProjects.v1` (project id → `{ shots, projectName, savedAt, bytes }`).
 - **What the tabs show** (`useShots` in `shots.ts`): the server's list, or without a connection the offline project copy (else the shots of offline days), plus the queued shots, with edits still waiting applied on top. Shots shows "Showing what is on this phone" then.
 - **Edits without a connection** (`localShots.ts`): a decision, tag edit or position on an uploaded shot is tried on the server; on a network error (or in offline mode, or when older edits of the shot still wait) it is kept in `pendingEdits.v1` and shown at once ("· syncs when online"). `flush()` sends them in order after the uploads; one the server rejects is dropped and logged, a network error keeps the rest. A location created meanwhile is created first (and remapped on a name clash). Deleting an uploaded shot needs a connection (Archive works offline).

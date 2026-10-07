@@ -2,3 +2,5 @@ export * from "./vocab.ts";
 export * from "./filter.ts";
 export * from "./fields.ts";
 export * from "./daylight.ts";
+export * from "./compose.ts";
+export * from "./markdown.ts";

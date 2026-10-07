@@ -1,11 +1,12 @@
 import type { ComponentChildren } from "preact";
-import { useEffect, useState } from "preact/hooks";
+import { useEffect, useRef, useState } from "preact/hooks";
 import { label, type FieldDef } from "@fielder/vocab";
 import { deleteShot, patchShot, type Location, type Preset, type Project, type Shot, type ShotState } from "./api";
 import { FRAME_MODES, positionOf, rigLabel, when } from "./format";
 import { downloadCrop, Framed, type MaskMode } from "./Framed";
 import { Inspector } from "./Inspector";
 import { afterG, useKeys } from "./keys";
+import { Compose, type ComposeGuard } from "./compose/Compose";
 import { ModeSwitch } from "./ModeSwitch";
 import { PositionStage } from "./PositionEditor";
 import { initialRigs, RigsStage, type RigsState } from "./RigExplorer";
@@ -45,6 +46,12 @@ export function ShotView(p: Props) {
   const [photoIndex, setPhotoIndex] = useState(0);
   const [rigs, setRigs] = useState<RigsState>(() => initialRigs(shot.photos[0], p.presets));
   const [busy, setBusy] = useState(false);
+  /** Set by the Compose stage while an item has unsaved changes: resolves false to stay. */
+  const composeGuard: ComposeGuard = useRef(null);
+  const guarded = async (go: () => void) => { if (stage === "compose" && composeGuard.current && !(await composeGuard.current())) return; go(); };
+  const setStage = (st: Stage) => { if (st === stage) return; void guarded(() => p.onStage(st)); };
+  const navigate = (s: Shot) => void guarded(() => p.onNavigate(s));
+  const pickPhoto = (i: number) => void guarded(() => setPhotoIndex(i));
   useEffect(() => { setPhotoIndex(0); }, [shot.id]);
   const photo = shot.photos[Math.min(photoIndex, shot.photos.length - 1)];
   useEffect(() => { setRigs(initialRigs(photo, p.presets)); }, [photo.id]);
@@ -63,9 +70,10 @@ export function ShotView(p: Props) {
     } catch (e) { toast(`Update failed: ${(e as Error).message}`, "danger"); } finally { setBusy(false); }
   }
   async function remove() {
+    const composed = [shot.overlays.length ? `${shot.overlays.length} overlay${shot.overlays.length === 1 ? "" : "s"}` : "", shot.sketches.length ? `${shot.sketches.length} sketch${shot.sketches.length === 1 ? "" : "es"}` : ""].filter(Boolean).join(" and ");
     const choice = await confirmDialog({
       title: "Delete this shot?",
-      body: `Removes ${shot.photos.length > 1 ? `all ${shot.photos.length} images` : "the image"} and the metadata from the server permanently. Archive keeps them.`,
+      body: `Removes ${shot.photos.length > 1 ? `all ${shot.photos.length} images` : "the image"}${composed ? `, ${composed},` : ""} and the metadata from the server permanently. Archive keeps them.`,
       confirmLabel: "Delete", danger: true, altLabel: shot.state === "archived" ? undefined : "Archive",
     });
     if (choice === "alt") return setState("archived");
@@ -83,9 +91,15 @@ export function ShotView(p: Props) {
     a: approveKey,
     e: archiveKey,
     r: () => { if (afterG()) return false; p.onStage("rigs"); },
+    c: () => { if (afterG()) return false; p.onStage("compose"); },
     m: () => { if (afterG()) return false; p.onMode(nextMode(p.mode)); },
     Escape: () => { if (p.context.kind === "shot") p.context.onBack(); else return false; },
   }, stage === "photo");
+  // In Compose, ","/"." still switch the photo (overlays are per photo) but ask about unsaved work first.
+  useKeys({
+    ",": () => pickPhoto(Math.max(0, photoIndex - 1)),
+    ".": () => pickPhoto(Math.min(shot.photos.length - 1, photoIndex + 1)),
+  }, stage === "compose");
 
   const pos = index >= 0 ? `${index + 1} of ${list.length}` : "";
   return (
@@ -93,7 +107,7 @@ export function ShotView(p: Props) {
       <Toolbar>
         {p.context.kind === "shot" ? (
           <>
-            <Button kind="secondary" size="sm" icon="arrow-left" kbd="Esc" onClick={p.context.onBack}>{p.context.backLabel}</Button>
+            <Button kind="secondary" size="sm" icon="arrow-left" kbd="Esc" onClick={() => void guarded(() => (p.context as { onBack: () => void }).onBack())}>{p.context.backLabel}</Button>
             <div class="toolbar-pos"><strong class="num">{pos}</strong><span class="meta">{p.context.line}</span></div>
           </>
         ) : (
@@ -103,18 +117,22 @@ export function ShotView(p: Props) {
           </>
         )}
         <div class="btn-row" style={{ gap: "4px" }}>
-          <IconButton kind="secondary" icon="chevron-left" label="Previous shot (←)" title="Previous (←)" disabled={!prev || stage !== "photo"} onClick={() => prev && p.onNavigate(prev)} />
-          <IconButton kind="secondary" icon="chevron-right" label="Next shot (→)" title="Next (→)" disabled={!next || stage !== "photo"} onClick={() => next && p.onNavigate(next)} />
+          <IconButton kind="secondary" icon="chevron-left" label="Previous shot (←)" title="Previous (←)" disabled={!prev || (stage !== "photo" && stage !== "compose")} onClick={() => prev && navigate(prev)} />
+          <IconButton kind="secondary" icon="chevron-right" label="Next shot (→)" title="Next (→)" disabled={!next || (stage !== "photo" && stage !== "compose")} onClick={() => next && navigate(next)} />
         </div>
         <ToolbarSpacer />
-        <Seg label="Stage" value={stage} onChange={p.onStage} options={[
+        <Seg label="Stage" value={stage} onChange={setStage} options={[
           { id: "photo", icon: "image-outline", label: "Photo" },
           { id: "rigs", icon: "camera-control", label: <>Rigs <Kbd>R</Kbd></> },
+          { id: "compose", icon: "draw", label: <>Compose <Kbd>C</Kbd></> },
           { id: "position", icon: "crosshairs-gps", label: "Position" },
         ]} />
-        <ModeSwitch value={p.mode} onChange={p.onMode} />
+        {stage !== "compose" && <ModeSwitch value={p.mode} onChange={p.onMode} />}
       </Toolbar>
       <div class="f-app__body">
+        {stage === "compose" ? (
+          <Compose key={shot.id} shot={shot} photo={photo} photoIndex={photoIndex} onPhotoIndex={pickPhoto} presets={p.presets} mode={p.mode} onUpdated={p.onUpdated} onBack={() => setStage("photo")} guard={composeGuard} />
+        ) : (
         <section class="f-stage" aria-label="Stage">
           {stage === "rigs" ? (
             <RigsStage photo={photo} presets={p.presets} mode={p.mode} state={rigs} onState={setRigs} onBack={() => p.onStage("photo")} />
@@ -153,8 +171,11 @@ export function ShotView(p: Props) {
             </>
           )}
         </section>
-        <Inspector shot={shot} photo={photo} projects={p.projects} fields={p.fieldsOf(shot.project_id)} locations={p.locations} onLocations={p.onLocations}
-          onUpdated={p.onUpdated} onState={(s) => void setState(s)} stateBusy={busy} onCorrect={() => p.onStage("position")} onOpenDay={p.onOpenDay} />
+        )}
+        {stage !== "compose" && (
+          <Inspector shot={shot} photo={photo} projects={p.projects} fields={p.fieldsOf(shot.project_id)} locations={p.locations} onLocations={p.onLocations}
+            onUpdated={p.onUpdated} onState={(s) => void setState(s)} stateBusy={busy} onCorrect={() => p.onStage("position")} onCompose={() => p.onStage("compose")} onOpenDay={p.onOpenDay} />
+        )}
       </div>
     </>
   );
@@ -174,5 +195,6 @@ export function ReviewProgress({ value, children }: { value: number; children: C
 export function shotHints(stage: Stage, review: boolean): { k: string; t: string }[] {
   if (stage === "rigs") return [{ k: "←/→", t: "Lens" }, { k: "Tab", t: "Rig / lens pickers" }, { k: "Esc", t: "Back to photo" }];
   if (stage === "position") return [{ k: "Drag", t: "Move pin" }, { k: "↵", t: "Save position" }, { k: "Esc", t: "Cancel" }];
-  return [{ k: "←/→", t: review ? "Queue" : "Shots" }, { k: ", .", t: "Photos" }, { k: "A", t: "Approve" }, { k: "E", t: "Archive" }, { k: "R", t: "Rigs" }, { k: "M", t: "Frame mode" }, ...(review ? [{ k: "O", t: "Order" }] : []), { k: "Esc", t: review ? "Leave field" : "Close" }];
+  if (stage === "compose") return [{ k: "V P L A R O T S E", t: "Tools" }, { k: "1–0", t: "Colour" }, { k: "⌘Z", t: "Undo" }, { k: "Del", t: "Remove shape" }, { k: ", .", t: "Photos" }, { k: "⌘S", t: "Save" }, { k: "Esc", t: "Back" }];
+  return [{ k: "←/→", t: review ? "Queue" : "Shots" }, { k: ", .", t: "Photos" }, { k: "A", t: "Approve" }, { k: "E", t: "Archive" }, { k: "R", t: "Rigs" }, { k: "C", t: "Compose" }, { k: "M", t: "Frame mode" }, ...(review ? [{ k: "O", t: "Order" }] : []), { k: "Esc", t: review ? "Leave field" : "Close" }];
 }

@@ -11,6 +11,7 @@ D1 (SQLite) database `fielder-db`, schema in `apps/worker/migrations/`. Images l
 | `0003_field_definitions.sql` | `field_definitions`, `project_fields` |
 | `0004_shooting_days.sql` | `shooting_days`, `day_shots` |
 | `0005_capture_flow.sql` | `shots.shot_size`, `camera_support`, `movement`; `photos` rebuilt with nullable `lat`/`lon` (copied row by row, both or neither set) |
+| `0006_compose.sql` | `shots.description`; `overlays`, `sketches` ([compose](features/compose.md)) |
 
 Add a new numbered file for every change; never edit one that was applied to production. Apply with `pnpm -C apps/worker migrate:local` / `migrate:remote` (see [development](development.md)).
 
@@ -22,15 +23,20 @@ Add a new numbered file for every change; never edit one that was applied to pro
 
 `locations(id, name UNIQUE NOCASE, created_at, updated_at)`: shared by all projects. No district (removed in the rework).
 
-`shots(id, project_id → projects RESTRICT, location_id → locations SET NULL, name, int_ext, light JSON array, artificial 0/1, weather, shot_size, camera_support, movement JSON array, state, extra JSON object, captured_at, created_at, updated_at)`
+`shots(id, project_id → projects RESTRICT, location_id → locations SET NULL, name, int_ext, light JSON array, artificial 0/1, weather, shot_size, camera_support, movement JSON array, state, extra JSON object, description, captured_at, created_at, updated_at)`
 - `state`: `unreviewed` (on upload) → `approved` / `archived`.
 - `light`: subset of `dawn, day, dusk, night`, stored in that canonical order. Empty = no requirement.
 - Camera language (`packages/vocab`): `shot_size` one of `ews, ws, mws, ms, mcu, cu, ecu`; `camera_support` one of `static, handheld, steadicam, gimbal, dolly, slider, crane, drone, vehicle`; `movement` any subset of `pan, tilt, push_in, pull_out, tracking, pedestal, orbit, zoom` in that order. `cameraLabel()` gives "WS · Steadicam · Pan / Push in".
 - `artificial`: lit artificially, independent of phases and INT/EXT.
 - `captured_at`: earliest photo timestamp; recomputed when photos are added. Lists sort and paginate on `(captured_at, id)`.
 - `extra`: values of the project's extra fields ([extra fields](features/extra-fields.md)).
+- `description`: Markdown subset (`packages/vocab/src/markdown.ts`), max 20 000 characters.
 
 `photos(id, shot_id → shots CASCADE, ordinal UNIQUE per shot, timestamp, lat, lon (both NULL when captured without GPS), gps_accuracy_m, position_corrected, preset_id → presets SET NULL, lens_mm, r2_object_key UNIQUE, width, height, framing JSON, device JSON, created_at)`
+
+`overlays(id, photo_id → photos CASCADE, name, description, drawing JSON, presentation JSON, render_key UNIQUE, position, created_at, updated_at)`: a drawing + look over one photo. `drawing` = `{ v: 1, shapes: [...], look: {...} }`, `presentation` = `{ mode, frame: { width_fraction, height_fraction } | null, label, rig_id?, lens_mm? }` (shapes in `packages/vocab/src/compose.ts`). `render_key` is the flattened image in R2 (`renders/overlays/<id>.<ext>`). See [compose](features/compose.md).
+
+`sketches(id, shot_id → shots CASCADE, name, kind, description, drawing JSON (look null), aspect REAL w/h, render_key UNIQUE, position, created_at, updated_at)`: a free canvas on the shot. `kind` is free text; `SKETCH_KINDS` are only suggestions.
 
 `views(id, name, filter JSON, …)`: saved dashboard filters (model in `packages/vocab/src/filter.ts`).
 
@@ -57,4 +63,4 @@ Add a new numbered file for every change; never edit one that was applied to pro
 
 ## API shapes
 
-The Worker returns a shot with its photos embedded (`shotToApi` in `apps/worker/src/shots.ts`); `light` as array, `artificial` as boolean, `extra` as object, plus joined `project_name`, `location_name` and per photo `preset_name` and `image_url`. Client types: `apps/dashboard/src/api.ts`, `apps/mobile/src/api.ts`.
+The Worker returns a shot with its photos embedded (`shotToApi` in `apps/worker/src/shots.ts`); `light` as array, `artificial` as boolean, `extra` as object, plus joined `project_name`, `location_name` and per photo `preset_name` and `image_url`. It also embeds `overlays` and `sketches` (ordered, without their `drawing`; each with `render_url` or null). Client types: `apps/dashboard/src/api.ts`, `apps/mobile/src/api.ts`.

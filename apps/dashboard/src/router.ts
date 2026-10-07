@@ -1,6 +1,6 @@
 import { useEffect, useState } from "preact/hooks";
 
-export type Stage = "photo" | "rigs" | "position";
+export type Stage = "photo" | "rigs" | "position" | "compose";
 export type LibrarySection = "projects" | "fields" | "rigs" | "locations";
 export const LIBRARY_SECTIONS: readonly LibrarySection[] = ["projects", "fields", "rigs", "locations"];
 
@@ -22,7 +22,7 @@ export function parseRoute(hash: string): Route {
     case "shots":
       if (parts[1]) {
         const st = q.get("stage");
-        return { page: "shot", shotId: parts[1], stage: st === "rigs" || st === "position" ? st : "photo" };
+        return { page: "shot", shotId: parts[1], stage: st === "rigs" || st === "position" || st === "compose" ? st : "photo" };
       }
       return { page: "shots", viewId: q.get("view") };
     case "review": return { page: "review" };

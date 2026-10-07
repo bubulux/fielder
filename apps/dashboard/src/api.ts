@@ -1,5 +1,5 @@
 /** Same-origin API; the Access session cookie is sent automatically. */
-import type { Extra, FieldDef, FieldDefinition, FilterGroup } from "@fielder/vocab";
+import type { Drawing, Extra, FieldDef, FieldDefinition, FilterGroup, Presentation } from "@fielder/vocab";
 export type { FieldDefinition };
 export type ShotState = "unreviewed" | "approved" | "archived";
 
@@ -42,11 +42,29 @@ export interface Shot {
   movement: string[];
   state: ShotState;
   extra: Extra;
+  /** Markdown subset (packages/vocab markdown.ts). */
+  description: string | null;
   captured_at: string;
   created_at: string;
   updated_at: string | null;
   /** Ordered; never empty. */
   photos: Photo[];
+  /** Drawings over single photos, in display order, without their drawing data (fetchOverlay has it). */
+  overlays: Overlay[];
+  /** Free canvases on the shot, in display order, without their drawing data (fetchSketch has it). */
+  sketches: Sketch[];
+}
+/** A drawing + look over one photo (issue #12). `drawing` is only present when fetched alone. */
+export interface Overlay {
+  id: string; photo_id: string; shot_id: string; name: string; description: string | null;
+  drawing?: Drawing; presentation: Presentation; position: number;
+  /** Flattened render (photo + look + drawing, photo-sized), or null before the first save with a render. */
+  render_url: string | null; created_at: string; updated_at: string | null;
+}
+/** A free canvas on the shot (floor plan, lighting diagram, …). */
+export interface Sketch {
+  id: string; shot_id: string; name: string; kind: string | null; description: string | null;
+  drawing?: Drawing; aspect: number; position: number; render_url: string | null; created_at: string; updated_at: string | null;
 }
 export interface Project { id: string; name: string; notes: string | null; created_at: string; updated_at: string | null; shot_count: number; /** Extra-field definitions the project uses, in order. */ field_ids: string[] }
 export interface Preset {
@@ -74,7 +92,7 @@ export interface SavedView { id: string; name: string; filter: FilterGroup; crea
 /** null / [] / false = not specified. */
 export interface ShotTags {
   name: string | null; light: string[]; artificial: boolean; weather: string | null; int_ext: string | null; location_id: string | null; extra: Extra;
-  shot_size: string | null; camera_support: string | null; movement: string[];
+  shot_size: string | null; camera_support: string | null; movement: string[]; description: string | null;
 }
 
 export class ApiError extends Error {
@@ -161,6 +179,28 @@ export async function patchShots(ids: string[], set: BulkSet, extra: Extra = {})
 /** Correct a photo's position by hand; `allInShot` moves every photo of its shot. Returns the updated shot. */
 export const patchPhotoPosition = (id: string, lat: number, lon: number, allInShot: boolean) =>
   send<{ shot: Shot }>("PATCH", `/api/photos/${id}`, { lat, lon, all_in_shot: allInShot }).then((r) => r.shot);
+
+// ---------- Overlays and sketches ----------
+
+/** Full overlay with its drawing. */
+export const fetchOverlay = (id: string) => get<{ overlay: Overlay & { drawing: Drawing } }>(`/api/overlays/${id}`).then((r) => r.overlay);
+export const fetchSketch = (id: string) => get<{ sketch: Sketch & { drawing: Drawing } }>(`/api/sketches/${id}`).then((r) => r.sketch);
+
+/** Multipart save: the metadata JSON plus the flattened render the dashboard produced. */
+async function putComposed<T>(path: string, metadata: unknown, render: Blob | null): Promise<T> {
+  const form = new FormData();
+  form.append("metadata", JSON.stringify(metadata));
+  if (render) form.append("render", render, "render");
+  return request<T>(path, { method: "PUT", body: form });
+}
+export interface OverlaySave { photo_id: string; name: string; description: string | null; drawing: Drawing; presentation: Presentation; position?: number }
+export const putOverlay = (id: string, m: OverlaySave, render: Blob | null) => putComposed<{ overlay: Overlay & { drawing: Drawing }; shot: Shot }>(`/api/overlays/${id}`, m, render);
+export const patchOverlay = (id: string, m: { name?: string; description?: string | null; position?: number }) => send<{ overlay: Overlay; shot: Shot }>("PATCH", `/api/overlays/${id}`, m);
+export const deleteOverlay = (id: string) => send<{ deleted: string; shot: Shot }>("DELETE", `/api/overlays/${id}`);
+export interface SketchSave { shot_id: string; name: string; kind: string | null; description: string | null; drawing: Drawing; aspect: number; position?: number }
+export const putSketch = (id: string, m: SketchSave, render: Blob | null) => putComposed<{ sketch: Sketch & { drawing: Drawing }; shot: Shot }>(`/api/sketches/${id}`, m, render);
+export const patchSketch = (id: string, m: { name?: string; kind?: string | null; description?: string | null; position?: number }) => send<{ sketch: Sketch; shot: Shot }>("PATCH", `/api/sketches/${id}`, m);
+export const deleteSketch = (id: string) => send<{ deleted: string; shot: Shot }>("DELETE", `/api/sketches/${id}`);
 
 export const fetchLocations = () => get<{ locations: Location[] }>("/api/locations").then((r) => r.locations);
 /** Upsert; a 409 carries body.existing_id when another location already has the name. */

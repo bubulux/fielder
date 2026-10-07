@@ -4,7 +4,7 @@ import { CAMERA_SUPPORTS, cameraLabel, INT_EXT, label, lightLabel, MOVEMENTS, SH
 import { existingIdOf, fetchDays, patchShot, putLocation, type Location, type Photo, type Project, type Shot, type ShootingDay, type ShotState } from "./api";
 import { ExtraEditor } from "./ExtraEditor";
 import { coords, fovLabel, placeLabel, rigDescription, shotTitle } from "./format";
-import { Button, Chip, Combobox, Icon, Input, LightChips, SaveStatus, Seg, StateMarker, type SaveState } from "./ui";
+import { Button, Chip, Combobox, Icon, Input, LightChips, MarkdownField, SaveStatus, Seg, StateMarker, type SaveState } from "./ui";
 
 // Shooting days per project, fetched on demand for the "Days" fact and the move warning.
 const daysCache = new Map<string, Promise<ShootingDay[]>>();
@@ -32,21 +32,25 @@ interface Props {
   onState: (state: ShotState) => void;
   stateBusy: boolean;
   onCorrect: () => void;
+  /** Open the Compose stage (overlays and sketches). */
+  onCompose: () => void;
   onOpenDay: (projectId: string, dayId: string) => void;
 }
 
 /** Right-hand inspector of the shot view and Review: decision, tags (saved per change), facts. */
-export function Inspector({ shot, photo, projects, fields, locations, onLocations, onUpdated, onState, stateBusy, onCorrect, onOpenDay }: Props) {
+export function Inspector({ shot, photo, projects, fields, locations, onLocations, onUpdated, onState, stateBusy, onCorrect, onCompose, onOpenDay }: Props) {
   const [save, setSave] = useState<SaveState>("idle");
   const last = useRef<Parameters<typeof patchShot>[1] | null>(null);
   const [name, setName] = useState(shot.name ?? "");
   const [extra, setExtra] = useState<Extra>(shot.extra);
+  const [description, setDescription] = useState(shot.description ?? "");
+  const descTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [moveTo, setMoveTo] = useState<string | null>(null);
   const [days, setDays] = useState<ShootingDay[]>([]);
   const [raw, setRaw] = useState(false);
   const extraTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  useEffect(() => { setName(shot.name ?? ""); setExtra(shot.extra); setMoveTo(null); setSave("idle"); }, [shot.id]);
+  useEffect(() => { setName(shot.name ?? ""); setExtra(shot.extra); setDescription(shot.description ?? ""); setMoveTo(null); setSave("idle"); }, [shot.id]);
   useEffect(() => { let live = true; void projectDays(shot.project_id).then((d) => { if (live) setDays(d.filter((x) => x.shots.some((s) => s.shot_id === shot.id))); }); return () => { live = false; }; }, [shot.id, shot.project_id]);
 
   async function patch(p: Parameters<typeof patchShot>[1]) {
@@ -61,6 +65,13 @@ export function Inspector({ shot, photo, projects, fields, locations, onLocation
     setSave("dirty");
     if (extraTimer.current) clearTimeout(extraTimer.current);
     extraTimer.current = setTimeout(() => void patch({ extra: v }), 700);
+  };
+  const commitDescription = (v: string) => { if (descTimer.current) clearTimeout(descTimer.current); const d = v.trim() || null; if (d !== (shot.description ?? null)) void patch({ description: d }); };
+  const changeDescription = (v: string) => {
+    setDescription(v);
+    setSave("dirty");
+    if (descTimer.current) clearTimeout(descTimer.current);
+    descTimer.current = setTimeout(() => commitDescription(v), 700);
   };
   async function setLocation(id: string | null, createName?: string) {
     if (createName) {
@@ -153,6 +164,19 @@ export function Inspector({ shot, photo, projects, fields, locations, onLocation
               <div class="inspector__extra"><ExtraEditor defs={fields} value={extra} onChange={changeExtra} /></div>
             </>
           )}
+        </div>
+
+        <div class="f-sec">
+          <div class="f-sec__head"><Icon name="text-long" />Description</div>
+          <MarkdownField value={description} onChange={changeDescription} onBlur={() => commitDescription(description)} rows={4} placeholder="What this shot is for, what to watch out for…" label="Description" />
+        </div>
+
+        <div class="f-sec">
+          <div class="f-sec__head"><Icon name="draw" />Compose<span class="f-sec__aside"><Button kind="secondary" size="sm" style={{ height: "26px" }} kbd="C" onClick={onCompose}>Open</Button></span></div>
+          <dl class="f-facts">
+            <dt>Overlays</dt><dd>{shot.overlays.length === 0 ? <span class="meta">none</span> : shot.overlays.map((o) => o.name).join(", ")}</dd>
+            <dt>Sketches</dt><dd>{shot.sketches.length === 0 ? <span class="meta">none</span> : shot.sketches.map((s) => s.name).join(", ")}</dd>
+          </dl>
         </div>
 
         <div class="f-sec">
