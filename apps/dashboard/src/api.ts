@@ -141,6 +141,26 @@ export const fetchProjects = () => get<{ projects: Project[] }>("/api/projects")
 /** Upsert; a 409 carries body.existing_id when another project already has the name. */
 export const putProject = (p: { id: string; name: string; notes: string | null }) =>
   send<{ project: Project }>("PUT", `/api/projects/${p.id}`, { name: p.name, notes: p.notes }).then((r) => r.project);
+/** Listeners told when a project was created somewhere other than Library › Projects (App refreshes its list). */
+const projectCreated = new Set<(p: Project) => void>();
+export function onProjectCreated(cb: (p: Project) => void): () => void { projectCreated.add(cb); return () => { projectCreated.delete(cb); }; }
+/**
+ * Create a project by name from a picker (move a shot, bulk edit). A name that already exists
+ * resolves to that project instead of failing, so typing an existing name is harmless.
+ */
+export async function createProjectNamed(name: string): Promise<Project> {
+  try {
+    const p = await putProject({ id: crypto.randomUUID(), name: name.trim(), notes: null });
+    for (const cb of projectCreated) cb(p);
+    return p;
+  } catch (err) {
+    const existing = existingIdOf(err);
+    if (!existing) throw err;
+    const found = (await fetchProjects()).find((p) => p.id === existing);
+    if (!found) throw err;
+    return found;
+  }
+}
 export const deleteProject = (id: string) => send<{ deleted: string }>("DELETE", `/api/projects/${id}`).then(() => undefined);
 
 export const fetchFields = () => get<{ fields: FieldDefinition[] }>("/api/fields").then((r) => r.fields);
