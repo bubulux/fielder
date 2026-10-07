@@ -1,7 +1,7 @@
 import type { ComponentChildren } from "preact";
 import { useEffect, useMemo, useState } from "preact/hooks";
 import { CAMERA_SUPPORTS, extraSummary, INT_EXT, label, LIGHT, lightLabel, MOVEMENTS, patchExtra, PHASE_ICONS, SHOT_SIZE_ABBR, SHOT_SIZES, SHOT_STATES, WEATHER, type Extra, type ExtraValue, type FieldDef } from "@fielder/vocab";
-import { existingIdOf, patchShot, patchShots, putLocation, type BulkSet, type Location, type Project, type Shot } from "./api";
+import { createProjectNamed, existingIdOf, patchShot, patchShots, putLocation, type BulkSet, type Location, type Project, type Shot } from "./api";
 import { ExtraEditor } from "./ExtraEditor";
 import { cover, shotTitle } from "./format";
 import { Framed, type MaskMode } from "./Framed";
@@ -152,6 +152,9 @@ export function BulkEditPanel({ shots, draft, onDraft, projects, locations, onLo
   const shown = (c: Col) => (c.id in draft ? draft[c.id] : common(c).value);
   const changing = shots.filter((s) => edited.some((c) => !same(c.get(s), afterOf(c, s, draft, defs))));
 
+  async function createProject(name: string) {
+    try { pickProject((await createProjectNamed(name)).id); } catch (e) { toast(`Could not create the project: ${(e as Error).message}`, "danger"); }
+  }
   function pickProject(v: string | null) {
     if (!v) return;
     // Values of fields the new project does not use cannot be applied.
@@ -233,7 +236,7 @@ export function BulkEditPanel({ shots, draft, onDraft, projects, locations, onLo
           <div class="bulk">
             <p class="meta bulk__intro">Only the fields you edit change; every other value stays as it is on each shot.</p>
             {field(col("project_id"),
-              <Combobox small options={projects.map((p) => ({ value: p.id, label: p.name }))} value={(shown(col("project_id")) as string | null) ?? null} clearable={false} placeholder={mixedHint(col("project_id"))} onChange={pickProject} />,
+              <Combobox small options={projects.map((p) => ({ value: p.id, label: p.name }))} value={(shown(col("project_id")) as string | null) ?? null} clearable={false} placeholder={mixedHint(col("project_id"))} onChange={pickProject} onCreate={(t) => void createProject(t)} />,
               target && leave.length > 0 && <span class="f-field__help bulk-warn"><Icon name="alert" />{plural(leave.length, "shot")} leave their shooting days.</span>)}
             {field(col("name"),
               <Input sm value={(shown(col("name")) as string | null) ?? ""} maxLength={120} placeholder={common(col("name")).mixed ? "Mixed: type to set for all" : "e.g. Bridge from the east bank"} aria-label="Name"
@@ -368,7 +371,8 @@ export function MoveDialog({ shots, projects, onClose, onUpdated }: { shots: Sho
     <Modal title={`Move ${plural(shots.length, "shot")}`} width="480px" onClose={onClose} onKeyDown={(e) => { if (e.key === "Escape") { e.stopPropagation(); onClose(); } }}>
       <div class="f-modal__body move-dialog">
         <span class="meta">Now in {from.map(([p, n]) => `${nameOf(p)} (${n})`).join(" · ")}</span>
-        <Combobox autoFocus options={projects.map((p) => ({ value: p.id, label: p.name, hint: `${p.shot_count}` }))} value={to} clearable={false} placeholder="Project…" onChange={setTo} />
+        <Combobox autoFocus options={projects.map((p) => ({ value: p.id, label: p.name, hint: `${p.shot_count}` }))} value={to} clearable={false} placeholder="Project… or type a new name" onChange={setTo}
+          onCreate={(t) => void createProjectNamed(t).then((p) => setTo(p.id)).catch((e: Error) => toast(`Could not create the project: ${e.message}`, "danger"))} />
         {to && moving.length < shots.length && <span class="meta">{plural(shots.length - moving.length, "shot")} already in {nameOf(to)}.</span>}
         {leave.length > 0 && <span class="f-field__help bulk-warn"><Icon name="alert" />{plural(leave.length, "shot")} leave the shooting days of their project.</span>}
         <span class="meta">Extra-field values stay on the shots; the new project shows those it uses.</span>

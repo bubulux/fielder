@@ -35,7 +35,7 @@ The shot view (`ShotView.tsx`) replaces the old dialog. It covers the main area 
   - the name, state marker and a summary line
   - the decision buttons: unreviewed → Approve (`A`) · Archive (`E`); approved → Back to review · Archive; archived → Back to review · Approve. A toast confirms, with **Undo**.
   - **Tags**, edited in place and **saved per change**, with a status (Saving… · Saved · Not saved + Retry):
-    - Project: a combobox. When moving the shot would take it off shooting days, a warning names how many, and Move confirms.
+    - Project: a combobox; "Create “…”" makes a new project and moves the shot there (an existing name is taken, not duplicated). When moving the shot would take it off shooting days, a warning names how many, and Move confirms.
     - Name: saved on Enter or leaving the field; Esc reverts.
     - Location: a combobox, "Create “…”" makes a new one.
     - INT/EXT: INT · EXT · –.
