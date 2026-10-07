@@ -12,6 +12,7 @@ D1 (SQLite) database `fielder-db`, schema in `apps/worker/migrations/`. Images l
 | `0004_shooting_days.sql` | `shooting_days`, `day_shots` |
 | `0005_capture_flow.sql` | `shots.shot_size`, `camera_support`, `movement`; `photos` rebuilt with nullable `lat`/`lon` (copied row by row, both or neither set) |
 | `0006_compose.sql` | `shots.description`; `overlays`, `sketches` ([compose](features/compose.md)) |
+| `0009_photo_source.sql` | `photos.source` (camera · upload · drawn) ([new shot](features/new-shot.md)) |
 | `0008_location_positions.sql` | `locations.lat`, `lon`; `shots.position_from_location` ([positions](features/positions.md)) |
 | `0007_timelines.sql` | `timelines`, `timeline_clips` ([timeline](features/timeline.md)) |
 
@@ -35,7 +36,7 @@ Add a new numbered file for every change; never edit one that was applied to pro
 - `position_from_location` 0/1: maps use the location's pin instead of the photos' GPS (the photos keep theirs). The API adds `location_position: { lat, lon } | null` from the join.
 - `description`: Markdown subset (`packages/vocab/src/markdown.ts`), max 20 000 characters.
 
-`photos(id, shot_id → shots CASCADE, ordinal UNIQUE per shot, timestamp, lat, lon (both NULL when captured without GPS), gps_accuracy_m, position_corrected, preset_id → presets SET NULL, lens_mm, r2_object_key UNIQUE, width, height, framing JSON, device JSON, created_at)`
+`photos(id, shot_id → shots CASCADE, ordinal UNIQUE per shot, source camera|upload|drawn (non-camera photos: no framing, lens_mm 0), timestamp, lat, lon (both NULL when captured without GPS), gps_accuracy_m, position_corrected, preset_id → presets SET NULL, lens_mm, r2_object_key UNIQUE, width, height, framing JSON, device JSON, created_at)`
 
 `overlays(id, photo_id → photos CASCADE, name, description, drawing JSON, presentation JSON, render_key UNIQUE, position, created_at, updated_at)`: a drawing + look over one photo. `drawing` = `{ v: 1, shapes: [...], look: {...} }`, `presentation` = `{ mode, frame: { width_fraction, height_fraction } | null, label, rig_id?, lens_mm? }` (shapes in `packages/vocab/src/compose.ts`). `render_key` is the flattened image in R2 (`renders/overlays/<id>.<ext>`). See [compose](features/compose.md).
 

@@ -97,6 +97,8 @@ export interface Photo {
   height: number | null;
   framing: Record<string, unknown> | null;
   device: Record<string, unknown> | null;
+  /** camera (phone capture), upload or drawn (made on the dashboard: no rig, lens_mm 0). Absent on queued shots = camera. */
+  source?: "camera" | "upload" | "drawn";
   image_url: string;
   created_at: string;
   /** A file on the phone (queued shots, which have no image on the server yet). */

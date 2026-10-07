@@ -101,7 +101,7 @@ export function Compose(p: Props) {
     if (kind === "overlay") {
       const n = overlays.length + 1;
       openDoc({ kind, id: crypto.randomUUID(), photoId: photo.id, name: `Overlay ${n}`, description: "", shapes: [], look: { ...NEUTRAL_LOOK }, position: overlays.length,
-        presentation: { mode: p.mode, frame: frameOf(photo), label: rigLabel(photo), rig_id: null, lens_mm: photo.lens_mm }, isNew: true });
+        presentation: { mode: p.mode, frame: frameOf(photo), label: rigLabel(photo), rig_id: null, lens_mm: photo.lens_mm || null }, isNew: true });
     } else {
       const n = shot.sketches.length + 1;
       openDoc({ kind, id: crypto.randomUUID(), name: `Sketch ${n}`, sketchKind: null, description: "", shapes: [], aspect: 16 / 9, position: shot.sketches.length, isNew: true });
@@ -212,7 +212,7 @@ export function Compose(p: Props) {
   const pickChoice = (c: RigChoice) => {
     setChoice(c);
     const frame = frameForChoice(photo, p.presets, c) ?? frameOf(photo);
-    setPresentation({ frame, label: choiceLabel(photo, p.presets, c), rig_id: c.rig === AS_SHOT ? null : c.rig, lens_mm: c.lensMm });
+    setPresentation({ frame, label: choiceLabel(photo, p.presets, c), rig_id: c.rig === AS_SHOT ? null : c.rig, lens_mm: c.lensMm || null });
   };
   const setLook = (patch: Partial<Look>) => setDoc((d) => (d && d.kind === "overlay" ? { ...d, look: { ...d.look, ...patch } } : d));
 
@@ -338,7 +338,7 @@ export function Compose(p: Props) {
                   <div class="f-sec">
                     <div class="f-sec__head"><Icon name="vector-rectangle" />Presentation<span class="f-sec__aside">default view of this overlay</span></div>
                     <Seg label="Frame mode" value={doc.presentation.mode} onChange={(m) => setPresentation({ mode: m })} options={PRESENTATION_MODES.map((m) => ({ id: m, label: frameModeLabel(m) }))} />
-                    <div class="btn-row" style={{ gap: "6px" }}><Pickers photo={photo} presets={p.presets} choice={choice} onChoice={pickChoice} /></div>
+                    {photo.source === "camera" && <div class="btn-row" style={{ gap: "6px" }}><Pickers photo={photo} presets={p.presets} choice={choice} onChoice={pickChoice} /></div>}
                     <span class="meta">The drawing stays in place in every mode and rig; this is only how it opens.</span>
                   </div>
                   <div class="f-sec">

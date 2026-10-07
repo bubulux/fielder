@@ -8,8 +8,8 @@ Designed in Claude Design (2026-09-28): four sections plus a shot view, a sideba
   - the **scope switcher** (a project, "All projects", "Manage projects…"); the choice is remembered in `localStorage["project"]`
   - the sections: Shots (count), Review (unreviewed count), Plan, Timeline, Library (with Projects · Fields · Rigs · Locations under it)
   - **saved views**, with a dot while a view has unsaved edits, and "+" for a new view
-  - footer: "Go to…" (⌘K), the theme button (Auto → Sun → Set) and reload
-- **Hash routes**, so deep links survive a reload: `#/shots`, `#/shots?view=<id>`, `#/shots/<shotId>?stage=rigs|compose|position`, `#/review`, `#/plan/<dayId>`, `#/timeline/<timelineId>`, `#/library/projects|fields|rigs|locations/<id>`.
+  - footer: "Go to…" (⌘K), the theme button (Auto → Sun → Set), **Settings** and reload
+- **Hash routes**, so deep links survive a reload: `#/shots`, `#/shots?view=<id>`, `#/shots/<shotId>?stage=rigs|compose|position`, `#/review`, `#/plan/<dayId>`, `#/timeline/<timelineId>`, `#/settings`, `#/library/projects|fields|rigs|locations/<id>`.
 - **Key hint bar** at the bottom: the shortcuts of the current screen; `?` opens all of them.
 - **First run** (no project chosen, or it was deleted): a full-window project picker with "New project" (`ProjectGate` in `Projects.tsx`).
 - **Installable (PWA)**: `public/manifest.webmanifest` (standalone, start `/`), icons in `public/icons/`, linked from `index.html` with `crossorigin="use-credentials"` so the manifest request carries the Access cookie. No service worker (nothing is cached offline; Chrome and Edge install without one). The `theme-color` meta follows the Sun/Set surface (`theme.ts`). Icons: `favicon.svg` (pixel-snapped for 16 px), `icon-192/512.png`, `icon-maskable-512.png`.
@@ -24,6 +24,7 @@ Designed in Claude Design (2026-09-28): four sections plus a shot view, a sideba
 | Review | `Review.tsx` | The unreviewed queue on the shot-view layout. See [review and tagging](review-and-tagging.md). |
 | Plan | `Plan.tsx` | [Shooting days](schedule.md) |
 | Timeline | `Timeline.tsx` | [Timelines](timeline.md): rough cuts with hold times and playback |
+| Settings | `SettingsPage.tsx`, `settings.ts` | Preferences saved on change, per browser (`localStorage["settings"]`; theme and frame mode keep their own keys): theme, default frame mode, the review state of shots made with New shot (Approved by default). Sidebar footer cog, or ⌘K → Settings. |
 | Library › Projects | `Projects.tsx` | [Projects](projects.md): list with counts, detail with name, notes and ordered extra fields |
 | Library › Fields | `Fields.tsx` | [Extra fields](extra-fields.md): list, JSON editor, live preview |
 | Library › Rigs | `Rigs.tsx` | Rig table (body, format, sensor, speedbooster, lens range, shots) and an editor panel |
@@ -33,6 +34,7 @@ Designed in Claude Design (2026-09-28): four sections plus a shot view, a sideba
 
 - **Toolbar**:
   - title: "Shots", "All shots · all projects", or the saved view's name with an **Edited** marker and Save · Save as new… · Revert; the view menu has Rename… and Delete view…
+  - **New shot** (`⇧N`): upload images or draw a sketch ([new shot](new-shot.md))
   - search (`/`) over name, location, rig and project
   - **Filter** (`F`) opens the rule-builder side panel (nested all/any groups over state, project, name, location, INT/EXT, light, artificial, weather, shot size, camera support, movement, has position, rig, lens, FF-equivalent, photos in shot, date and the extra fields; the model is `packages/vocab/src/filter.ts`)
   - the layout switch and the frame-mode switch (mask/frame/fit/raw, `M` cycles; global, `localStorage["maskMode"]`)

@@ -87,6 +87,8 @@ export function useShots(projectId: string | null) {
 export type ShotsData = ReturnType<typeof useShots>;
 
 export function rigLabel(p: Photo): string {
+  if (p.source === "upload") return "Uploaded image";
+  if (p.source === "drawn") return "Drawn sketch";
   const f = p.framing ?? {};
   const name = p.preset_name ?? (f.preset_name as string | undefined) ?? "unknown rig";
   const sb = f.speedbooster_factor as number | undefined;

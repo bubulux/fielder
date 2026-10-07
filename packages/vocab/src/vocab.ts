@@ -20,6 +20,10 @@ export type IntExt = (typeof INT_EXT)[number];
 
 export const SHOT_STATES = ["unreviewed", "approved", "archived"] as const;
 
+/** Where a photo comes from: the phone camera (with rig framing), an uploaded image, or a sketch drawn on the dashboard. */
+export const PHOTO_SOURCES = ["camera", "upload", "drawn"] as const;
+export type PhotoSource = (typeof PHOTO_SOURCES)[number];
+
 /**
  * Camera language of a shot, in the terms used on set. Size and support are single choices,
  * movement any subset (a Steadicam shot can pan and push in). Widest to tightest, then roughly

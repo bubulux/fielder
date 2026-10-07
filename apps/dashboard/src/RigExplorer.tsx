@@ -19,7 +19,7 @@ export const initialRigs = (photo: Photo, presets: Preset[]): RigsState => ({
 const lensRange = (p: Preset | undefined) => (p?.lens_min_mm != null && p.lens_max_mm != null ? { min: p.lens_min_mm, max: p.lens_max_mm } : null);
 export function lensesFor(p: Preset | undefined, extra: number[]): number[] {
   const r = lensRange(p);
-  const list = [...LENS_PRESETS_MM, ...extra].filter((mm) => !r || (mm >= r.min && mm <= r.max));
+  const list = [...LENS_PRESETS_MM, ...extra].filter((mm) => mm > 0 && (!r || (mm >= r.min && mm <= r.max)));
   if (r) list.push(r.min, r.max);
   return [...new Set(list)].sort((a, b) => a - b);
 }

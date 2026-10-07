@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from "preact/hooks";
 import { CAMERA_SUPPORTS, cameraLabel, INT_EXT, label, lightLabel, MOVEMENTS, SHOT_SIZE_ABBR, SHOT_SIZES, WEATHER, type Extra, type FieldDef } from "@fielder/vocab";
 import { createProjectNamed, existingIdOf, fetchDays, fetchTimelines, patchShot, putLocation, type Location, type Photo, type Project, type Shot, type ShootingDay, type ShotState, type Timeline } from "./api";
 import { ExtraEditor } from "./ExtraEditor";
-import { coords, fovLabel, placeLabel, rigDescription, shotTitle } from "./format";
+import { coords, fovLabel, placeLabel, rigDescription, shotTitle, sourceLabel } from "./format";
 import { Button, Chip, Combobox, Icon, Input, LightChips, MarkdownField, SaveStatus, Seg, StateMarker, Switch, toast, type SaveState } from "./ui";
 
 // Shooting days per project, fetched on demand for the "Days" fact and the move warning.
@@ -223,6 +223,9 @@ export function Inspector({ shot, photo, projects, fields, locations, onLocation
 
         <div class="f-sec">
           <div class="f-sec__head"><Icon name="camera-outline" />Camera{shot.photos.length > 1 ? ` · photo ${photo.ordinal + 1} of ${shot.photos.length}` : ""}</div>
+          {sourceLabel(photo) ? (
+            <dl class="f-facts"><dt>Source</dt><dd>{sourceLabel(photo)} · made on the dashboard, no rig or lens</dd>{photo.width && photo.height ? <><dt>Size</dt><dd>{photo.width} × {photo.height} px</dd></> : null}</dl>
+          ) : (
           <dl class="f-facts">
             <dt>Rig</dt><dd>{[photo.preset_name ?? (f.preset_name as string | undefined) ?? "deleted / unsynced", rigDescription(photo)].filter(Boolean).join(" · ")}</dd>
             <dt>Lens</dt><dd>{photo.lens_mm} mm{typeof f.full_frame_equivalent_mm === "number" ? ` · FF ${f.full_frame_equivalent_mm} mm` : ""}</dd>
@@ -231,6 +234,7 @@ export function Inspector({ shot, photo, projects, fields, locations, onLocation
             <dt>GPS</dt><dd>{[photo.gps_accuracy_m != null ? `±${Math.round(photo.gps_accuracy_m)} m` : null, typeof dev.gps_fix_age_ms === "number" ? `fix ${Math.round(dev.gps_fix_age_ms / 1000)} s old` : null, typeof dev.gps_altitude_m === "number" ? `${Math.round(dev.gps_altitude_m)} m alt.` : null].filter(Boolean).join(" · ") || "—"}</dd>
             <dt>Phone</dt><dd>{[dev.phone_model, typeof f.phone_equivalent_focal_mm === "number" ? `${f.phone_equivalent_focal_mm} mm equiv.` : null].filter(Boolean).join(" · ") || "—"}</dd>
           </dl>
+          )}
         </div>
 
         <div class={raw ? "f-sec" : "f-sec is-collapsed"}>

@@ -13,6 +13,8 @@ import { ProjectGate, ProjectsPage } from "./Projects";
 import { ReviewPage } from "./Review";
 import { RigsPage } from "./Rigs";
 import { DEFAULT_ROUTE, useRoute, type Route, type Stage } from "./router";
+import { NewShotDialog } from "./NewShot";
+import { SettingsPage } from "./SettingsPage";
 import { ShotsPage } from "./ShotsPage";
 import { TimelinePage } from "./Timeline";
 import { decodeView, emptyQuery, encodeView, runQuery, type Layout, type ShotsQuery } from "./shotsQuery";
@@ -65,6 +67,7 @@ export function App() {
   const [openList, setOpenList] = useState<string[]>([]);
   const [returnTo, setReturnTo] = useState<Route>(DEFAULT_ROUTE);
   const [palette, setPalette] = useState(false);
+  const [newShot, setNewShot] = useState(false);
   const [sheet, setSheet] = useState(false);
   const [paletteDays, setPaletteDays] = useState<ShootingDay[]>([]);
 
@@ -236,6 +239,9 @@ export function App() {
   } else if (route.page === "timeline") {
     main = <TimelinePage project={scopeProject} projects={projects!} onPickProject={setScope} shots={scoped} presets={presets!} mask={mask} timelineId={route.timelineId} onTimeline={(id) => replace({ page: "timeline", timelineId: id })} onOpen={openShot} />;
     hints = [{ k: "←/→", t: "Clip" }, { k: "Space", t: "Play / pause" }, { k: "Alt ←/→", t: "Reorder" }, { k: "D", t: "Hold time" }, { k: "Del", t: "Remove" }, { k: "N", t: "Add shots" }, { k: "⇧N", t: "New timeline" }, { k: "↵", t: "Open shot" }];
+  } else if (route.page === "settings") {
+    main = <SettingsPage theme={theme} onTheme={setTheme} mask={mask} onMask={setMask} />;
+    hints = [{ k: "G S", t: "Back to Shots" }];
   } else if (route.page === "library") {
     const sel = route.id;
     const setSel = (id: string | null) => replace({ page: "library", section: route.section, id });
@@ -258,7 +264,7 @@ export function App() {
     main = <ShotsPage shots={scoped} error={error} scopeName={scopeName} isAll={isAll} query={query} onQuery={setQuery} view={loadedView} edited={edited}
       onSaveView={() => void saveView()} onSaveAsNew={() => void saveAsNew()} onRevert={() => loadedView && setQuery({ ...query, ...decodeView(loadedView.filter) })} onViewMenu={(a) => void viewMenu(a)}
       panel={panel} onPanel={setPanel} layout={layout} onLayout={setLayout} mask={mask} onMask={setMask} ctx={ctx} onOpen={openShot}
-      mapSelected={mapSelected} onMapSelected={setMapSelected} onDeleted={deleted} onUpdated={updated} onLocations={setLocations} fieldsOf={fieldsOf} onReload={() => void load()} onSwitchScope={openPalette} />;
+      mapSelected={mapSelected} onMapSelected={setMapSelected} onDeleted={deleted} onUpdated={updated} onLocations={setLocations} fieldsOf={fieldsOf} onReload={() => void load()} onSwitchScope={openPalette} onNewShot={() => setNewShot(true)} />;
     hints = layout === "list" ? [{ k: "J/K", t: "Move" }, { k: "X", t: "Select" }, { k: "⇧X", t: "Select range" }, { k: "↵", t: "Open" }, { k: "E", t: "Edit selected" }, { k: "⇧M", t: "Move selected" }, { k: "Del", t: "Delete selected" }, { k: "F", t: "Filter" }]
       : layout === "map" ? [{ k: "↑/↓", t: "Move in list" }, { k: "↵", t: "Open" }, { k: "F", t: "Filter" }, { k: "M", t: "Frame mode" }]
       : [{ k: "←↑→↓", t: "Move" }, { k: "↵", t: "Open" }, { k: "F", t: "Filter" }, { k: "M", t: "Frame mode" }, { k: "/", t: "Search" }, { k: "⌘K", t: "Go to" }];
@@ -273,9 +279,11 @@ export function App() {
     { id: "a-lib", group: "Go to", icon: "bookshelf", title: "Library: projects, fields, rigs, locations", keys: "G L", run: () => void navigate({ page: "library", section: "projects", id: null }) },
     { id: "a-all", group: "Actions", icon: "folder-multiple-outline", title: "Switch to all projects", run: () => setScope(ALL_PROJECTS) },
     { id: "a-mode", group: "Actions", icon: "vector-rectangle", title: "Change frame mode", sub: `Now ${mask === "off" ? "raw" : mask}`, keys: "M", run: () => setMask(nextMode(mask)) },
+    { id: "a-newshot", group: "Actions", icon: "image-plus", title: "New shot", sub: "Upload images or draw a sketch", keys: "⇧N", run: () => { void navigate({ page: "shots", viewId }).then(() => setNewShot(true)); } },
     { id: "a-day", group: "Actions", icon: "calendar-plus", title: "New shooting day", sub: "In Plan", keys: "⇧N", run: () => void navigate({ page: "plan", dayId: null }) },
     { id: "a-rig", group: "Actions", icon: "camera-plus-outline", title: "New rig", sub: "Library › Rigs", run: () => navigateRaw({ page: "library", section: "rigs", id: null }) },
     { id: "a-theme", group: "Actions", icon: "theme-light-dark", title: "Toggle theme", sub: `Now ${theme === "auto" ? "Auto" : theme === "sun" ? "Sun" : "Set"}`, run: () => setTheme(theme === "set" ? "sun" : "set") },
+    { id: "a-settings", group: "Go to", icon: "cog-outline", title: "Settings", sub: "Theme, frame mode, new shots", run: () => void navigate({ page: "settings" }) },
     { id: "a-reload", group: "Actions", icon: "refresh", title: "Reload data", run: reload },
     { id: "a-side", group: "Actions", icon: rail ? "chevron-double-right" : "chevron-double-left", title: rail ? "Expand the sidebar" : "Collapse the sidebar", keys: "Ctrl B", run: toggleSidebar },
     { id: "a-keys", group: "Actions", icon: "keyboard-outline", title: "Keyboard shortcuts", keys: "?", run: () => setSheet(true) },
@@ -297,6 +305,8 @@ export function App() {
         onOpenShot={(s) => openShot(s, [s])} onLocation={(l) => showLocationShots(l.id, "grid")} onView={(v) => void navigate({ page: "shots", viewId: v.id })}
         onProject={(p) => setScope(p.id)} onDay={(d) => navigateRaw({ page: "plan", dayId: d.id })} />}
       {sheet && <ShortcutSheet onClose={() => setSheet(false)} />}
+      {newShot && <NewShotDialog projectId={isAll ? null : scope} projects={projects ?? []} locations={locations ?? []} onLocations={setLocations} onClose={() => setNewShot(false)}
+        onCreated={(created) => { setShots((cur) => [...created, ...(cur ?? [])]); refreshCounts(); setNewShot(false); const first = created[0]; if (first) openShot(first, created.length > 1 ? created : undefined); }} />}
       <ConfirmHost />
       <ToastHost />
     </div>

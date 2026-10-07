@@ -36,6 +36,7 @@ All routes live in `apps/worker/src/` and are registered in `index.ts`. Every re
 
 - Idempotent. An existing shot keeps its tags (they may have been edited since); only photos not stored yet are added. That is how retries and chunked sequence uploads work (the phone sends 12 photos per request, the server allows 60).
 - `lat`/`lon` may be null or missing (captured without GPS); half a position is dropped. `position_corrected` marks a position set by hand on the phone before upload. `state` carries a review decision made on the phone before upload; anything invalid becomes `unreviewed`.
+- `photos[].source`: `camera` (default), `upload` or `drawn` (dashboard-made, [new shot](features/new-shot.md)); for the last two `lens_mm` is optional and stored as 0.
 - Lenient on purpose: unknown `preset_id`/`location_id` become null, names over 120 characters are cut, `extra` is only pruned, not validated.
 - `201` for a new shot, `200` for an existing one; `duplicate: true` when nothing was added.
 
