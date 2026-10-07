@@ -1,4 +1,4 @@
-import type { ComponentChildren } from "preact";
+import type { ComponentChildren, JSX } from "preact";
 import type { Photo } from "./api";
 import { frameLayout, frameOf, imageAspect, type FrameGeometry, type FrameMode, type PctRect } from "./format";
 import { cx } from "./ui";
@@ -19,21 +19,21 @@ const pct = (r: PctRect) => ({ left: `${r.left}%`, top: `${r.top}%`, width: `${r
  * The box always has the photo's aspect ratio (or the frame's in fit mode) so the percentage
  * geometry of frame and tints lines up with the image.
  */
-export function Framed({ photo, mode, className, maxHeight, frame, children }: { photo: Photo; mode: MaskMode; className?: string; maxHeight?: string; /** Draw this frame instead of the stored one (rig explorer). */ frame?: FrameGeometry | null; /** Tags drawn on the photo (positioned inside the box). */ children?: ComponentChildren }) {
+export function Framed({ photo, mode, className, maxHeight, frame, imgStyle, src, children }: { photo: Photo; mode: MaskMode; className?: string; maxHeight?: string; /** Draw this frame instead of the stored one (rig explorer). */ frame?: FrameGeometry | null; /** Extra style on the <img> (the compose editor's look filter). */ imgStyle?: JSX.CSSProperties; /** Another image of the same size (an overlay render). */ src?: string; /** Tags drawn on the photo (positioned inside the box). */ children?: ComponentChildren }) {
   const f = frame ?? frameOf(photo);
-  const img = photo.image_url;
+  const img = src ?? photo.image_url;
   const photoAspect = imageAspect(photo);
   const l = f && mode !== "off" ? frameLayout(f, mode, photoAspect) : null;
   const aspect = l?.aspect ?? photoAspect;
   // No inline height: thumbnails fix theirs in CSS; elsewhere the aspect ratio gives it. The width is
   // explicit with maxHeight, so the box never depends on a shrink-to-fit parent (its children are absolute).
   const style = { aspectRatio: String(aspect), width: maxHeight ? `min(100%, calc(${maxHeight} * ${aspect}))` : undefined };
-  if (!l) return <div class={`framed ${className ?? ""}`} style={style}><img src={img} alt="" loading="lazy" />{children}</div>;
+  if (!l) return <div class={`framed ${className ?? ""}`} style={style}><img src={img} alt="" loading="lazy" style={imgStyle} />{children}</div>;
 
   const fullImg = l.img.left === 0 && l.img.width === 100 && l.img.height === 100;
   return (
     <div class={`framed ${className ?? ""}`} style={style}>
-      <img src={img} alt="" loading="lazy" style={fullImg ? undefined : { inset: "auto", ...pct(l.img) }} />
+      <img src={img} alt="" loading="lazy" style={fullImg ? imgStyle : { inset: "auto", ...pct(l.img), ...imgStyle }} />
       {mode === "mask" && l.frame && (
         <>
           <div class="tint" style={{ left: 0, top: 0, right: 0, height: `${l.frame.top}%` }} />
@@ -46,6 +46,14 @@ export function Framed({ photo, mode, className, maxHeight, frame, children }: {
       {children}
     </div>
   );
+}
+
+/** Where the photo sits inside a Framed box (% of the box) and the box's aspect ratio, for things drawn in photo coordinates. */
+export function framedLayout(photo: Photo, mode: MaskMode, frame?: FrameGeometry | null): { img: PctRect; aspect: number } {
+  const f = frame ?? frameOf(photo);
+  const photoAspect = imageAspect(photo);
+  const l = f && mode !== "off" ? frameLayout(f, mode, photoAspect) : null;
+  return { img: l?.img ?? { left: 0, top: 0, width: 100, height: 100 }, aspect: l?.aspect ?? photoAspect };
 }
 
 /**

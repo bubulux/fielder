@@ -53,11 +53,12 @@ Switching:
 | `navigation.tsx` | `Seg` |
 | `data.tsx` | `ListRow`, `MenuItem`, `StateMarker`, `SeqBadge`, `ProjectTag` |
 | `feedback.tsx` | `Banner`, `Empty` (a whole page), `EmptyNote` (inside a list), `Loading`, `Spinner`, `ProgressBar`, `ErrorLine`, `SaveStatus`, `toast`/`ToastHost` |
+| `Markdown.tsx` | `MarkdownView` (rendered description), `MarkdownField` (textarea + formatting toolbar + Write · Preview) |
 | `overlays.tsx` | `Overlay`, `Modal`, `Popover`, `confirmDialog`/`promptDialog`/`ConfirmHost` |
 | `layout.tsx` | `Toolbar`, `ToolbarTitle`, `ToolbarSpacer`, `Panel`, `PanelHead`, `PanelBody`, `PanelFoot` |
 | `hooks.ts` | `useOutsideClick` |
 
-Domain pieces that draw photos (`Framed`, `FramedThumb`, `ShotCard`) stay next to the pages because they depend on the frame math in `format.ts`.
+Domain pieces that draw photos (`Framed`, `FramedThumb`, `ShotCard`) stay next to the pages because they depend on the frame math in `format.ts`. The compose editor (`src/compose/`) draws over photos with the fixed `COMPOSE_PALETTE` colours; its own classes (`compose__*`, `swatch`, `f-range`, `md*`) are in `styles.css`.
 
 ## Phone component library
 

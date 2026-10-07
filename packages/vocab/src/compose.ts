@@ -77,6 +77,9 @@ export interface Presentation {
   frame: { width_fraction: number; height_fraction: number } | null;
   /** "6K FULL · 24 mm", for display only. */
   label: string | null;
+  /** The rig preset and lens the frame came from, so the editor can show the pickers again; null = as shot. */
+  rig_id?: string | null;
+  lens_mm?: number | null;
 }
 export const PRESENTATION_MODES: readonly Presentation["mode"][] = ["mask", "frame", "fit", "off"];
 
@@ -172,6 +175,8 @@ export function validatePresentation(v: unknown): string | null {
     if (typeof f !== "object" || f === null || !num(f.width_fraction, 0.01, 20) || !num(f.height_fraction, 0.01, 20)) return "presentation.frame must be { width_fraction, height_fraction } (0.01..20)";
   }
   if (p.label !== null && p.label !== undefined && (typeof p.label !== "string" || p.label.length > 80)) return "presentation.label must be a string (max 80) or null";
+  if (p.rig_id !== null && p.rig_id !== undefined && (typeof p.rig_id !== "string" || p.rig_id.length > 40)) return "presentation.rig_id must be a string or null";
+  if (p.lens_mm !== null && p.lens_mm !== undefined && !num(p.lens_mm, 1, 2000)) return "presentation.lens_mm must be 1..2000 or null";
   return null;
 }
 

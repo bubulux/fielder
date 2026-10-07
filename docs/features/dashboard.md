@@ -9,7 +9,7 @@ Designed in Claude Design (2026-09-28): four sections plus a shot view, a sideba
   - the sections: Shots (count), Review (unreviewed count), Plan, Library (with Projects · Fields · Rigs · Locations under it)
   - **saved views**, with a dot while a view has unsaved edits, and "+" for a new view
   - footer: "Go to…" (⌘K), the theme button (Auto → Sun → Set) and reload
-- **Hash routes**, so deep links survive a reload: `#/shots`, `#/shots?view=<id>`, `#/shots/<shotId>?stage=rigs|position`, `#/review`, `#/plan/<dayId>`, `#/library/projects|fields|rigs|locations/<id>`.
+- **Hash routes**, so deep links survive a reload: `#/shots`, `#/shots?view=<id>`, `#/shots/<shotId>?stage=rigs|compose|position`, `#/review`, `#/plan/<dayId>`, `#/library/projects|fields|rigs|locations/<id>`.
 - **Key hint bar** at the bottom: the shortcuts of the current screen; `?` opens all of them.
 - **First run** (no project chosen, or it was deleted): a full-window project picker with "New project" (`ProjectGate` in `Projects.tsx`).
 - **Installable (PWA)**: `public/manifest.webmanifest` (standalone, start `/`), icons in `public/icons/`, linked from `index.html` with `crossorigin="use-credentials"` so the manifest request carries the Access cookie. No service worker (nothing is cached offline; Chrome and Edge install without one). The `theme-color` meta follows the Sun/Set surface (`theme.ts`). Icons: `favicon.svg` (pixel-snapped for 16 px), `icon-192/512.png`, `icon-maskable-512.png`.
@@ -20,7 +20,7 @@ Designed in Claude Design (2026-09-28): four sections plus a shot view, a sideba
 | Section | Files | What |
 | --- | --- | --- |
 | Shots | `ShotsPage.tsx`, `shotsQuery.ts`, `FilterBuilder.tsx`, `MapView.tsx`, `ShotCard.tsx` | Gallery, Views and Map merged: one filter model, three layouts (Grid · List · Map, remembered). See below. |
-| Shot view | `ShotView.tsx`, `Inspector.tsx`, `RigExplorer.tsx`, `PositionEditor.tsx` | Replaces the dialog. See [review and tagging](review-and-tagging.md). |
+| Shot view | `ShotView.tsx`, `Inspector.tsx`, `RigExplorer.tsx`, `PositionEditor.tsx`, `compose/` | Replaces the dialog. See [review and tagging](review-and-tagging.md) and [compose](compose.md). |
 | Review | `Review.tsx` | The unreviewed queue on the shot-view layout. See [review and tagging](review-and-tagging.md). |
 | Plan | `Plan.tsx` | [Shooting days](schedule.md) |
 | Library › Projects | `Projects.tsx` | [Projects](projects.md): list with counts, detail with name, notes and ordered extra fields |

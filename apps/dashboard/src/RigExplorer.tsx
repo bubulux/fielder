@@ -17,11 +17,28 @@ export const initialRigs = (photo: Photo, presets: Preset[]): RigsState => ({
 });
 
 const lensRange = (p: Preset | undefined) => (p?.lens_min_mm != null && p.lens_max_mm != null ? { min: p.lens_min_mm, max: p.lens_max_mm } : null);
-function lensesFor(p: Preset | undefined, extra: number[]): number[] {
+export function lensesFor(p: Preset | undefined, extra: number[]): number[] {
   const r = lensRange(p);
   const list = [...LENS_PRESETS_MM, ...extra].filter((mm) => !r || (mm >= r.min && mm <= r.max));
   if (r) list.push(r.min, r.max);
   return [...new Set(list)].sort((a, b) => a - b);
+}
+
+/** The rig frame on this photo for a rig + lens choice (as shot = the stored frame); null without framing data. Shared with the compose editor. */
+export function frameForChoice(photo: Photo, presets: Preset[], choice: RigChoice): FrameGeometry | null {
+  const source = sourceRigOf(photo);
+  if (!source) return null;
+  const p = presets.find((x) => x.id === choice.rig);
+  const target: RigLens = p
+    ? { rig: { sensor: { widthMm: p.sensor_width_mm, heightMm: p.sensor_height_mm }, speedboosterFactor: p.speedbooster_factor }, lensMm: choice.lensMm, portrait: source.rigLens.portrait }
+    : { ...source.rigLens, lensMm: choice.lensMm };
+  const r = reframe(source.rigLens, source.frame, target);
+  return { width_fraction: r.widthFraction, height_fraction: r.heightFraction };
+}
+/** "6K FULL · 24 mm" for a choice. */
+export function choiceLabel(photo: Photo, presets: Preset[], choice: RigChoice): string {
+  const name = presets.find((p) => p.id === choice.rig)?.name ?? photo.preset_name ?? (photo.framing?.preset_name as string | undefined) ?? "As shot";
+  return `${name} · ${choice.lensMm} mm`;
 }
 
 interface Props { photo: Photo; presets: Preset[]; mode: MaskMode; state: RigsState; onState: (s: RigsState) => void; onBack: () => void }
@@ -112,7 +129,7 @@ function Reframed({ photo, mode, frame }: { photo: Photo; mode: MaskMode; frame:
   return <Framed photo={photo} mode={mode} frame={frame} maxHeight="calc(100vh - 290px)" />;
 }
 
-function Pickers({ photo, presets, choice, onChoice }: { photo: Photo; presets: Preset[]; choice: RigChoice; onChoice: (c: RigChoice) => void }) {
+export function Pickers({ photo, presets, choice, onChoice }: { photo: Photo; presets: Preset[]; choice: RigChoice; onChoice: (c: RigChoice) => void }) {
   const preset = presets.find((p) => p.id === choice.rig);
   const lenses = lensesFor(preset, [photo.lens_mm, choice.lensMm]);
   const pickRig = (v: string) => { const p = presets.find((x) => x.id === v); const r = lensRange(p); onChoice({ rig: v, lensMm: r ? Math.min(r.max, Math.max(r.min, choice.lensMm)) : choice.lensMm }); };

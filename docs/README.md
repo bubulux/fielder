@@ -24,6 +24,7 @@ Reference documentation for the whole app. Start with [architecture](architectur
 | [features/extra-fields.md](features/extra-fields.md) | User-defined fields as JSON, AI import, per-project selection |
 | [features/positions.md](features/positions.md) | GPS modes (High · Low · Off), photos without a position, manual pin correction |
 | [features/rig-explorer.md](features/rig-explorer.md) | Re-framing a photo for other rigs and lenses |
+| [features/compose.md](features/compose.md) | Shot descriptions, overlays (drawing + look on a photo), sketches (floor plans, diagrams); dashboard editor, phone viewer, renders |
 | [features/schedule.md](features/schedule.md) | Shooting days, daylight phases, forecast, shootable windows |
 | [features/day-mode-offline.md](features/day-mode-offline.md) | Phone "Day" tab, offline days, offline project, offline mode, edits kept on the phone |
 | [features/phone-app.md](features/phone-app.md) | Phone shell: 5 tabs, gates, pushed screens, header and sync state, Setup hub, shared components |

@@ -25,10 +25,11 @@ The shot view (`ShotView.tsx`) replaces the old dialog. It covers the main area 
 - **Toolbar**:
   - Shot view: back (Esc) to where it was opened from, "7 of 212" with the list's description (state · view or project · sort), and ←/→.
   - Review: "3 of 14 · newest first" with a progress bar, and ←/→. The order is a link that switches to oldest first (also `O`), remembered in `localStorage["reviewOrder"]`; switching starts at the top of the new order.
-  - Both: the **stage switch** Photo · Rigs (`R`) · Position, and the frame-mode switch. The frame mode starts from the global mode; a change sticks for ←/→ until the view closes (`viewMode`/`reviewMode` in `App.tsx`). `M` cycles it.
+  - Both: the **stage switch** Photo · Rigs (`R`) · Compose (`C`) · Position, and the frame-mode switch (hidden in Compose, where the overlay's own presentation applies). The frame mode starts from the global mode; a change sticks for ←/→ until the view closes (`viewMode`/`reviewMode` in `App.tsx`). `M` cycles it.
 - **Stage**:
   - **Photo**: the photo as large as fits, with prev/next buttons beside it and nothing drawn over the picture (rig and lens are in the inspector). The foot has the photo strip for sequences (`,` `.`) and the actions Download crop (cropped in the browser), Original, Show on map, and Delete (confirm dialog, offering Archive instead).
   - **Rigs**: the [rig explorer](rig-explorer.md).
+  - **Compose**: overlays and sketches ([compose](compose.md)); the inspector is replaced by the compose panel.
   - **Position**: the [position correction](positions.md) map.
 - **Inspector** (`Inspector.tsx`, 380 px, scrolls on its own):
   - the name, state marker and a summary line
@@ -42,6 +43,8 @@ The shot view (`ShotView.tsx`) replaces the old dialog. It covers the main area 
     - Weather: a combobox.
     - Shot size and Support: comboboxes; Movement: chips (any number).
     - Extra fields: saved 0.7 s after the last change.
+  - **Description**: a Markdown field ([compose](compose.md)), saved 0.7 s after the last edit or on leaving it.
+  - **Compose**: the names of the shot's overlays and sketches, with Open (`C`).
   - **Position** of the photo on stage, with "Correct". A photo captured without GPS says "No position · captured without GPS" and offers "Set position" (the same map stage, starting at another photo of the shot or Berlin).
   - **Shot**: captured, photos, uploaded, and the **shooting days** it is planned on, which link to Plan.
   - **Camera** of the photo on stage: rig, body, format, sensor, lens + FF-equivalent, FOV, time, GPS accuracy, fix age and altitude, phone.
@@ -65,7 +68,7 @@ The **Review** tab (`screens/Review.tsx`) takes the same queue (unreviewed, queu
 
 **Shot details** (Shots → a shot, or ⋯ → Shot details; `screens/ShotDetails.tsx`) is a full screen:
 - the photo (swipe = the neighbours in the list it was opened from), strip and frame view
-- the summary, **Tags** with Edit, **Position** per photo (coordinates, ±accuracy or "corrected") with Show on map and Correct, **Camera** per photo, and **Raw metadata** (expands)
+- the summary, the **description** (when set) and the **overlays · sketches** strip ([compose](compose.md)), **Tags** with Edit, **Position** per photo (coordinates, ±accuracy or "corrected") with Show on map and Correct, **Camera** per photo, and **Raw metadata** (expands)
 - ⋯ holds Delete (Discard for a queued shot; deleting an uploaded shot needs a connection)
 - Pinned: the two states that aren't the current one (unreviewed → Archive | Approve; approved → Back to review | Archive; archived → Back to review | Approve)
 

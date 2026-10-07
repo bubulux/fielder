@@ -1,6 +1,6 @@
 import { Directory, File, Paths } from "expo-file-system";
 import Storage from "expo-sqlite/kv-store";
-import { imageHeaders, imageUri, type Photo, type Shot, type ShootingDay } from "./api";
+import { imageHeaders, imageUri, renderUri, type Overlay, type Photo, type Shot, type ShootingDay, type Sketch } from "./api";
 import { API_URL } from "./config";
 import { log } from "./log";
 
@@ -23,10 +23,26 @@ export const offlineDays = (): OfflineDay[] => Object.values(readAll()).sort((a,
 export const offlineDay = (id: string): OfflineDay | null => readAll()[id] ?? null;
 
 const photoFile = (id: string) => new File(dir, `${id}.jpg`);
+// Renders change when the dashboard saves again, so the file carries the version from render_url (?v=…).
+const renderVersion = (item: { render_url: string | null }) => (item.render_url?.split("v=")[1] ?? "").replace(/[^0-9A-Za-z]/g, "").slice(0, 24);
+const renderFile = (item: { id: string; render_url: string | null }) => new File(dir, `r-${item.id}-${renderVersion(item)}.jpg`);
+const rendersOf = (shots: Shot[]): (Overlay | Sketch)[] => shots.flatMap((s) => [...s.overlays, ...s.sketches]).filter((r) => !!r.render_url);
 
 /** Local copy of a photo if one was saved for an offline day, else null. */
 export function offlinePhotoUri(photo: Photo): string | null {
   try { const f = photoFile(photo.id); return f.exists ? f.uri : null; } catch { return null; }
+}
+/** Local copy of an overlay or sketch render (this exact version), else null. */
+export function offlineRenderUri(item: { id: string; render_url: string | null }): string | null {
+  if (!item.render_url) return null;
+  try { const f = renderFile(item); return f.exists ? f.uri : null; } catch { return null; }
+}
+/** Download one render and drop older versions of it. */
+async function fetchRender(item: Overlay | Sketch) {
+  const f = renderFile(item);
+  if (f.exists) return;
+  await File.downloadFileAsync(renderUri(item)!, f, { headers: imageHeaders(), idempotent: true });
+  try { for (const old of dir.list()) if (old instanceof File && old.name.startsWith(`r-${item.id}-`) && old.name !== f.name) old.delete(); } catch { /* best effort */ }
 }
 
 /** Save a day and download its photos. Reports progress as (done, total). Throws if a download fails. */
@@ -34,12 +50,15 @@ export async function saveDayOffline(day: ShootingDay, shots: Shot[], projectNam
   if (!dir.exists) dir.create({ intermediates: true });
   const planned = day.shots.map((ds) => shots.find((s) => s.id === ds.shot_id)).filter((s): s is Shot => !!s);
   const photos = planned.flatMap((s) => s.photos);
+  const renders = rendersOf(planned);
+  const total = photos.length + renders.length;
   let done = 0;
-  onProgress?.(0, photos.length);
+  onProgress?.(0, total);
   for (const p of photos) {
     if (!photoFile(p.id).exists) await File.downloadFileAsync(imageUri(p), photoFile(p.id), { headers: imageHeaders(), idempotent: true });
-    onProgress?.(++done, photos.length);
+    onProgress?.(++done, total);
   }
+  for (const r of renders) { await fetchRender(r); onProgress?.(++done, total); }
   const entry: OfflineDay = { day, shots: planned, projectName, savedAt: new Date().toISOString() };
   writeAll({ ...readAll(), [day.id]: entry });
   log("info", "day saved offline", { day: day.id, shots: planned.length, photos: photos.length, api: API_URL });
@@ -56,12 +75,20 @@ export function removeOfflineDay(id: string) {
   deleteUnused(gone.shots);
 }
 
-/** Delete the local photos of these shots unless an offline day or project still uses them. */
+/** Delete the local photos and renders of these shots unless an offline day or project still uses them. */
 function deleteUnused(shots: Shot[]) {
-  const keep = new Set([...Object.values(readAll()), ...Object.values(readProjects())].flatMap((d) => d.shots.flatMap((s) => s.photos.map((p) => p.id))));
-  for (const s of shots) for (const p of s.photos) {
-    if (keep.has(p.id)) continue;
-    try { const f = photoFile(p.id); if (f.exists) f.delete(); } catch { /* best effort */ }
+  const kept = [...Object.values(readAll()), ...Object.values(readProjects())].flatMap((d) => d.shots);
+  const keep = new Set(kept.flatMap((s) => s.photos.map((p) => p.id)));
+  const keepRenders = new Set(rendersOf(kept).map((r) => r.id));
+  for (const s of shots) {
+    for (const p of s.photos) {
+      if (keep.has(p.id)) continue;
+      try { const f = photoFile(p.id); if (f.exists) f.delete(); } catch { /* best effort */ }
+    }
+    for (const r of [...s.overlays, ...s.sketches]) {
+      if (keepRenders.has(r.id)) continue;
+      try { for (const f of dir.list()) if (f instanceof File && f.name.startsWith(`r-${r.id}-`)) f.delete(); } catch { /* best effort */ }
+    }
   }
 }
 
@@ -101,12 +128,15 @@ export function saveProjectOffline(projectId: string, projectName: string, shots
     if (!dir.exists) dir.create({ intermediates: true });
     const photos = shots.flatMap((s) => s.photos);
     const missing = photos.filter((p) => !photoFile(p.id).exists);
-    setProgress({ projectId, done: 0, total: missing.length });
+    const renders = rendersOf(shots).filter((r) => !renderFile(r).exists);
+    const total = missing.length + renders.length;
+    setProgress({ projectId, done: 0, total });
     let done = 0;
     for (const p of missing) {
       await File.downloadFileAsync(imageUri(p), photoFile(p.id), { headers: imageHeaders(), idempotent: true });
-      setProgress({ projectId, done: ++done, total: missing.length });
+      setProgress({ projectId, done: ++done, total });
     }
+    for (const r of renders) { await fetchRender(r); setProgress({ projectId, done: ++done, total }); }
     let bytes = 0;
     for (const p of photos) { try { bytes += photoFile(p.id).size ?? 0; } catch { /* size unknown */ } }
     const before = readProjects()[projectId];

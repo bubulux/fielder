@@ -4,11 +4,13 @@ import { StatusBar } from "expo-status-bar";
 import { useKeepAwake } from "expo-keep-awake";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { lightLabel, shootableWindows } from "@fielder/vocab";
-import type { Shot, ShootingDay } from "../api";
+import type { Composed, Shot, ShootingDay } from "../api";
 import { useApp } from "../appState";
 import { useOnline } from "../net";
 import { extraLine, hhmm, placeLabel, rigLabel, shotTitle, tagsLabel } from "../shots";
 import { FRAME_MODES, FrameModeSeg, type FrameMode } from "../components/ShotFrame";
+import { ComposeRows, ComposeViewer } from "../components/ComposeParts";
+import { MarkdownText } from "../components/Markdown";
 import { ShotPhoto } from "../components/ShotParts";
 import { BORDER, Button, FIXED, Icon, makeStyles, num, PhotoTag, RADIUS, Sheet, type, useLayoutSize, useTheme } from "../ui";
 import { store } from "../storage";
@@ -31,6 +33,7 @@ export function StepThrough({ day, shots, index: start }: { day: ShootingDay; sh
   const [photoIndex, setPhotoIndex] = useState(0);
   const [mode, setMode] = useState<FrameMode>(() => store.loadPref("stepMode.v1", "fit", FRAME_MODES));
   const [info, setInfo] = useState(false);
+  const [viewing, setViewing] = useState<Composed | null>(null);
   const { light } = useDayLight(day, shots);
   useEffect(() => { setPhotoIndex(0); }, [index]);
   const [screen, onScreen] = useLayoutSize();
@@ -118,10 +121,13 @@ export function StepThrough({ day, shots, index: start }: { day: ShootingDay; sh
         <Fact k="Rig" v={rigLabel(photo)} />
         {!!extraLine(shot) && <Fact k="Fields" v={extraLine(shot)} />}
         {!!notes && <Fact k="Plan notes" v={notes} />}
+        {!!shot.description && <View style={{ paddingVertical: 6 }}><MarkdownText source={shot.description} /></View>}
+        <ComposeRows shot={shot} photo={photo} onOpen={(c) => { setInfo(false); setViewing(c); }} />
         <FrameModeSeg block value={mode} onChange={pickMode} />
         {online && app.shots.shots?.some((x) => x.id === shot.id) && <Button kind="secondary" icon="map-marker-outline" label="Show on map" onPress={() => { setInfo(false); app.push({ name: "mapFocus", shotId: shot.id }); }} />}
         <Button kind="secondary" icon="exit-to-app" label="Leave step-through" onPress={() => { setInfo(false); app.pop(); }} />
       </Sheet>
+      {viewing && <ComposeViewer item={viewing} photo={photo} settings={app.settings} onClose={() => setViewing(null)} />}
     </View>
   );
 }

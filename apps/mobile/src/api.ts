@@ -3,7 +3,7 @@ import { getToken, setToken } from "./auth";
 import { API_URL, isConfigured } from "./config";
 import { log } from "./log";
 import { isOfflineMode, markOnline } from "./net";
-import type { Extra, FieldDefinition } from "@fielder/vocab";
+import type { Extra, FieldDefinition, Presentation } from "@fielder/vocab";
 import type { LocationEntry, Preset, ProjectEntry, ShotMetadata, ShotTags } from "./types";
 
 export class ApiError extends Error {
@@ -120,14 +120,26 @@ export interface Shot {
   movement: string[];
   state: "unreviewed" | "approved" | "archived";
   extra: Extra;
+  /** Markdown subset, written on the dashboard. */
+  description: string | null;
   captured_at: string;
   created_at: string;
   updated_at: string | null;
   /** Ordered; never empty. */
   photos: Photo[];
+  /** Drawings over single photos (dashboard-made); the phone shows their renders. */
+  overlays: Overlay[];
+  /** Free canvases on the shot (floor plans, diagrams); the phone shows their renders. */
+  sketches: Sketch[];
   /** Only on the phone: still in the upload queue (see localShots.ts). */
   queued?: boolean;
 }
+/** A drawing + look over one photo, as a flattened render the size of the photo (issue #12). */
+export interface Overlay { id: string; photo_id: string; shot_id: string; name: string; description: string | null; presentation: Presentation; position: number; render_url: string | null; created_at: string; updated_at: string | null }
+/** A sketch of the shot (floor plan, lighting diagram, …), rendered on white. */
+export interface Sketch { id: string; shot_id: string; name: string; kind: string | null; description: string | null; aspect: number; position: number; render_url: string | null; created_at: string; updated_at: string | null }
+/** Either kind, for strips and the viewer. */
+export type Composed = ({ type: "overlay" } & Overlay) | ({ type: "sketch" } & Sketch);
 
 /** A shooting day of a project with its planned shots in order (planned in the dashboard). */
 export interface DayShot { shot_id: string; planned_time: string | null; notes: string | null }
@@ -151,6 +163,8 @@ interface ShotsPage { shots: Shot[]; next: Cursor }
 /** Headers for <Image> requests to the API (Access session token). */
 export const imageHeaders = (): Record<string, string> => headers();
 export const imageUri = (photo: Photo) => `${API_URL}${photo.image_url}`;
+/** Absolute URL of an overlay or sketch render; null before the dashboard saved one. */
+export const renderUri = (item: { render_url: string | null }) => (item.render_url ? `${API_URL}${item.render_url}` : null);
 
 export const api = {
   /** Every shot of one project, newest first. */

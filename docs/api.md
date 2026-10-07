@@ -18,9 +18,9 @@ All routes live in `apps/worker/src/` and are registered in `index.ts`. Every re
 | GET | `/api/shots?project_id=&state=&location_id=&limit=&before=&before_id=` | Newest first, keyset pagination on `(captured_at, id)`, `next` cursor. Photos embedded. |
 | GET | `/api/shots/:id` | |
 | POST | `/api/shots` | Multipart: `metadata` (JSON) + one `photo.<photoId>` file per photo not yet stored. See below. |
-| PATCH | `/api/shots/:id` | Any of `name, light, artificial, weather, int_ext, shot_size, camera_support, movement, location_id, extra, state, project_id`. `extra` is validated against the project's fields. Moving to another project removes the shot from the old project's shooting days. |
+| PATCH | `/api/shots/:id` | Any of `name, light, artificial, weather, int_ext, shot_size, camera_support, movement, location_id, extra, description, state, project_id`. `extra` is validated against the project's fields. Moving to another project removes the shot from the old project's shooting days. |
 | PATCH | `/api/shots` | Bulk edit: `{ ids: uuid[] (≤ 500), set?: { any single-PATCH field except extra }, extra?: { key: value \| null } }`. Only the given fields change. `extra` is per key and merged into each shot's values (groups child by child, null clears, dependent selects that no longer fit are dropped), then the edited keys are checked against each shot's (new) project. Unknown ids → 404, any error → nothing written (one transaction). Moving removes the shots from the old project's shooting days. Returns `{ shots }`. |
-| DELETE | `/api/shots/:id` | Deletes photos (cascade) and their R2 objects |
+| DELETE | `/api/shots/:id` | Deletes photos, overlays and sketches (cascade) and their R2 objects |
 | GET | `/api/photos/:id/image` | Image from R2, immutable caching, supports conditional requests |
 | PATCH | `/api/photos/:id` | `{ lat, lon, all_in_shot? }` position correction (also sets a position on photos captured without one); sets `position_corrected` |
 
@@ -38,6 +38,20 @@ All routes live in `apps/worker/src/` and are registered in `index.ts`. Every re
 - `lat`/`lon` may be null or missing (captured without GPS); half a position is dropped. `position_corrected` marks a position set by hand on the phone before upload. `state` carries a review decision made on the phone before upload; anything invalid becomes `unreviewed`.
 - Lenient on purpose: unknown `preset_id`/`location_id` become null, names over 120 characters are cut, `extra` is only pruned, not validated.
 - `201` for a new shot, `200` for an existing one; `duplicate: true` when nothing was added.
+
+## Overlays and sketches (`compose.ts`)
+
+Shots embed both lists without the drawing; see [compose](features/compose.md) for the model.
+
+| Method | Path | Notes |
+| --- | --- | --- |
+| GET | `/api/overlays/:id` | With `drawing` |
+| PUT | `/api/overlays/:id` | Upsert. JSON `{ photo_id, name, description?, drawing, presentation, position? }`, or `multipart/form-data` with `metadata` (that JSON) and `render` (jpeg/png/webp ≤ 6 MB, the flattened image). `drawing` is validated by `validateDrawing(v, true)` (a look is required), `presentation` by `validatePresentation`. An overlay cannot move to another photo (`409`). Returns `{ overlay, shot }`; `201` when new. |
+| PATCH | `/api/overlays/:id` | `{ name?, description?, position? }` → `{ overlay, shot }` |
+| DELETE | `/api/overlays/:id` | Removes the render too → `{ deleted, shot }` |
+| GET | `/api/overlays/:id/render` | The render; `render_url` on the overlay carries `?v=<updated_at>`, so it is cached as immutable |
+| GET / PUT / PATCH / DELETE | `/api/sketches/:id` | Same, with `{ shot_id, name, kind?, description?, drawing (look null), aspect (0.25..4), position? }`; PATCH takes `kind` too |
+| GET | `/api/sketches/:id/render` | |
 
 ## Locations, rigs, views
 
