@@ -5,7 +5,7 @@ import { Framed, type MaskMode } from "./Framed";
 import { afterG, useKeys } from "./keys";
 import { Compose, type ComposeGuard } from "./compose/Compose";
 import { initialRigs, RigsStage, type RigsState } from "./RigExplorer";
-import { ClipPanel, clock, clipsOfShot, CutPreview, defaultPresentation, newPlaceholder, resolveClips, shotDrag, Strip, useCut, useTimelineStore, type ResolvedClip } from "./TimelineParts";
+import { ClipPanel, clock, clipsOfShot, CutPreview, defaultPresentation, LockSelect, newPlaceholder, resolveClips, shotDrag, Strip, useCut, useTimelineStore, type ResolvedClip } from "./TimelineParts";
 import { Banner, Button, ContextMenu, cx, Empty, EmptyNote, Field, IconButton, Input, MenuItem, Panel, PanelBody, PanelHead, promptDialog, SaveStatus, Select, Spinner, StateMarker, toast, Toolbar, ToolbarSpacer, ToolbarTitle, useCtxMenu, type SaveState } from "./ui";
 
 /**
@@ -243,15 +243,16 @@ function Workspace(p: WorkspaceProps) {
           <div class="plan-head">
             <Field label="Name" style={{ flex: 1, minWidth: "220px" }}><Input value={t.name} maxLength={120} style={{ fontWeight: 700 }} onInput={(e) => p.onChange({ ...t, name: (e.target as HTMLInputElement).value || "Untitled" })} /></Field>
             <Field label="Length"><span class="f-input num" style={{ fontWeight: 700, padding: "0 10px", display: "inline-flex", alignItems: "center" }}>{clock(total)} · {clips.length} clip{clips.length === 1 ? "" : "s"}</span></Field>
+            <Field label="Presentation" as="div"><LockSelect value={t.lock_mode} onChange={(m) => p.onChange({ ...t, lock_mode: m })} /></Field>
             <div class="plan-head__status"><SaveStatus state={p.save} onRetry={p.onRetry} /></div>
           </div>
 
-          <CutPreview cut={cut} clips={clips} total={total} maxHeight="calc(100vh - 470px)">
+          <CutPreview cut={cut} clips={clips} total={total} maxHeight="calc(100vh - 470px)" lock={t.lock_mode}>
             <Button kind="secondary" size="sm" icon="image-off-outline" kbd="P" onClick={addPlaceholder}>Placeholder</Button>
             <Button kind={panel === "browser" ? "secondary" : "primary"} size="sm" icon="view-grid-outline" kbd="N" aria-pressed={panel === "browser"} onClick={() => setPanel(panel === "browser" ? "clip" : "browser")}>Shots</Button>
           </CutPreview>
 
-          <Strip clips={clips} cut={{ ...cut, select: selectClip }} stripRef={stripRef} onOpen={open} onReorder={reorder} onDropShot={onDropShot} onContext={(c, e) => clipMenu.openMenu(e, c)} />
+          <Strip clips={clips} cut={{ ...cut, select: selectClip }} stripRef={stripRef} lock={t.lock_mode} onOpen={open} onReorder={reorder} onDropShot={onDropShot} onContext={(c, e) => clipMenu.openMenu(e, c)} />
         </div>
       </div>
       {clipMenu.menu && (() => {
@@ -267,7 +268,7 @@ function Workspace(p: WorkspaceProps) {
         );
       })()}
       {panel === "clip" && cur
-        ? <ClipPanel key={cur.clip.id} c={cur} count={clips.length} durRef={durRef} onUpdate={(patch) => update(cur.clip.id, patch)} onMove={(d) => move(cur, d)} onRemove={() => removeClip(cur)} onDuplicate={() => duplicate(cur)} onOpen={() => open(cur)}
+        ? <ClipPanel key={cur.clip.id} c={cur} count={clips.length} lock={t.lock_mode} durRef={durRef} onUpdate={(patch) => update(cur.clip.id, patch)} onMove={(d) => move(cur, d)} onRemove={() => removeClip(cur)} onDuplicate={() => duplicate(cur)} onOpen={() => open(cur)}
             onReframe={() => startEdit("framing", cur)} onCompose={() => startEdit("compose", cur)}
             head={<><span class="meta num">clip {cur.index + 1} of {clips.length}</span><IconButton icon="view-grid-outline" label="Browse shots (N)" title="Browse shots (N)" onClick={() => setPanel("browser")} /></>} />
         : <Browser {...p} onAdd={addShot} />}

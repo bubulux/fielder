@@ -70,7 +70,7 @@ Shots embed both lists without the drawing; see [compose](features/compose.md) f
 | --- | --- | --- |
 | GET | `/api/timelines?project_id=` | Each with `clips: [{ id, photo_id, shot_id, overlay_id, presentation, duration_ms, notes, title }]` in order. A placeholder clip has `photo_id`/`shot_id`/`overlay_id`/`presentation` null and a `title`. |
 | GET | `/api/timelines/:id` | |
-| PUT | `/api/timelines/:id` | `{ project_id, name, notes?, clips: [...] }` replaces the whole timeline (≤ 500 clips). A clip is `{ id, photo_id, overlay_id?, presentation, duration_ms, notes? }` or a placeholder `{ id, title, duration_ms, notes? }`. Clips whose photo is not in the project are dropped silently; an overlay that is not the photo's is nulled. |
+| PUT | `/api/timelines/:id` | `{ project_id, name, notes?, lock_mode?, clips: [...] }` replaces the whole timeline (≤ 500 clips). `lock_mode` (a presentation mode or null) forces one mode on every clip. A clip is `{ id, photo_id, overlay_id?, presentation, duration_ms, notes? }` or a placeholder `{ id, title, duration_ms, notes? }`. Clips whose photo is not in the project are dropped silently; an overlay that is not the photo's is nulled. |
 | DELETE | `/api/timelines/:id` | |
 
 ## Locations, rigs, views

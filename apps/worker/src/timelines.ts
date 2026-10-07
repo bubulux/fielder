@@ -1,4 +1,4 @@
-import { validatePresentation } from "@fielder/vocab";
+import { PRESENTATION_MODES, validatePresentation, type Presentation } from "@fielder/vocab";
 import { assertNumber, assertString, assertUuid, HttpError, json, readJson, type Router } from "./http.ts";
 import type { Ctx } from "./index.ts";
 import { assertProjectExists } from "./projects.ts";
@@ -11,7 +11,7 @@ import { assertProjectExists } from "./projects.ts";
  * shot is dropped onto it. The phone never reads these.
  */
 
-interface TimelineRow { id: string; project_id: string; name: string; notes: string | null; created_at: string; updated_at: string | null }
+interface TimelineRow { id: string; project_id: string; name: string; notes: string | null; lock_mode: string | null; created_at: string; updated_at: string | null }
 interface ClipRow { id: string; timeline_id: string; position: number; photo_id: string | null; shot_id: string | null; overlay_id: string | null; presentation: string | null; duration_ms: number; notes: string | null; title: string | null }
 
 const MAX_CLIPS = 500;
@@ -50,7 +50,7 @@ export function registerTimelineRoutes(r: Router<Ctx>) {
     return json({ timeline: (await withClips(env, [row]))[0] });
   });
 
-  /** JSON { project_id, name, notes?, clips: [...] } — the whole timeline. A clip is { id, photo_id, overlay_id?, presentation, duration_ms, notes? } or a placeholder { id, title, duration_ms, notes? }. */
+  /** JSON { project_id, name, notes?, lock_mode?, clips: [...] } — the whole timeline. `lock_mode` forces one presentation mode on every clip (null = per clip). A clip is { id, photo_id, overlay_id?, presentation, duration_ms, notes? } or a placeholder { id, title, duration_ms, notes? }. */
   r.on("PUT", "/api/timelines/:id", async ({ env, request }, { id }) => {
     const tid = assertUuid(id, "id");
     const b = await readJson<Record<string, unknown>>(request);
@@ -58,6 +58,8 @@ export function registerTimelineRoutes(r: Router<Ctx>) {
     const name = assertString(b.name, "name", 120);
     const opt = (v: unknown, f: string, max: number) => (v === undefined || v === null || v === "" ? null : assertString(v, f, max));
     const notes = opt(b.notes, "notes", 4000);
+    const lockMode = b.lock_mode === undefined || b.lock_mode === null ? null : (b.lock_mode as Presentation["mode"]);
+    if (lockMode !== null && !PRESENTATION_MODES.includes(lockMode)) throw new HttpError(400, `lock_mode must be one of ${PRESENTATION_MODES.join(", ")} or null`);
     if (!Array.isArray(b.clips)) throw new HttpError(400, "clips must be an array");
     if (b.clips.length > MAX_CLIPS) throw new HttpError(413, `at most ${MAX_CLIPS} clips per timeline`);
     let clips = b.clips.map((c, i) => {
@@ -98,9 +100,9 @@ export function registerTimelineRoutes(r: Router<Ctx>) {
     const now = new Date().toISOString();
     await env.DB.batch([
       env.DB.prepare(
-        `INSERT INTO timelines (id, project_id, name, notes, updated_at) VALUES (?1, ?2, ?3, ?4, ?5)
-         ON CONFLICT(id) DO UPDATE SET project_id = ?2, name = ?3, notes = ?4, updated_at = ?5`,
-      ).bind(tid, projectId, name, notes, now),
+        `INSERT INTO timelines (id, project_id, name, notes, lock_mode, updated_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+         ON CONFLICT(id) DO UPDATE SET project_id = ?2, name = ?3, notes = ?4, lock_mode = ?5, updated_at = ?6`,
+      ).bind(tid, projectId, name, notes, lockMode, now),
       env.DB.prepare("DELETE FROM timeline_clips WHERE timeline_id = ?1").bind(tid),
       ...clips.map((c, i) => env.DB.prepare("INSERT INTO timeline_clips (id, timeline_id, position, photo_id, overlay_id, presentation, duration_ms, notes, title) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)")
         .bind(c.id, tid, i, c.photo_id, c.overlay_id, c.presentation, c.duration_ms, c.notes, c.title)),

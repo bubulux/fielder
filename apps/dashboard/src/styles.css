@@ -247,7 +247,7 @@ button { font: inherit; }
 .tl-clock { font-size: var(--text-body); margin-left: 6px; }
 .tl-strip-wrap { overflow-x: auto; overflow-y: hidden; padding-bottom: 6px; }
 .tl-strip { position: relative; min-width: 100%; }
-.tl-ruler { position: relative; height: 18px; border-bottom: var(--bw) solid var(--border); margin-bottom: 4px; }
+.tl-ruler { position: relative; height: 18px; border-bottom: var(--bw) solid var(--border); margin-bottom: 4px; cursor: ew-resize; touch-action: none; user-select: none; }
 .tl-ruler span { position: absolute; top: 0; height: 100%; border-left: 1px solid var(--border); padding-left: 3px; font: var(--weight-semibold) var(--text-micro)/18px var(--font-sans); color: var(--text-dim); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .tl-clips { display: flex; gap: 2px; position: relative; }
 .tl-clip { position: relative; flex: none; display: flex; flex-direction: column; gap: 2px; padding: 4px; border: var(--bw) solid var(--border); border-radius: var(--radius-sm); background: var(--surface); color: var(--text); cursor: pointer; text-align: left; overflow: hidden; }

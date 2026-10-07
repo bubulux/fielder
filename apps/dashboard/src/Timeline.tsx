@@ -3,7 +3,7 @@ import { fetchTimelines, type Preset, type Project, type Shot, type Timeline, ty
 import { cover, shotTitle } from "./format";
 import { Framed, type MaskMode } from "./Framed";
 import { useKeys } from "./keys";
-import { ClipPanel, clock, CutPreview, newPlaceholder, resolveClips, Strip, useCut, useTimelineStore, clipsOfShot, type ResolvedClip } from "./TimelineParts";
+import { ClipPanel, clock, CutPreview, LockSelect, newPlaceholder, resolveClips, Strip, useCut, useTimelineStore, clipsOfShot, type ResolvedClip } from "./TimelineParts";
 import { Banner, Button, Checkbox, cx, Empty, EmptyNote, Field, Icon, IconButton, Input, Kbd, ListRow, MenuItem, Panel, PanelBody, PanelHead, Popover, SaveStatus, Select, Spinner, Toolbar, ToolbarTitle, type SaveState } from "./ui";
 
 /**
@@ -128,6 +128,7 @@ function Editor({ timeline: t, shots, mask, onChange, onDelete, onOpen, save, on
           <div class="plan-head">
             <Field label="Name" style={{ flex: 1, minWidth: "220px" }}><Input value={t.name} maxLength={120} style={{ fontWeight: 700 }} onInput={(e) => onChange({ ...t, name: (e.target as HTMLInputElement).value || "Untitled" })} /></Field>
             <Field label="Length"><span class="f-input num" style={{ fontWeight: 700, padding: "0 10px", display: "inline-flex", alignItems: "center" }}>{clock(total)} · {clips.length} clip{clips.length === 1 ? "" : "s"}</span></Field>
+            <Field label="Presentation" as="div"><LockSelect value={t.lock_mode} onChange={(m) => onChange({ ...t, lock_mode: m })} /></Field>
             <div class="plan-head__status">
               <SaveStatus state={save} onRetry={onRetry} />
               <div class="menu-anchor">
@@ -137,16 +138,16 @@ function Editor({ timeline: t, shots, mask, onChange, onDelete, onOpen, save, on
             </div>
           </div>
 
-          <CutPreview cut={cut} clips={clips} total={total} maxHeight="calc(100vh - 470px)">
+          <CutPreview cut={cut} clips={clips} total={total} maxHeight="calc(100vh - 470px)" lock={t.lock_mode}>
             <Button kind="secondary" size="sm" icon="image-off-outline" kbd="P" onClick={addPlaceholder}>Placeholder</Button>
             <Button kind={adding ? "secondary" : "primary"} size="sm" icon="plus" kbd="N" aria-pressed={adding} onClick={() => setAdding(!adding)}>Add shots</Button>
           </CutPreview>
 
-          <Strip clips={clips} cut={cut} stripRef={stripRef} onOpen={open} onReorder={reorder} />
+          <Strip clips={clips} cut={cut} stripRef={stripRef} lock={t.lock_mode} onOpen={open} onReorder={reorder} />
         </div>
       </div>
       {adding ? <AddPanel shots={shots} mask={mask} onAdd={addShots} onClose={() => setAdding(false)} />
-        : cur && <ClipPanel key={cur.clip.id} c={cur} count={clips.length} durRef={durRef} onUpdate={(p) => update(cur.clip.id, p)} onMove={(d) => move(cur, d)} onRemove={() => removeClip(cur)} onDuplicate={() => duplicate(cur)} onOpen={() => open(cur)} />}
+        : cur && <ClipPanel key={cur.clip.id} c={cur} count={clips.length} lock={t.lock_mode} durRef={durRef} onUpdate={(p) => update(cur.clip.id, p)} onMove={(d) => move(cur, d)} onRemove={() => removeClip(cur)} onDuplicate={() => duplicate(cur)} onOpen={() => open(cur)} />}
     </>
   );
 }
