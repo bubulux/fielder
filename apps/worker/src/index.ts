@@ -8,6 +8,7 @@ import { registerAuthRoutes } from "./auth.ts";
 import { registerComposeRoutes } from "./compose.ts";
 import { registerDayRoutes } from "./days.ts";
 import { registerFieldRoutes } from "./fields.ts";
+import { registerFramingRoutes } from "./framings.ts";
 import { HttpError, json, Router } from "./http.ts";
 import { registerLocationRoutes } from "./locations.ts";
 import { registerPresetRoutes } from "./presets.ts";
@@ -64,6 +65,7 @@ registerShotRoutes(router);
 registerViewRoutes(router);
 registerComposeRoutes(router);
 registerTimelineRoutes(router);
+registerFramingRoutes(router);
 
 async function authenticate(request: Request, env: Env): Promise<AccessIdentity> {
   if (env.ACCESS_DEV_BYPASS === "true") return { email: "dev@localhost", kind: "user" };

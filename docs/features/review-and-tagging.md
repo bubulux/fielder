@@ -25,10 +25,10 @@ The shot view (`ShotView.tsx`) replaces the old dialog. It covers the main area 
 - **Toolbar**:
   - Shot view: back (Esc) to where it was opened from, "7 of 212" with the list's description (state · view or project · sort), and ←/→.
   - Review: "3 of 14 · newest first" with a progress bar, and ←/→. The order is a link that switches to oldest first (also `O`), remembered in `localStorage["reviewOrder"]`; switching starts at the top of the new order.
-  - Both: the **stage switch** Photo · Rigs (`R`) · Compose (`C`) · Position, and the frame-mode switch (hidden in Compose, where the overlay's own presentation applies). The frame mode starts from the global mode; a change sticks for ←/→ until the view closes (`viewMode`/`reviewMode` in `App.tsx`). `M` cycles it.
+  - Both: the **stage switch** Photo · Framing (`R`) · Compose (`C`) · Position, and the frame-mode switch (hidden in Compose, where the overlay's own presentation applies). The frame mode starts from the global mode; a change sticks for ←/→ until the view closes (`viewMode`/`reviewMode` in `App.tsx`). `M` cycles it.
 - **Stage**:
   - **Photo**: the photo as large as fits, with prev/next buttons beside it and nothing drawn over the picture (rig and lens are in the inspector). The foot has the photo strip for sequences (`,` `.`) and the actions Download crop (cropped in the browser), Original, Show on map, and Delete (confirm dialog, offering Archive instead).
-  - **Rigs**: the [rig explorer](rig-explorer.md).
+  - **Framing**: re-frame the photo, saved framings, the root frame ([framing](rig-explorer.md)).
   - **Compose**: overlays and sketches ([compose](compose.md)); the inspector is replaced by the compose panel.
   - **Position**: the [position correction](positions.md) map.
 - **Inspector** (`Inspector.tsx`, 380 px, scrolls on its own):
@@ -47,7 +47,7 @@ The shot view (`ShotView.tsx`) replaces the old dialog. It covers the main area 
   - **Compose**: the names of the shot's overlays and sketches, with Open (`C`).
   - **Position** of the photo on stage, with "Correct", and the switch "Use the location's position" ([positions](positions.md)). A photo captured without GPS says "No position · captured without GPS" and offers "Set position" (the same map stage, starting at another photo of the shot or Berlin).
   - **Shot**: captured, photos, uploaded, the **shooting days** it is planned on (link to Plan) and the **timelines** it is cut into (link to Timeline).
-  - **Camera** of the photo on stage: rig, body, format, sensor, lens + FF-equivalent, FOV, time, GPS accuracy, fix age and altitude, phone.
+  - **Camera** of the photo on stage: rig, the frame shown (root framing or As captured, and how many framings), body, format, sensor, lens + FF-equivalent, FOV, time, GPS accuracy, fix age and altitude, phone.
   - **Raw metadata**: collapsed, with Copy.
 - **Review queue**: unreviewed shots of the scope, newest first (switchable); ←/→ step, there is no Skip. After Approve/Archive the next shot takes the same position. Ends on "Nothing to review" (Browse approved shots · Plan a day).
 

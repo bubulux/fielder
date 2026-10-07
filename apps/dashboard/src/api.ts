@@ -1,5 +1,5 @@
 /** Same-origin API; the Access session cookie is sent automatically. */
-import type { PhotoSource, Drawing, Extra, FieldDef, FieldDefinition, FilterGroup, Presentation } from "@fielder/vocab";
+import type { Framing, PhotoSource, Drawing, Extra, FieldDef, FieldDefinition, FilterGroup, Presentation } from "@fielder/vocab";
 export type { FieldDefinition };
 export type ShotState = "unreviewed" | "approved" | "archived";
 
@@ -24,6 +24,10 @@ export interface Photo {
   device: Record<string, unknown> | null;
   /** camera = captured on the phone (rig framing); upload / drawn = made on the dashboard, no rig or lens (lens_mm 0). */
   source: PhotoSource;
+  /** Saved re-framings (issue #29), in order. */
+  framings: Framing[];
+  /** The framing every view shows; null = as captured. */
+  root_framing_id: string | null;
   image_url: string;
   created_at: string;
 }
@@ -226,6 +230,14 @@ export async function patchShots(ids: string[], set: BulkSet, extra: Extra = {})
   for (let i = 0; i < ids.length; i += 500) out.push(...(await send<{ shots: Shot[] }>("PATCH", "/api/shots", { ids: ids.slice(i, i + 500), set, extra })).shots);
   return out;
 }
+
+// ---------- Framings (issue #29) ----------
+export interface FramingSave { photo_id: string; name: string; rig_id: string | null; lens_mm: number; frame: { width_fraction: number; height_fraction: number; x: number; y: number }; root?: boolean }
+/** Create or update a framing; `root` also makes it the photo's root. Returns the shot. */
+export const putFraming = (id: string, f: FramingSave) => send<{ shot: Shot }>("PUT", `/api/framings/${id}`, f).then((r) => r.shot);
+export const deleteFraming = (id: string) => send<{ shot: Shot }>("DELETE", `/api/framings/${id}`).then((r) => r.shot);
+/** null = back to as captured. */
+export const setRootFraming = (photoId: string, framingId: string | null) => send<{ shot: Shot }>("PUT", `/api/photos/${photoId}/root`, { framing_id: framingId }).then((r) => r.shot);
 
 /** Correct a photo's position by hand; `allInShot` moves every photo of its shot. Returns the updated shot. */
 export const patchPhotoPosition = (id: string, lat: number, lon: number, allInShot: boolean) =>

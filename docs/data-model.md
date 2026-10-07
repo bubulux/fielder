@@ -12,6 +12,7 @@ D1 (SQLite) database `fielder-db`, schema in `apps/worker/migrations/`. Images l
 | `0004_shooting_days.sql` | `shooting_days`, `day_shots` |
 | `0005_capture_flow.sql` | `shots.shot_size`, `camera_support`, `movement`; `photos` rebuilt with nullable `lat`/`lon` (copied row by row, both or neither set) |
 | `0006_compose.sql` | `shots.description`; `overlays`, `sketches` ([compose](features/compose.md)) |
+| `0010_framings.sql` | `framings`; `photos.root_framing_id` ([framing](features/rig-explorer.md)) |
 | `0009_photo_source.sql` | `photos.source` (camera · upload · drawn) ([new shot](features/new-shot.md)) |
 | `0008_location_positions.sql` | `locations.lat`, `lon`; `shots.position_from_location` ([positions](features/positions.md)) |
 | `0007_timelines.sql` | `timelines`, `timeline_clips` ([timeline](features/timeline.md)) |
@@ -42,6 +43,8 @@ Add a new numbered file for every change; never edit one that was applied to pro
 
 `sketches(id, shot_id → shots CASCADE, name, kind, description, drawing JSON (look null), aspect REAL w/h, render_key UNIQUE, position, created_at, updated_at)`: a free canvas on the shot. `kind` is free text; `SKETCH_KINDS` are only suggestions.
 
+`framings(id, photo_id → photos CASCADE, name, rig_id → presets SET NULL (null = as shot), lens_mm, frame JSON { width_fraction, height_fraction, x, y }, position, created_at, updated_at)` and `photos.root_framing_id → framings SET NULL` (null = as captured). The API embeds `framings` and `root_framing_id` in every photo. See [framing](features/rig-explorer.md).
+
 `views(id, name, filter JSON, …)`: saved dashboard filters (model in `packages/vocab/src/filter.ts`).
 
 `field_definitions(id, key UNIQUE, definition JSON, …)` and `project_fields(project_id, field_id, position)`.
@@ -63,7 +66,7 @@ Add a new numbered file for every change; never edit one that was applied to pro
   "phone_equivalent_focal_mm": 25 }
 ```
 
-`frame` is the rig frame relative to the photo, centred. Fractions > 1 mean the rig saw more than the phone. Everything that draws a frame (dashboard `Framed.tsx`, mobile `FramedImage.tsx`) and the [rig explorer](features/rig-explorer.md) works from it. The framing snapshot also preserves the rig if the preset is deleted later.
+`frame` is the rig frame relative to the photo as captured, centred. Saved framings add a centre (`x`, `y`) and one can be the photo's root ([framing](features/rig-explorer.md)); views use the root. Fractions > 1 mean the rig saw more than the phone. Everything that draws a frame (dashboard `Framed.tsx`, mobile `FramedImage.tsx`) and the [rig explorer](features/rig-explorer.md) works from it. The framing snapshot also preserves the rig if the preset is deleted later.
 
 `device`: phone model, EXIF focal lengths, GPS altitude/heading, `gps_fix_age_ms`.
 

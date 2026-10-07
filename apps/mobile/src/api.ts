@@ -3,7 +3,7 @@ import { getToken, setToken } from "./auth";
 import { API_URL, isConfigured } from "./config";
 import { log } from "./log";
 import { isOfflineMode, markOnline } from "./net";
-import type { Extra, FieldDefinition, Presentation } from "@fielder/vocab";
+import type { Extra, FieldDefinition, Framing, Presentation } from "@fielder/vocab";
 import type { LocationEntry, Preset, ProjectEntry, ShotMetadata, ShotTags } from "./types";
 
 export class ApiError extends Error {
@@ -99,6 +99,10 @@ export interface Photo {
   device: Record<string, unknown> | null;
   /** camera (phone capture), upload or drawn (made on the dashboard: no rig, lens_mm 0). Absent on queued shots = camera. */
   source?: "camera" | "upload" | "drawn";
+  /** Re-framings made on the dashboard (issue #29); absent on queued shots. */
+  framings?: Framing[];
+  /** The framing every view shows; null/absent = as captured. */
+  root_framing_id?: string | null;
   image_url: string;
   created_at: string;
   /** A file on the phone (queued shots, which have no image on the server yet). */

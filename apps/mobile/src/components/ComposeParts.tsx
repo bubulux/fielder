@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Modal, Pressable, ScrollView, Text, useWindowDimensions, View } from "react-native";
 import { Image, type ImageSource } from "expo-image";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { sketchKindLabel } from "@fielder/vocab";
+import { referencedFrame, sketchKindLabel } from "@fielder/vocab";
 import { imageHeaders, renderUri, type Composed, type Overlay, type Photo, type Shot, type Sketch } from "../api";
 import { isOfflineMode } from "../net";
 import { offlineRenderUri } from "../offline";
@@ -77,9 +77,11 @@ export function ComposeViewer({ item, photo, settings, onClose }: { item: Compos
   const landscape = width > height;
   const imgMaxH = height - (landscape ? 110 : 220);
   const source = renderSource(item);
-  const frame = overlay ? overlay.presentation.frame ? { width: overlay.presentation.frame.width_fraction, height: overlay.presentation.frame.height_fraction } : frameOf(photo) : null;
+  // The framing the overlay references (follows its edits), else the frame it kept, else the photo's root.
+  const ref = overlay ? referencedFrame({ framings: photo.framings }, overlay.presentation) : null;
+  const frame = overlay ? (ref ? { width: ref.width_fraction, height: ref.height_fraction, x: ref.x, y: ref.y } : frameOf(photo)) : null;
   const w = overlay
-    ? fitWidth({ ...photo, framing: frame ? { ...(photo.framing ?? {}), frame: { width_fraction: frame.width, height_fraction: frame.height } } : photo.framing }, mode, width, imgMaxH)
+    ? fitWidth({ ...photo, framings: [], root_framing_id: null, framing: frame ? { ...(photo.framing ?? {}), frame: { width_fraction: frame.width, height_fraction: frame.height } } : photo.framing }, mode, width, imgMaxH)
     : Math.max(40, Math.min(width, imgMaxH * (item as Sketch).aspect));
   return (
     <Modal visible animationType="fade" onRequestClose={onClose} statusBarTranslucent navigationBarTranslucent>

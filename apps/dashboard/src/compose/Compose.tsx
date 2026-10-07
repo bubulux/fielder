@@ -8,10 +8,10 @@ import type { ComponentChildren } from "preact";
 import { useEffect, useMemo, useRef, useState, type MutableRef } from "preact/hooks";
 import { COMPOSE_PALETTE, emptyDrawing, lookFilter, NEUTRAL_LOOK, PRESENTATION_MODES, SKETCH_ASPECTS, SKETCH_KIND_LABELS, SKETCH_KINDS, sketchKindLabel, STENCIL_LABELS, STENCILS, type Drawing, type Look, type Presentation, type Shape, type Stencil } from "@fielder/vocab";
 import { deleteOverlay, deleteSketch, fetchOverlay, fetchSketch, patchOverlay, patchSketch, putOverlay, putSketch, type Overlay, type Photo, type Preset, type Shot, type Sketch } from "../api";
-import { frameModeLabel, frameOf, rigLabel } from "../format";
+import { frameModeLabel } from "../format";
 import { Framed, framedLayout } from "../Framed";
 import { useKeys } from "../keys";
-import { AS_SHOT, choiceLabel, frameForChoice, Pickers, type RigChoice } from "../RigExplorer";
+import { FramingSelect, presentationFrame, rootPresentation } from "../FramingSelect";
 import { Button, Chip, Combobox, confirmDialog, cx, Empty, Icon, IconButton, Input, Kbd, MarkdownField, ReorderButtons, SaveStatus, Seg, Switch, toast, ToolbarSpacer, type SaveState } from "../ui";
 import { defaultStyle, DrawSurface, shapeId, TOOLS, WIDTHS, type Style, type TextEdit, type Tool } from "./DrawSurface";
 import type { CanvasRect } from "./geometry";
@@ -53,7 +53,6 @@ export function Compose(p: Props) {
   const [style, setStyle] = useState<Style>(() => defaultStyle(false));
   const [textEdit, setTextEdit] = useState<TextEdit | null>(null);
   const [save, setSave] = useState<SaveState>("idle");
-  const [choice, setChoice] = useState<RigChoice>({ rig: AS_SHOT, lensMm: photo.lens_mm });
   const dirty = !!doc && !same(doc, saved);
   const docRef = useRef(doc); docRef.current = doc;
   const dirtyRef = useRef(dirty); dirtyRef.current = dirty;
@@ -80,7 +79,6 @@ export function Compose(p: Props) {
   function openDoc(d: Doc) {
     setDoc(d); setSaved(d.isNew ? null : d); setHistory({ past: [], future: [] }); setSelected(null); setTextEdit(null); setSave("idle");
     setStyle((s) => ({ ...s, color: d.kind === "sketch" ? (s.color === "#FFD60A" ? "#0B0B0C" : s.color) : s.color === "#0B0B0C" ? "#FFD60A" : s.color }));
-    if (d.kind === "overlay") setChoice({ rig: d.presentation.rig_id ?? AS_SHOT, lensMm: d.presentation.lens_mm ?? photo.lens_mm });
   }
   async function open(kind: "overlay" | "sketch", id: string) {
     if (doc?.id === id) return;
@@ -101,7 +99,7 @@ export function Compose(p: Props) {
     if (kind === "overlay") {
       const n = overlays.length + 1;
       openDoc({ kind, id: crypto.randomUUID(), photoId: photo.id, name: `Overlay ${n}`, description: "", shapes: [], look: { ...NEUTRAL_LOOK }, position: overlays.length,
-        presentation: { mode: p.mode, frame: frameOf(photo), label: rigLabel(photo), rig_id: null, lens_mm: photo.lens_mm || null }, isNew: true });
+        presentation: { mode: p.mode, ...rootPresentation(photo) }, isNew: true });
     } else {
       const n = shot.sketches.length + 1;
       openDoc({ kind, id: crypto.randomUUID(), name: `Sketch ${n}`, sketchKind: null, description: "", shapes: [], aspect: 16 / 9, position: shot.sketches.length, isNew: true });
@@ -209,22 +207,17 @@ export function Compose(p: Props) {
 
   // ----- presentation (overlay) -----
   const setPresentation = (patch: Partial<Presentation>) => setDoc((d) => (d && d.kind === "overlay" ? { ...d, presentation: { ...d.presentation, ...patch } } : d));
-  const pickChoice = (c: RigChoice) => {
-    setChoice(c);
-    const frame = frameForChoice(photo, p.presets, c) ?? frameOf(photo);
-    setPresentation({ frame, label: choiceLabel(photo, p.presets, c), rig_id: c.rig === AS_SHOT ? null : c.rig, lens_mm: c.lensMm || null });
-  };
   const setLook = (patch: Partial<Look>) => setDoc((d) => (d && d.kind === "overlay" ? { ...d, look: { ...d.look, ...patch } } : d));
 
   // ----- surface geometry -----
-  const layout = doc?.kind === "overlay" ? framedLayout(photo, doc.presentation.mode, doc.presentation.frame) : null;
+  const layout = doc?.kind === "overlay" ? framedLayout(photo, doc.presentation.mode, presentationFrame(photo, doc.presentation)) : null;
   const aspect = doc?.kind === "sketch" ? doc.aspect : layout?.aspect ?? 4 / 3;
   const canvasOf = (w: number, h: number): CanvasRect => (layout ? { x: (layout.img.left / 100) * w, y: (layout.img.top / 100) * h, w: (layout.img.width / 100) * w, h: (layout.img.height / 100) * h } : { x: 0, y: 0, w, h });
   const background = (size: { w: number; h: number }, c: CanvasRect): ComponentChildren => {
     if (!doc || doc.kind !== "overlay" || !layout) return null;
     const look = doc.look;
     return (
-      <Framed photo={photo} mode={doc.presentation.mode} frame={doc.presentation.frame} className="compose__photo" imgStyle={{ filter: lookFilter(look, c.w * BLUR_FRACTION) }}>
+      <Framed photo={photo} mode={doc.presentation.mode} frame={presentationFrame(photo, doc.presentation)} className="compose__photo" imgStyle={{ filter: lookFilter(look, c.w * BLUR_FRACTION) }}>
         {look.tint && look.tint_opacity > 0 && <div class="compose__layer" style={{ ...pct(layout.img), background: look.tint, opacity: look.tint_opacity }} />}
         {look.vignette > 0 && <div class="compose__layer" style={{ ...pct(layout.img), background: vignetteCss(look.vignette) }} />}
       </Framed>
@@ -338,7 +331,7 @@ export function Compose(p: Props) {
                   <div class="f-sec">
                     <div class="f-sec__head"><Icon name="vector-rectangle" />Presentation<span class="f-sec__aside">default view of this overlay</span></div>
                     <Seg label="Frame mode" value={doc.presentation.mode} onChange={(m) => setPresentation({ mode: m })} options={PRESENTATION_MODES.map((m) => ({ id: m, label: frameModeLabel(m) }))} />
-                    {photo.source === "camera" && <div class="btn-row" style={{ gap: "6px" }}><Pickers photo={photo} presets={p.presets} choice={choice} onChoice={pickChoice} /></div>}
+                    {photo.source === "camera" && <FramingSelect photo={photo} value={doc.presentation} onChange={setPresentation} />}
                     <span class="meta">The drawing stays in place in every mode and rig; this is only how it opens.</span>
                   </div>
                   <div class="f-sec">

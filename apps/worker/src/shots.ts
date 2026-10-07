@@ -1,5 +1,6 @@
 import { CAMERA_SUPPORTS, INT_EXT, isOneOf, LIGHT, PHOTO_SOURCES, MAX_DESCRIPTION, MOVEMENTS, patchExtra, pruneExtra, SHOT_SIZES, SHOT_STATES, validateExtra, validateValues, WEATHER, type Extra, type FieldDef } from "@fielder/vocab";
 import { composeFor, renderKeysOf, type OverlayApi, type SketchApi } from "./compose.ts";
+import { framingsFor, type FramingApi } from "./framings.ts";
 import { projectFieldDefs } from "./fields.ts";
 import { assertEnum, assertIsoTimestamp, assertNumber, assertString, assertUuid, HttpError, json, readJson, type Router } from "./http.ts";
 import type { Ctx } from "./index.ts";
@@ -48,6 +49,7 @@ interface PhotoRow {
   framing: string | null;
   device: string | null;
   source: string;
+  root_framing_id: string | null;
   created_at: string;
 }
 
@@ -64,7 +66,7 @@ function objectKey(photoId: string, contentType: string): string {
 
 const parseJson = <T>(s: string | null): T | null => (s ? (JSON.parse(s) as T) : null);
 
-function photoToApi(p: PhotoRow) {
+function photoToApi(p: PhotoRow, framings: Map<string, FramingApi[]>) {
   return {
     id: p.id,
     shot_id: p.shot_id,
@@ -82,12 +84,20 @@ function photoToApi(p: PhotoRow) {
     framing: parseJson<Record<string, unknown>>(p.framing),
     device: parseJson<Record<string, unknown>>(p.device),
     source: p.source ?? "camera",
+    /** Saved re-framings (issue #29) and the one every view shows; null = as captured. */
+    framings: framings.get(p.id) ?? [],
+    root_framing_id: p.root_framing_id ?? null,
     image_url: `/api/photos/${p.id}/image`,
     created_at: p.created_at,
   };
 }
 
-type Compose = Awaited<ReturnType<typeof composeFor>>;
+type Compose = Awaited<ReturnType<typeof composeFor>> & { framings: Map<string, FramingApi[]> };
+/** Overlays, sketches and framings of these shots in one go. */
+async function extrasFor(env: Ctx["env"], ids: string[]): Promise<Compose> {
+  const [c, framings] = await Promise.all([composeFor(env, ids), framingsFor(env, ids)]);
+  return { ...c, framings };
+}
 
 function shotToApi(s: ShotRow, photos: PhotoRow[], compose: Compose) {
   return {
@@ -113,7 +123,7 @@ function shotToApi(s: ShotRow, photos: PhotoRow[], compose: Compose) {
     captured_at: s.captured_at,
     created_at: s.created_at,
     updated_at: s.updated_at,
-    photos: photos.map(photoToApi),
+    photos: photos.map((p) => photoToApi(p, compose.framings)),
     overlays: (compose.overlays.get(s.id) ?? []) as OverlayApi[],
     sketches: (compose.sketches.get(s.id) ?? []) as SketchApi[],
   };
@@ -137,7 +147,7 @@ async function photosFor(env: Ctx["env"], shotIds: string[]): Promise<Map<string
 export async function loadShot(env: Ctx["env"], id: string) {
   const row = await env.DB.prepare(`${SHOT_SQL} WHERE s.id = ?1`).bind(id).first<ShotRow>();
   if (!row) return null;
-  return shotToApi(row, (await photosFor(env, [id])).get(id) ?? [], await composeFor(env, [id]));
+  return shotToApi(row, (await photosFor(env, [id])).get(id) ?? [], await extrasFor(env, [id]));
 }
 
 /**
@@ -262,7 +272,7 @@ export function registerShotRoutes(r: Router<Ctx>) {
     args.push(limit);
     const { results } = await env.DB.prepare(`${SHOT_SQL}${where.length ? ` WHERE ${where.join(" AND ")}` : ""} ORDER BY s.captured_at DESC, s.id DESC LIMIT ?${args.length}`).bind(...args).all<ShotRow>();
     const ids = results.map((s) => s.id);
-    const [photos, compose] = await Promise.all([photosFor(env, ids), composeFor(env, ids)]);
+    const [photos, compose] = await Promise.all([photosFor(env, ids), extrasFor(env, ids)]);
     const last = results.at(-1);
     return json({
       shots: results.map((s) => shotToApi(s, photos.get(s.id) ?? [], compose)),
@@ -482,7 +492,7 @@ export function registerShotRoutes(r: Router<Ctx>) {
     await env.DB.batch(stmts);
 
     const { results } = await env.DB.prepare(`${SHOT_SQL} WHERE s.id IN (SELECT value FROM json_each(?1))`).bind(list).all<ShotRow>();
-    const [photos, compose] = await Promise.all([photosFor(env, ids), composeFor(env, ids)]);
+    const [photos, compose] = await Promise.all([photosFor(env, ids), extrasFor(env, ids)]);
     return json({ shots: results.map((s) => shotToApi(s, photos.get(s.id) ?? [], compose)) });
   });
 

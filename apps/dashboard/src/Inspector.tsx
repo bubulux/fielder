@@ -228,6 +228,7 @@ export function Inspector({ shot, photo, projects, fields, locations, onLocation
           ) : (
           <dl class="f-facts">
             <dt>Rig</dt><dd>{[photo.preset_name ?? (f.preset_name as string | undefined) ?? "deleted / unsynced", rigDescription(photo)].filter(Boolean).join(" · ")}</dd>
+            <dt>Frame</dt><dd>{photo.framings.find((f) => f.id === photo.root_framing_id)?.name ?? "As captured"}{photo.framings.length ? <span class="meta"> · {photo.framings.length} framing{photo.framings.length === 1 ? "" : "s"}</span> : null}</dd>
             <dt>Lens</dt><dd>{photo.lens_mm} mm{typeof f.full_frame_equivalent_mm === "number" ? ` · FF ${f.full_frame_equivalent_mm} mm` : ""}</dd>
             <dt>FOV</dt><dd>{fovLabel(photo).replace(/^[^·]*mm FF-eq · /, "") || "n/a"}{typeof f.rig_orientation === "string" ? ` · ${f.rig_orientation}` : ""}</dd>
             <dt>Time</dt><dd>{new Date(photo.timestamp).toLocaleTimeString()}</dd>
