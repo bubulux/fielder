@@ -45,7 +45,7 @@ The shot view (`ShotView.tsx`) replaces the old dialog. It covers the main area 
     - Extra fields: saved 0.7 s after the last change.
   - **Description**: a Markdown field ([compose](compose.md)), saved 0.7 s after the last edit or on leaving it.
   - **Compose**: the names of the shot's overlays and sketches, with Open (`C`).
-  - **Position** of the photo on stage, with "Correct". A photo captured without GPS says "No position · captured without GPS" and offers "Set position" (the same map stage, starting at another photo of the shot or Berlin).
+  - **Position** of the photo on stage, with "Correct", and the switch "Use the location's position" ([positions](positions.md)). A photo captured without GPS says "No position · captured without GPS" and offers "Set position" (the same map stage, starting at another photo of the shot or Berlin).
   - **Shot**: captured, photos, uploaded, the **shooting days** it is planned on (link to Plan) and the **timelines** it is cut into (link to Timeline).
   - **Camera** of the photo on stage: rig, body, format, sensor, lens + FF-equivalent, FOV, time, GPS accuracy, fix age and altitude, phone.
   - **Raw metadata**: collapsed, with Copy.

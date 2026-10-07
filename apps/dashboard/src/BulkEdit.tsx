@@ -41,6 +41,7 @@ function columns(projects: Project[], locations: Location[], defs: readonly Fiel
     { id: "int_ext", label: "INT/EXT", get: (s) => s.int_ext, text: (v) => label(v as string).toUpperCase(), nullable: true },
     { id: "light", label: "Light", get: (s) => s.light, text: (v) => lightLabel(v as string[], false), nullable: true },
     { id: "artificial", label: "Artificial light", get: (s) => s.artificial, text: (v) => (v ? "Yes" : "No"), nullable: false },
+    { id: "position_from_location", label: "Position", get: (s) => s.position_from_location, text: (v) => (v ? "From location" : "Own"), nullable: false },
     { id: "weather", label: "Weather", get: (s) => s.weather, text: (v) => label(v as string), nullable: true },
     { id: "shot_size", label: "Shot size", get: (s) => s.shot_size, text: sizeText, nullable: true },
     { id: "camera_support", label: "Camera support", get: (s) => s.camera_support, text: (v) => label(v as string), nullable: true },
@@ -255,6 +256,9 @@ export function BulkEditPanel({ shots, draft, onDraft, projects, locations, onLo
             {field(col("artificial"),
               <Seg label="Artificial light" value={typeof artificial === "boolean" ? (artificial ? "yes" : "no") : "mixed"} onChange={(v) => set("artificial", v === "yes")}
                 options={[{ id: "yes", label: "Yes" }, { id: "no", label: "No" }]} />)}
+            {field(col("position_from_location"),
+              <Seg label="Position" value={typeof shown(col("position_from_location")) === "boolean" ? (shown(col("position_from_location")) ? "location" : "own") : "mixed"} onChange={(v) => set("position_from_location", v === "location")}
+                options={[{ id: "own", label: "Own (photo GPS)" }, { id: "location", label: "From location" }]} />)}
             {field(col("weather"),
               <Combobox small options={WEATHER.map((v) => ({ value: v, label: label(v) }))} value={(shown(col("weather")) as string | null) ?? null} placeholder={mixedHint(col("weather"))} onChange={(v) => set("weather", v)} />)}
             {field(col("shot_size"),

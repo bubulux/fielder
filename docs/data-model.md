@@ -12,6 +12,7 @@ D1 (SQLite) database `fielder-db`, schema in `apps/worker/migrations/`. Images l
 | `0004_shooting_days.sql` | `shooting_days`, `day_shots` |
 | `0005_capture_flow.sql` | `shots.shot_size`, `camera_support`, `movement`; `photos` rebuilt with nullable `lat`/`lon` (copied row by row, both or neither set) |
 | `0006_compose.sql` | `shots.description`; `overlays`, `sketches` ([compose](features/compose.md)) |
+| `0008_location_positions.sql` | `locations.lat`, `lon`; `shots.position_from_location` ([positions](features/positions.md)) |
 | `0007_timelines.sql` | `timelines`, `timeline_clips` ([timeline](features/timeline.md)) |
 
 Add a new numbered file for every change; never edit one that was applied to production. Apply with `pnpm -C apps/worker migrate:local` / `migrate:remote` (see [development](development.md)).
@@ -22,7 +23,7 @@ Add a new numbered file for every change; never edit one that was applied to pro
 
 `presets(id, name, camera_id, format_id, sensor_width_mm, sensor_height_mm, speedbooster_factor, lens_min_mm, lens_max_mm, created_at, updated_at)`: rigs. Sensor dimensions are the source of truth for the math; `camera_id`/`format_id` refer to `packages/fov-math/src/cameras.ts` (null = custom sensor).
 
-`locations(id, name UNIQUE NOCASE, created_at, updated_at)`: shared by all projects. No district (removed in the rework).
+`locations(id, name UNIQUE NOCASE, lat, lon, created_at, updated_at)`: shared by all projects. `lat`/`lon` is the location's pin (null = none). No district (removed in the rework).
 
 `shots(id, project_id → projects RESTRICT, location_id → locations SET NULL, name, int_ext, light JSON array, artificial 0/1, weather, shot_size, camera_support, movement JSON array, state, extra JSON object, description, captured_at, created_at, updated_at)`
 - `state`: `unreviewed` (on upload) → `approved` / `archived`.
@@ -31,6 +32,7 @@ Add a new numbered file for every change; never edit one that was applied to pro
 - `artificial`: lit artificially, independent of phases and INT/EXT.
 - `captured_at`: earliest photo timestamp; recomputed when photos are added. Lists sort and paginate on `(captured_at, id)`.
 - `extra`: values of the project's extra fields ([extra fields](features/extra-fields.md)).
+- `position_from_location` 0/1: maps use the location's pin instead of the photos' GPS (the photos keep theirs). The API adds `location_position: { lat, lon } | null` from the join.
 - `description`: Markdown subset (`packages/vocab/src/markdown.ts`), max 20 000 characters.
 
 `photos(id, shot_id → shots CASCADE, ordinal UNIQUE per shot, timestamp, lat, lon (both NULL when captured without GPS), gps_accuracy_m, position_corrected, preset_id → presets SET NULL, lens_mm, r2_object_key UNIQUE, width, height, framing JSON, device JSON, created_at)`

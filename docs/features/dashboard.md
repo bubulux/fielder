@@ -27,7 +27,7 @@ Designed in Claude Design (2026-09-28): four sections plus a shot view, a sideba
 | Library › Projects | `Projects.tsx` | [Projects](projects.md): list with counts, detail with name, notes and ordered extra fields |
 | Library › Fields | `Fields.tsx` | [Extra fields](extra-fields.md): list, JSON editor, live preview |
 | Library › Rigs | `Rigs.tsx` | Rig table (body, format, sensor, speedbooster, lens range, shots) and an editor panel |
-| Library › Locations | `Locations.tsx` | Filterable table, inline rename (F2), counts that open Shots filtered to the location, show on map, delete |
+| Library › Locations | `Locations.tsx` | Filterable table, inline rename (F2), the pin (Set position `P`, a map dialog with the location's shots, see [positions](positions.md)), counts that open Shots filtered to the location, show on map, delete |
 
 ## Shots
 

@@ -30,3 +30,10 @@ Three **GPS modes** (Setup → Capture → GPS, `settings.gpsMode`, default High
 - API: `PATCH /api/photos/:id { lat, lon, all_in_shot }`. It sets `photos.position_corrected = 1`, keeps the original `gps_accuracy_m`, and the UI shows "corrected" instead of the accuracy.
 
 Maps use the cover photo's position for a shot (dashboard Shots › Map, `MapView.tsx`; phone Shots › Map and Show on map, `screens/Shots.tsx`, `ShotDetails.tsx`).
+
+## Location positions and synced shots ([issue #19](https://github.com/bubulux/fielder/issues/19))
+
+- A **location** can have a pin (`locations.lat`, `lon`). Set it in Library › Locations → Set position (`P`, or click the coordinates): a map dialog with a draggable pin, the location's shots drawn as dots at their **own** positions for orientation (amber = synced to the location, title on hover), Save position and Remove pin. Without a pin the map opens at the centre of those shots (else Berlin). The table shows the pin and how many shots are synced.
+- A **shot** can take its position from its location: `shots.position_from_location`. Set it in the inspector's Position section ("Use the location's position") or for many shots at once in bulk edit (Position: Own (photo GPS) · From location). It is a reference: the photos keep their GPS, and switching back restores it. Moving the location pin moves every synced shot.
+- `positionOf()` (both clients) uses the location's pin when the shot is synced **and** the location has one; otherwise the shot's own position. Every map, "Show on map", the Has-position filter and the daylight centre of Plan and Day go through it. A synced shot without a location, or whose location has no pin, keeps its own position.
+- The phone shows synced positions but cannot change the flag or the pin. A location rename from the phone (PUT with only `name`) keeps the pin.

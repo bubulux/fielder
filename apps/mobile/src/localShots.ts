@@ -35,6 +35,8 @@ export function queuedToShot(entry: PendingUpload): Shot {
     state: m.state ?? "unreviewed",
     extra: m.extra ?? {},
     description: null,
+    position_from_location: false,
+    location_position: null,
     captured_at: at,
     created_at: at,
     updated_at: null,

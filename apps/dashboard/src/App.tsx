@@ -249,7 +249,7 @@ export function App() {
       main = <RigsPage presets={presets!} shots={shots!} onChange={setPresets} selectedId={sel} onSelect={setSel} />;
       hints = [{ k: "J/K", t: "Move" }, { k: "↵", t: "Edit" }, { k: "⌘S", t: "Save rig" }, { k: "Esc", t: "Close editor" }];
     } else {
-      main = <LocationsPage locations={locations!} onChange={setLocations} onShotsChanged={() => void fetchAllShots().then(setShots).catch(() => {})} onShowShots={showLocationShots} />;
+      main = <LocationsPage locations={locations!} shots={shots!} onChange={setLocations} onShotsChanged={() => void fetchAllShots().then(setShots).catch(() => {})} onShowShots={showLocationShots} />;
       hints = [{ k: "J/K", t: "Move" }, { k: "F2", t: "Rename" }, { k: "↵", t: "Show shots" }, { k: "Del", t: "Delete" }, { k: "/", t: "Filter" }];
     }
   } else {

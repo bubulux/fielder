@@ -17,8 +17,16 @@ export const shotTitle = (s: Shot): string => s.name?.trim() || rigLabel(cover(s
 export const placeLabel = (s: Shot): string => s.location_name ?? "";
 export const tagsLabel = (s: Shot): string =>
   [label(s.int_ext), lightLabel(s.light, s.artificial), label(s.weather), cameraLabel(s), extraLabel(s.extra)].filter(Boolean).join(" · ");
-/** Where a shot is on a map: the cover photo, else the first photo with a position; null when none has one (GPS off). */
+/**
+ * Where a shot is on a map: the location's pin when the shot is synced to it (and the pin is set),
+ * else its own position. Null when there is none.
+ */
 export function positionOf(s: Shot): { lat: number; lon: number } | null {
+  if (s.position_from_location && s.location_position) return s.location_position;
+  return ownPositionOf(s);
+}
+/** The shot's own position: the cover photo, else the first photo with a position; null when none has one (GPS off). */
+export function ownPositionOf(s: Shot): { lat: number; lon: number } | null {
   const p = [cover(s), ...s.photos].find((x) => x.lat !== null && x.lon !== null);
   return p ? { lat: p.lat!, lon: p.lon! } : null;
 }

@@ -4,7 +4,7 @@ import { CAMERA_SUPPORTS, cameraLabel, INT_EXT, label, lightLabel, MOVEMENTS, SH
 import { existingIdOf, fetchDays, fetchTimelines, patchShot, putLocation, type Location, type Photo, type Project, type Shot, type ShootingDay, type ShotState, type Timeline } from "./api";
 import { ExtraEditor } from "./ExtraEditor";
 import { coords, fovLabel, placeLabel, rigDescription, shotTitle } from "./format";
-import { Button, Chip, Combobox, Icon, Input, LightChips, MarkdownField, SaveStatus, Seg, StateMarker, type SaveState } from "./ui";
+import { Button, Chip, Combobox, Icon, Input, LightChips, MarkdownField, SaveStatus, Seg, StateMarker, Switch, type SaveState } from "./ui";
 
 // Shooting days per project, fetched on demand for the "Days" fact and the move warning.
 const daysCache = new Map<string, Promise<ShootingDay[]>>();
@@ -194,6 +194,10 @@ export function Inspector({ shot, photo, projects, fields, locations, onLocation
 
         <div class="f-sec">
           <div class="f-sec__head"><Icon name="crosshairs-gps" />Position<span class="f-sec__aside"><Button kind="secondary" size="sm" style={{ height: "26px" }} onClick={onCorrect}>{photo.lat === null ? "Set position" : "Correct"}</Button></span></div>
+          <Switch on={shot.position_from_location} onClick={() => void patch({ position_from_location: !shot.position_from_location })}>Use the location’s position</Switch>
+          {shot.position_from_location && (
+            <span class="f-field__help">{!shot.location_id ? "No location set: the shot keeps its own position." : shot.location_position ? `Maps use ${shot.location_name}: ${shot.location_position.lat.toFixed(5)}, ${shot.location_position.lon.toFixed(5)}. The photos keep their GPS below.` : `${shot.location_name} has no pin yet (Library › Locations). The shot keeps its own position until then.`}</span>
+          )}
           <dl class="f-facts">
             <dt>{shot.photos.length > 1 ? `Photo ${photo.ordinal + 1}` : "Photo"}</dt>
             <dd>{photo.lat === null ? <span class="meta">No position · captured without GPS</span>

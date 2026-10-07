@@ -44,6 +44,10 @@ export interface Shot {
   extra: Extra;
   /** Markdown subset (packages/vocab markdown.ts). */
   description: string | null;
+  /** Maps and filters use the location's pin instead of the photos' GPS (the photos keep theirs). */
+  position_from_location: boolean;
+  /** The location's pin, null when it has none. */
+  location_position: { lat: number; lon: number } | null;
   captured_at: string;
   created_at: string;
   updated_at: string | null;
@@ -83,6 +87,9 @@ export interface Preset {
 export interface Location {
   id: string;
   name: string;
+  /** The location's pin; both null when none is set. */
+  lat: number | null;
+  lon: number | null;
   created_at: string;
   updated_at: string | null;
   shot_count: number;
@@ -92,7 +99,7 @@ export interface SavedView { id: string; name: string; filter: FilterGroup; crea
 /** null / [] / false = not specified. */
 export interface ShotTags {
   name: string | null; light: string[]; artificial: boolean; weather: string | null; int_ext: string | null; location_id: string | null; extra: Extra;
-  shot_size: string | null; camera_support: string | null; movement: string[]; description: string | null;
+  shot_size: string | null; camera_support: string | null; movement: string[]; description: string | null; position_from_location: boolean;
 }
 
 export class ApiError extends Error {
@@ -213,8 +220,8 @@ export const deleteSketch = (id: string) => send<{ deleted: string; shot: Shot }
 
 export const fetchLocations = () => get<{ locations: Location[] }>("/api/locations").then((r) => r.locations);
 /** Upsert; a 409 carries body.existing_id when another location already has the name. */
-export const putLocation = (l: { id: string; name: string }) =>
-  send<{ location: Location }>("PUT", `/api/locations/${l.id}`, { name: l.name }).then((r) => r.location);
+export const putLocation = (l: { id: string; name: string; lat?: number | null; lon?: number | null }) =>
+  send<{ location: Location }>("PUT", `/api/locations/${l.id}`, l.lat === undefined ? { name: l.name } : { name: l.name, lat: l.lat, lon: l.lon }).then((r) => r.location);
 export const deleteLocation = (id: string) => send<{ deleted: string }>("DELETE", `/api/locations/${id}`).then(() => undefined);
 
 export const fetchViews = () => get<{ views: SavedView[] }>("/api/views").then((r) => r.views);
