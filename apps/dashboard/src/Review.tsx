@@ -23,6 +23,7 @@ interface Props {
   onDeleted: (id: string) => void;
   onShowOnMap: (s: Shot) => void;
   onOpenDay: (projectId: string, dayId: string) => void;
+  onOpenTimeline: (projectId: string, timelineId: string) => void;
   onBrowseApproved: () => void;
   onPlan: () => void;
 }
@@ -63,6 +64,6 @@ export function ReviewPage(p: Props) {
   return (
     <ShotView shot={current} list={queue} onNavigate={(s) => setCurrentId(s.id)} context={{ kind: "review", total: queue.length, newestFirst, onOrder: toggleOrder }} stage={p.stage} onStage={p.onStage}
       mode={p.mode} onMode={p.onMode} projects={p.projects} presets={p.presets} fieldsOf={p.fieldsOf} locations={p.locations} onLocations={p.onLocations}
-      onUpdated={p.onUpdated} onDeleted={p.onDeleted} onShowOnMap={p.onShowOnMap} onOpenDay={p.onOpenDay} />
+      onUpdated={p.onUpdated} onDeleted={p.onDeleted} onShowOnMap={p.onShowOnMap} onOpenDay={p.onOpenDay} onOpenTimeline={p.onOpenTimeline} />
   );
 }

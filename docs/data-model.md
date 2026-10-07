@@ -12,6 +12,7 @@ D1 (SQLite) database `fielder-db`, schema in `apps/worker/migrations/`. Images l
 | `0004_shooting_days.sql` | `shooting_days`, `day_shots` |
 | `0005_capture_flow.sql` | `shots.shot_size`, `camera_support`, `movement`; `photos` rebuilt with nullable `lat`/`lon` (copied row by row, both or neither set) |
 | `0006_compose.sql` | `shots.description`; `overlays`, `sketches` ([compose](features/compose.md)) |
+| `0007_timelines.sql` | `timelines`, `timeline_clips` ([timeline](features/timeline.md)) |
 
 Add a new numbered file for every change; never edit one that was applied to production. Apply with `pnpm -C apps/worker migrate:local` / `migrate:remote` (see [development](development.md)).
 
@@ -43,6 +44,8 @@ Add a new numbered file for every change; never edit one that was applied to pro
 `field_definitions(id, key UNIQUE, definition JSON, …)` and `project_fields(project_id, field_id, position)`.
 
 `shooting_days(id, project_id → CASCADE, date YYYY-MM-DD, title, notes, …)` and `day_shots(day_id, shot_id, position, planned_time HH:MM, notes)`.
+
+`timelines(id, project_id → projects CASCADE, name, notes, created_at, updated_at)` and `timeline_clips(id, timeline_id → CASCADE, position, photo_id → photos CASCADE, overlay_id → overlays SET NULL, presentation JSON, duration_ms 100..3600000, notes)`. See [timeline](features/timeline.md).
 
 ## JSON shapes on photos
 

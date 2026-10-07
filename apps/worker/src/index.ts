@@ -13,6 +13,7 @@ import { registerLocationRoutes } from "./locations.ts";
 import { registerPresetRoutes } from "./presets.ts";
 import { registerProjectRoutes } from "./projects.ts";
 import { registerShotRoutes } from "./shots.ts";
+import { registerTimelineRoutes } from "./timelines.ts";
 import { registerViewRoutes } from "./views.ts";
 
 export interface Env {
@@ -62,6 +63,7 @@ registerLocationRoutes(router);
 registerShotRoutes(router);
 registerViewRoutes(router);
 registerComposeRoutes(router);
+registerTimelineRoutes(router);
 
 async function authenticate(request: Request, env: Env): Promise<AccessIdentity> {
   if (env.ACCESS_DEV_BYPASS === "true") return { email: "dev@localhost", kind: "user" };

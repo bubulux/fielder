@@ -63,6 +63,7 @@ export function Sidebar({ route, rail, onToggle, scope, projects, views, editedV
       {nav("shots", "view-grid-outline", "Shots", { page: "shots", viewId: null }, counts.shots)}
       {nav("review", "checkbox-marked-outline", "Review", { page: "review" }, counts.unreviewed, true)}
       {nav("plan", "calendar-clock", "Plan", { page: "plan", dayId: null })}
+      {nav("timeline", "filmstrip", "Timeline", { page: "timeline", timelineId: null })}
       {nav("library", "bookshelf", "Library", { page: "library", section: lib ?? "projects", id: null })}
       {!rail && section === "library" && (
         <>
