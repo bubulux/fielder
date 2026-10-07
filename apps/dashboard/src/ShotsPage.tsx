@@ -41,6 +41,8 @@ interface Props {
   fieldsOf: (projectId: string) => FieldDef[];
   onReload: () => void;
   onSwitchScope: () => void;
+  /** Open the New shot dialog (upload images or draw). */
+  onNewShot: () => void;
 }
 
 const SORTS: { id: Sort; label: string }[] = [{ id: "newest", label: "Newest first" }, { id: "oldest", label: "Oldest first" }, { id: "name", label: "Name A–Z" }];
@@ -58,6 +60,7 @@ export function ShotsPage(p: Props) {
   useKeys({
     "/": () => search.current?.focus(),
     f: () => p.onPanel(!p.panel),
+    "Shift+N": () => p.onNewShot(),
     Escape: (e) => { if (e.target === search.current) { search.current?.blur(); return; } return false; },
   });
 
@@ -98,6 +101,7 @@ export function ShotsPage(p: Props) {
           </div>
         )}
         <ToolbarSpacer />
+        <Button size="sm" icon="plus" kbd="⇧N" title="New shot: upload images or draw a sketch" onClick={p.onNewShot}>New shot</Button>
         <SearchInput inputRef={search} value={query.search} placeholder="Name or location" aria-label="Search shots" onInput={(e) => setQuery({ search: (e.target as HTMLInputElement).value })}
           after={query.search ? <IconButton icon="close" label="Clear search" style={{ height: "24px", width: "24px", marginRight: "4px" }} onClick={() => setQuery({ search: "" })} /> : undefined} />
         <Button kind={p.panel ? "primary" : "secondary"} size="sm" icon="filter-variant" kbd={rules > 0 && rules} aria-pressed={p.panel} onClick={() => p.onPanel(!p.panel)}>Filter</Button>
@@ -118,6 +122,7 @@ export function ShotsPage(p: Props) {
           </div>
         )}
         <ToolbarSpacer />
+        <Button size="sm" icon="plus" kbd="⇧N" title="New shot: upload images or draw a sketch" onClick={p.onNewShot}>New shot</Button>
         <span class="meta num">{resultLine}</span>
         <div class="menu-anchor">
           <Button kind="ghost" size="sm" iconAfter="chevron-down" aria-expanded={menu === "sort"} onClick={() => setMenu(menu === "sort" ? null : "sort")}>{SORTS.find((s) => s.id === query.sort)?.label}</Button>

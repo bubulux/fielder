@@ -1,5 +1,5 @@
 /** Same-origin API; the Access session cookie is sent automatically. */
-import type { Drawing, Extra, FieldDef, FieldDefinition, FilterGroup, Presentation } from "@fielder/vocab";
+import type { PhotoSource, Drawing, Extra, FieldDef, FieldDefinition, FilterGroup, Presentation } from "@fielder/vocab";
 export type { FieldDefinition };
 export type ShotState = "unreviewed" | "approved" | "archived";
 
@@ -22,6 +22,8 @@ export interface Photo {
   height: number | null;
   framing: Record<string, unknown> | null;
   device: Record<string, unknown> | null;
+  /** camera = captured on the phone (rig framing); upload / drawn = made on the dashboard, no rig or lens (lens_mm 0). */
+  source: PhotoSource;
   image_url: string;
   created_at: string;
 }
@@ -202,6 +204,19 @@ export const putPreset = (p: Omit<Preset, "created_at" | "updated_at">) =>
   }).then((r) => r.preset);
 export const deletePreset = (id: string) => send<{ deleted: string }>("DELETE", `/api/presets/${id}`).then(() => undefined);
 
+/** A shot made on the dashboard (issue #27): images uploaded or drawn here, sent like a phone upload. */
+export interface NewShotPhoto { id: string; blob: Blob; width: number; height: number; source: "upload" | "drawn"; timestamp: string }
+export async function createShot(m: { id: string; project_id: string; name: string | null; location_id: string | null; state: ShotState; description: string | null }, photos: NewShotPhoto[]): Promise<Shot> {
+  const form = new FormData();
+  form.append("metadata", JSON.stringify({
+    ...m, light: [], artificial: false, movement: [], extra: {},
+    photos: photos.map((p, i) => ({ id: p.id, ordinal: i, timestamp: p.timestamp, source: p.source, width: p.width, height: p.height, lat: null, lon: null })),
+  }));
+  for (const p of photos) form.append(`photo.${p.id}`, p.blob, `${p.id}.${p.blob.type === "image/png" ? "png" : "jpg"}`);
+  const r = await request<{ shot: Shot }>("/api/shots", { method: "POST", body: form });
+  // The upload keeps tags of an existing shot; a description is set with a follow-up PATCH.
+  return m.description ? patchShot(r.shot.id, { description: m.description }) : r.shot;
+}
 export const deleteShot = (id: string) => send<{ deleted: string }>("DELETE", `/api/shots/${id}`).then(() => undefined);
 export const patchShot = (id: string, patch: Partial<ShotTags> & { state?: ShotState; project_id?: string }) => send<{ shot: Shot }>("PATCH", `/api/shots/${id}`, patch).then((r) => r.shot);
 export type BulkSet = Partial<Omit<ShotTags, "extra">> & { state?: ShotState; project_id?: string };

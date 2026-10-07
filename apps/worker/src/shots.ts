@@ -1,4 +1,4 @@
-import { CAMERA_SUPPORTS, INT_EXT, isOneOf, LIGHT, MAX_DESCRIPTION, MOVEMENTS, patchExtra, pruneExtra, SHOT_SIZES, SHOT_STATES, validateExtra, validateValues, WEATHER, type Extra, type FieldDef } from "@fielder/vocab";
+import { CAMERA_SUPPORTS, INT_EXT, isOneOf, LIGHT, PHOTO_SOURCES, MAX_DESCRIPTION, MOVEMENTS, patchExtra, pruneExtra, SHOT_SIZES, SHOT_STATES, validateExtra, validateValues, WEATHER, type Extra, type FieldDef } from "@fielder/vocab";
 import { composeFor, renderKeysOf, type OverlayApi, type SketchApi } from "./compose.ts";
 import { projectFieldDefs } from "./fields.ts";
 import { assertEnum, assertIsoTimestamp, assertNumber, assertString, assertUuid, HttpError, json, readJson, type Router } from "./http.ts";
@@ -47,6 +47,7 @@ interface PhotoRow {
   height: number | null;
   framing: string | null;
   device: string | null;
+  source: string;
   created_at: string;
 }
 
@@ -80,6 +81,7 @@ function photoToApi(p: PhotoRow) {
     height: p.height,
     framing: parseJson<Record<string, unknown>>(p.framing),
     device: parseJson<Record<string, unknown>>(p.device),
+    source: p.source ?? "camera",
     image_url: `/api/photos/${p.id}/image`,
     created_at: p.created_at,
   };
@@ -204,7 +206,7 @@ function optionalJson(v: unknown, field: string): string | null {
 
 interface PhotoInput {
   id: string; ordinal: number; timestamp: string; lat: number | null; lon: number | null; gps_accuracy_m: number | null; position_corrected: number;
-  preset_id: string | null; lens_mm: number; width: number | null; height: number | null; framing: string | null; device: string | null;
+  preset_id: string | null; lens_mm: number; width: number | null; height: number | null; framing: string | null; device: string | null; source: string;
 }
 
 function parsePhoto(v: unknown, i: number): PhotoInput {
@@ -215,7 +217,10 @@ function parsePhoto(v: unknown, i: number): PhotoInput {
   const lat = optNum(p.lat, `photos[${i}].lat`, { min: -90, max: 90 });
   const lon = optNum(p.lon, `photos[${i}].lon`, { min: -180, max: 180 });
   const located = lat !== null && lon !== null;
+  // Uploaded and drawn images have no lens: lens_mm is optional for them and stored as 0.
+  const source = isOneOf(PHOTO_SOURCES, p.source) ? p.source : "camera";
   return {
+    source,
     id: assertUuid(p.id, `photos[${i}].id`),
     ordinal: assertNumber(p.ordinal, `photos[${i}].ordinal`, { min: 0, max: 10_000 }),
     timestamp: assertIsoTimestamp(p.timestamp, `photos[${i}].timestamp`),
@@ -225,7 +230,7 @@ function parsePhoto(v: unknown, i: number): PhotoInput {
     // Set on the phone before the upload (a queued shot corrected by hand).
     position_corrected: located && p.position_corrected === true ? 1 : 0,
     preset_id: p.preset_id == null ? null : assertUuid(p.preset_id, `photos[${i}].preset_id`),
-    lens_mm: assertNumber(p.lens_mm, `photos[${i}].lens_mm`, { min: 1, max: 2000 }),
+    lens_mm: source === "camera" ? assertNumber(p.lens_mm, `photos[${i}].lens_mm`, { min: 1, max: 2000 }) : 0,
     width: optNum(p.width, `photos[${i}].width`, { min: 1, max: 20_000 }),
     height: optNum(p.height, `photos[${i}].height`, { min: 1, max: 20_000 }),
     framing: optionalJson(p.framing, `photos[${i}].framing`),
@@ -358,9 +363,9 @@ export function registerShotRoutes(r: Router<Ctx>) {
       }
       // One batch = one transaction: the shot row and its photo rows land together or not at all.
       const stmts = files.map(({ photo: p, key }) => env.DB.prepare(
-        `INSERT INTO photos (id, shot_id, ordinal, timestamp, lat, lon, gps_accuracy_m, position_corrected, preset_id, lens_mm, r2_object_key, width, height, framing, device)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)`,
-      ).bind(p.id, id, p.ordinal, p.timestamp, p.lat, p.lon, p.gps_accuracy_m, p.position_corrected, p.preset_id, p.lens_mm, key, p.width, p.height, p.framing, p.device));
+        `INSERT INTO photos (id, shot_id, ordinal, timestamp, lat, lon, gps_accuracy_m, position_corrected, preset_id, lens_mm, r2_object_key, width, height, framing, device, source)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16)`,
+      ).bind(p.id, id, p.ordinal, p.timestamp, p.lat, p.lon, p.gps_accuracy_m, p.position_corrected, p.preset_id, p.lens_mm, key, p.width, p.height, p.framing, p.device, p.source));
       if (insertShot) stmts.unshift(insertShot);
       // A continued sequence may start earlier than what is stored (upload order is not capture order).
       stmts.push(env.DB.prepare("UPDATE shots SET captured_at = (SELECT min(timestamp) FROM photos WHERE shot_id = ?1) WHERE id = ?1").bind(id));

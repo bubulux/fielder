@@ -33,6 +33,7 @@ Designed in Claude Design (2026-09-28): four sections plus a shot view, a sideba
 
 - **Toolbar**:
   - title: "Shots", "All shots · all projects", or the saved view's name with an **Edited** marker and Save · Save as new… · Revert; the view menu has Rename… and Delete view…
+  - **New shot** (`⇧N`): upload images or draw a sketch ([new shot](new-shot.md))
   - search (`/`) over name, location, rig and project
   - **Filter** (`F`) opens the rule-builder side panel (nested all/any groups over state, project, name, location, INT/EXT, light, artificial, weather, shot size, camera support, movement, has position, rig, lens, FF-equivalent, photos in shot, date and the extra fields; the model is `packages/vocab/src/filter.ts`)
   - the layout switch and the frame-mode switch (mask/frame/fit/raw, `M` cycles; global, `localStorage["maskMode"]`)

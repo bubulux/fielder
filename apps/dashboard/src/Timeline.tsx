@@ -51,7 +51,7 @@ export function resolveClips(t: Timeline, byId: Map<string, Shot>): ResolvedClip
   return out;
 }
 /** Default presentation of a photo: the view's frame mode and the rig it was shot with. */
-export const defaultPresentation = (photo: Photo, mode: MaskMode): Presentation => ({ mode, frame: frameOf(photo), label: rigLabel(photo), rig_id: null, lens_mm: photo.lens_mm });
+export const defaultPresentation = (photo: Photo, mode: MaskMode): Presentation => ({ mode, frame: frameOf(photo), label: rigLabel(photo), rig_id: null, lens_mm: photo.lens_mm || null });
 
 export function TimelinePage({ project, projects, onPickProject, shots, presets, mask, timelineId, onTimeline, onOpen }: Props) {
   const [list, setList] = useState<Timeline[] | null>(null);
@@ -269,7 +269,7 @@ function ClipPanel({ c, presets, count, durRef, onUpdate, onMove, onRemove, onDu
   const bump = (d: number) => onUpdate({ duration_ms: Math.max(100, Math.min(3_600_000, c.clip.duration_ms + d)) });
   const pickChoice = (ch: RigChoice) => {
     setChoice(ch);
-    onUpdate({ presentation: { ...pres, frame: frameForChoice(c.photo, presets, ch) ?? frameOf(c.photo), label: choiceLabel(c.photo, presets, ch), rig_id: ch.rig === AS_SHOT ? null : ch.rig, lens_mm: ch.lensMm } });
+    onUpdate({ presentation: { ...pres, frame: frameForChoice(c.photo, presets, ch) ?? frameOf(c.photo), label: choiceLabel(c.photo, presets, ch), rig_id: ch.rig === AS_SHOT ? null : ch.rig, lens_mm: ch.lensMm || null } });
   };
   const overlays = c.shot.overlays.filter((o) => o.photo_id === c.photo.id);
   const pickOverlay = (id: string) => {
@@ -300,7 +300,7 @@ function ClipPanel({ c, presets, count, durRef, onUpdate, onMove, onRemove, onDu
         </Field>
         <Field label="Presentation" as="div">
           <Seg label="Frame mode" value={pres.mode} onChange={(m) => onUpdate({ presentation: { ...pres, mode: m } })} options={PRESENTATION_MODES.map((m) => ({ id: m, label: frameModeLabel(m) }))} />
-          <div class="btn-row" style={{ gap: "6px", marginTop: "6px" }}><Pickers photo={c.photo} presets={presets} choice={choice} onChoice={pickChoice} /></div>
+          {c.photo.source === "camera" && <div class="btn-row" style={{ gap: "6px", marginTop: "6px" }}><Pickers photo={c.photo} presets={presets} choice={choice} onChoice={pickChoice} /></div>}
           <span class="f-field__help">{pres.label ?? "As shot"}</span>
         </Field>
         <Field label="Notes"><textarea class="f-textarea" rows={3} placeholder="Why this shot here, what it needs…" value={c.clip.notes ?? ""} onInput={(e) => onUpdate({ notes: (e.target as HTMLTextAreaElement).value || null })} /></Field>

@@ -5,7 +5,12 @@ import type { Photo, Shot } from "./api";
 /** The photo that stands for the shot in lists, maps and filters: the first one. */
 export const cover = (s: Shot): Photo => s.photos[0];
 
+/** "Uploaded image" / "Drawn sketch" for photos that did not come from the phone camera. */
+export const sourceLabel = (p: Photo): string | null => (p.source === "upload" ? "Uploaded image" : p.source === "drawn" ? "Drawn sketch" : null);
+
 export function rigLabel(p: Photo): string {
+  const src = sourceLabel(p);
+  if (src) return src;
   const f = p.framing;
   const name = p.preset_name ?? (f?.preset_name as string | undefined) ?? "unknown rig";
   const sb = f?.speedbooster_factor as number | undefined;
