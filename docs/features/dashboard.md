@@ -6,10 +6,10 @@ Designed in Claude Design (2026-09-28): four sections plus a shot view, a sideba
 
 - **Sidebar**, 232 px, or a 56 px rail. Collapse and expand it with the button next to the brand (rail: at the bottom) or Ctrl B / ⌘B; the choice is remembered in `localStorage["sidebar"]`. Without a choice it is a rail below 1100 px. The scope menu opens as a fixed popup, so the rail does not clip it. It holds:
   - the **scope switcher** (a project, "All projects", "Manage projects…"); the choice is remembered in `localStorage["project"]`
-  - the sections: Shots (count), Review (unreviewed count), Plan, Library (with Projects · Fields · Rigs · Locations under it)
+  - the sections: Shots (count), Review (unreviewed count), Plan, Timeline, Library (with Projects · Fields · Rigs · Locations under it)
   - **saved views**, with a dot while a view has unsaved edits, and "+" for a new view
   - footer: "Go to…" (⌘K), the theme button (Auto → Sun → Set) and reload
-- **Hash routes**, so deep links survive a reload: `#/shots`, `#/shots?view=<id>`, `#/shots/<shotId>?stage=rigs|compose|position`, `#/review`, `#/plan/<dayId>`, `#/library/projects|fields|rigs|locations/<id>`.
+- **Hash routes**, so deep links survive a reload: `#/shots`, `#/shots?view=<id>`, `#/shots/<shotId>?stage=rigs|compose|position`, `#/review`, `#/plan/<dayId>`, `#/timeline/<timelineId>`, `#/library/projects|fields|rigs|locations/<id>`.
 - **Key hint bar** at the bottom: the shortcuts of the current screen; `?` opens all of them.
 - **First run** (no project chosen, or it was deleted): a full-window project picker with "New project" (`ProjectGate` in `Projects.tsx`).
 - **Installable (PWA)**: `public/manifest.webmanifest` (standalone, start `/`), icons in `public/icons/`, linked from `index.html` with `crossorigin="use-credentials"` so the manifest request carries the Access cookie. No service worker (nothing is cached offline; Chrome and Edge install without one). The `theme-color` meta follows the Sun/Set surface (`theme.ts`). Icons: `favicon.svg` (pixel-snapped for 16 px), `icon-192/512.png`, `icon-maskable-512.png`.
@@ -23,6 +23,7 @@ Designed in Claude Design (2026-09-28): four sections plus a shot view, a sideba
 | Shot view | `ShotView.tsx`, `Inspector.tsx`, `RigExplorer.tsx`, `PositionEditor.tsx`, `compose/` | Replaces the dialog. See [review and tagging](review-and-tagging.md) and [compose](compose.md). |
 | Review | `Review.tsx` | The unreviewed queue on the shot-view layout. See [review and tagging](review-and-tagging.md). |
 | Plan | `Plan.tsx` | [Shooting days](schedule.md) |
+| Timeline | `Timeline.tsx` | [Timelines](timeline.md): rough cuts with hold times and playback |
 | Library › Projects | `Projects.tsx` | [Projects](projects.md): list with counts, detail with name, notes and ordered extra fields |
 | Library › Fields | `Fields.tsx` | [Extra fields](extra-fields.md): list, JSON editor, live preview |
 | Library › Rigs | `Rigs.tsx` | Rig table (body, format, sensor, speedbooster, lens range, shots) and an editor panel |
@@ -48,7 +49,7 @@ Designed in Claude Design (2026-09-28): four sections plus a shot view, a sideba
 
 ## Keyboard (all shortcuts in `?`)
 
-- Everywhere: ⌘K / Ctrl K palette (shots, locations, views, days, projects, actions), `?`, `G` then `S`/`R`/`P`/`L`/`M` for Shots, Review, Plan, Library, Map, `/` search, `M` frame mode, Esc backs out one level.
+- Everywhere: ⌘K / Ctrl K palette (shots, locations, views, days, projects, actions), `?`, `G` then `S`/`R`/`P`/`T`/`L`/`M` for Shots, Review, Plan, Timeline, Library, Map, `/` search, `M` frame mode, Esc backs out one level.
 - Shots list: `X`/`⇧X` select, `E` edit the selection, `⇧M` move it, Del delete it.
 - Kept from before: ←/→ shots, `,`/`.` photos, the combobox keys. Single keys never fire while typing in a field (`keys.ts`).
 

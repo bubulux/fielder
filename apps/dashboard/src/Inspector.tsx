@@ -1,7 +1,7 @@
 import { Fragment } from "preact";
 import { useEffect, useRef, useState } from "preact/hooks";
 import { CAMERA_SUPPORTS, cameraLabel, INT_EXT, label, lightLabel, MOVEMENTS, SHOT_SIZE_ABBR, SHOT_SIZES, WEATHER, type Extra, type FieldDef } from "@fielder/vocab";
-import { existingIdOf, fetchDays, patchShot, putLocation, type Location, type Photo, type Project, type Shot, type ShootingDay, type ShotState } from "./api";
+import { existingIdOf, fetchDays, fetchTimelines, patchShot, putLocation, type Location, type Photo, type Project, type Shot, type ShootingDay, type ShotState, type Timeline } from "./api";
 import { ExtraEditor } from "./ExtraEditor";
 import { coords, fovLabel, placeLabel, rigDescription, shotTitle } from "./format";
 import { Button, Chip, Combobox, Icon, Input, LightChips, MarkdownField, SaveStatus, Seg, StateMarker, type SaveState } from "./ui";
@@ -15,6 +15,16 @@ export const projectDays = (projectId: string) => {
 };
 /** Call after a day was saved or deleted so the next read is fresh. */
 export const invalidateDays = (projectId?: string) => (projectId ? daysCache.delete(projectId) : daysCache.clear());
+// Timelines per project, the same way, for the "Timelines" fact and the delete warning.
+const timelinesCache = new Map<string, Promise<Timeline[]>>();
+export const projectTimelines = (projectId: string) => {
+  let p = timelinesCache.get(projectId);
+  if (!p) { p = fetchTimelines(projectId).catch(() => []); timelinesCache.set(projectId, p); }
+  return p;
+};
+export const invalidateTimelines = (projectId?: string) => (projectId ? timelinesCache.delete(projectId) : timelinesCache.clear());
+/** The timelines that hold a photo of this shot. */
+export const timelinesOfShot = (all: Timeline[], shotId: string) => all.filter((t) => t.clips.some((c) => c.shot_id === shotId));
 
 const dayLabel = (date: string) => new Date(`${date}T12:00:00`).toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" });
 const stamp = (iso: string) => new Date(iso).toLocaleString(undefined, { dateStyle: "short", timeStyle: "short" });
@@ -35,10 +45,11 @@ interface Props {
   /** Open the Compose stage (overlays and sketches). */
   onCompose: () => void;
   onOpenDay: (projectId: string, dayId: string) => void;
+  onOpenTimeline: (projectId: string, timelineId: string) => void;
 }
 
 /** Right-hand inspector of the shot view and Review: decision, tags (saved per change), facts. */
-export function Inspector({ shot, photo, projects, fields, locations, onLocations, onUpdated, onState, stateBusy, onCorrect, onCompose, onOpenDay }: Props) {
+export function Inspector({ shot, photo, projects, fields, locations, onLocations, onUpdated, onState, stateBusy, onCorrect, onCompose, onOpenDay, onOpenTimeline }: Props) {
   const [save, setSave] = useState<SaveState>("idle");
   const last = useRef<Parameters<typeof patchShot>[1] | null>(null);
   const [name, setName] = useState(shot.name ?? "");
@@ -47,11 +58,13 @@ export function Inspector({ shot, photo, projects, fields, locations, onLocation
   const descTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [moveTo, setMoveTo] = useState<string | null>(null);
   const [days, setDays] = useState<ShootingDay[]>([]);
+  const [timelines, setTimelines] = useState<Timeline[]>([]);
   const [raw, setRaw] = useState(false);
   const extraTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => { setName(shot.name ?? ""); setExtra(shot.extra); setDescription(shot.description ?? ""); setMoveTo(null); setSave("idle"); }, [shot.id]);
   useEffect(() => { let live = true; void projectDays(shot.project_id).then((d) => { if (live) setDays(d.filter((x) => x.shots.some((s) => s.shot_id === shot.id))); }); return () => { live = false; }; }, [shot.id, shot.project_id]);
+  useEffect(() => { let live = true; void projectTimelines(shot.project_id).then((t) => { if (live) setTimelines(timelinesOfShot(t, shot.id)); }); return () => { live = false; }; }, [shot.id, shot.project_id]);
 
   async function patch(p: Parameters<typeof patchShot>[1]) {
     last.current = p;
@@ -196,6 +209,7 @@ export function Inspector({ shot, photo, projects, fields, locations, onLocation
             <dt>Photos</dt><dd>{shot.photos.length}{shot.photos.length > 1 ? " · sequence" : ""}</dd>
             <dt>Uploaded</dt><dd>{stamp(shot.created_at)}</dd>
             <dt>Days</dt><dd>{days.length === 0 ? <span class="meta">not planned</span> : days.map((d, i) => <Fragment key={d.id}>{i > 0 && ", "}<a href="#" onClick={(e) => { e.preventDefault(); onOpenDay(shot.project_id, d.id); }}>{dayLabel(d.date)}</a></Fragment>)}</dd>
+            <dt>Timelines</dt><dd>{timelines.length === 0 ? <span class="meta">not used</span> : timelines.map((t, i) => <Fragment key={t.id}>{i > 0 && ", "}<a href="#" onClick={(e) => { e.preventDefault(); onOpenTimeline(shot.project_id, t.id); }}>{t.name}</a></Fragment>)}</dd>
           </dl>
         </div>
 

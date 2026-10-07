@@ -10,6 +10,7 @@ export type Route =
   | { page: "shot"; shotId: string; stage: Stage }
   | { page: "review" }
   | { page: "plan"; dayId: string | null }
+  | { page: "timeline"; timelineId: string | null }
   | { page: "library"; section: LibrarySection; id: string | null };
 
 export const DEFAULT_ROUTE: Route = { page: "shots", viewId: null };
@@ -27,6 +28,7 @@ export function parseRoute(hash: string): Route {
       return { page: "shots", viewId: q.get("view") };
     case "review": return { page: "review" };
     case "plan": return { page: "plan", dayId: parts[1] ?? null };
+    case "timeline": return { page: "timeline", timelineId: parts[1] ?? null };
     case "library": {
       const section = (LIBRARY_SECTIONS as readonly string[]).includes(parts[1]) ? (parts[1] as LibrarySection) : "projects";
       return { page: "library", section, id: parts[2] ?? null };
@@ -41,6 +43,7 @@ export function routeHash(r: Route): string {
     case "shot": return `#/shots/${r.shotId}${r.stage === "photo" ? "" : `?stage=${r.stage}`}`;
     case "review": return "#/review";
     case "plan": return r.dayId ? `#/plan/${r.dayId}` : "#/plan";
+    case "timeline": return r.timelineId ? `#/timeline/${r.timelineId}` : "#/timeline";
     case "library": return `#/library/${r.section}${r.id ? `/${r.id}` : ""}`;
   }
 }

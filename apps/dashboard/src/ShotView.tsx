@@ -4,7 +4,7 @@ import { label, type FieldDef } from "@fielder/vocab";
 import { deleteShot, patchShot, type Location, type Preset, type Project, type Shot, type ShotState } from "./api";
 import { FRAME_MODES, positionOf, rigLabel, when } from "./format";
 import { downloadCrop, Framed, type MaskMode } from "./Framed";
-import { Inspector } from "./Inspector";
+import { Inspector, projectTimelines, timelinesOfShot } from "./Inspector";
 import { afterG, useKeys } from "./keys";
 import { Compose, type ComposeGuard } from "./compose/Compose";
 import { ModeSwitch } from "./ModeSwitch";
@@ -36,6 +36,7 @@ interface Props {
   onDeleted: (id: string) => void;
   onShowOnMap: (s: Shot) => void;
   onOpenDay: (projectId: string, dayId: string) => void;
+  onOpenTimeline: (projectId: string, timelineId: string) => void;
 }
 
 const nextMode = (m: MaskMode) => FRAME_MODES[(FRAME_MODES.indexOf(m) + 1) % FRAME_MODES.length];
@@ -71,9 +72,10 @@ export function ShotView(p: Props) {
   }
   async function remove() {
     const composed = [shot.overlays.length ? `${shot.overlays.length} overlay${shot.overlays.length === 1 ? "" : "s"}` : "", shot.sketches.length ? `${shot.sketches.length} sketch${shot.sketches.length === 1 ? "" : "es"}` : ""].filter(Boolean).join(" and ");
+    const used = timelinesOfShot(await projectTimelines(shot.project_id), shot.id);
     const choice = await confirmDialog({
       title: "Delete this shot?",
-      body: `Removes ${shot.photos.length > 1 ? `all ${shot.photos.length} images` : "the image"}${composed ? `, ${composed},` : ""} and the metadata from the server permanently. Archive keeps them.`,
+      body: <>Removes {shot.photos.length > 1 ? `all ${shot.photos.length} images` : "the image"}{composed ? `, ${composed},` : ""} and the metadata from the server permanently. Archive keeps them.{used.length > 0 && <><br /><br /><strong>Used in {used.length} timeline{used.length === 1 ? "" : "s"}</strong> ({used.map((t) => t.name).join(", ")}): its clips are removed there too.</>}</>,
       confirmLabel: "Delete", danger: true, altLabel: shot.state === "archived" ? undefined : "Archive",
     });
     if (choice === "alt") return setState("archived");
@@ -174,7 +176,7 @@ export function ShotView(p: Props) {
         )}
         {stage !== "compose" && (
           <Inspector shot={shot} photo={photo} projects={p.projects} fields={p.fieldsOf(shot.project_id)} locations={p.locations} onLocations={p.onLocations}
-            onUpdated={p.onUpdated} onState={(s) => void setState(s)} stateBusy={busy} onCorrect={() => p.onStage("position")} onCompose={() => p.onStage("compose")} onOpenDay={p.onOpenDay} />
+            onUpdated={p.onUpdated} onState={(s) => void setState(s)} stateBusy={busy} onCorrect={() => p.onStage("position")} onCompose={() => p.onStage("compose")} onOpenDay={p.onOpenDay} onOpenTimeline={p.onOpenTimeline} />
         )}
       </div>
     </>

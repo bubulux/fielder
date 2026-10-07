@@ -397,8 +397,11 @@ export function registerShotRoutes(r: Router<Ctx>) {
     args.push(sid);
     const res = await env.DB.prepare(`UPDATE shots SET ${sets.join(", ")} WHERE id = ?${args.length}`).bind(...args).run();
     if (!res.meta.changes) throw new HttpError(404, "shot not found");
-    // A shot moved to another project leaves the shooting days of its old project.
-    if (movedTo) await env.DB.prepare("DELETE FROM day_shots WHERE shot_id = ?1 AND day_id IN (SELECT id FROM shooting_days WHERE project_id != ?2)").bind(sid, movedTo).run();
+    // A shot moved to another project leaves the shooting days and timelines of its old project.
+    if (movedTo) await env.DB.batch([
+      env.DB.prepare("DELETE FROM day_shots WHERE shot_id = ?1 AND day_id IN (SELECT id FROM shooting_days WHERE project_id != ?2)").bind(sid, movedTo),
+      env.DB.prepare("DELETE FROM timeline_clips WHERE photo_id IN (SELECT id FROM photos WHERE shot_id = ?1) AND timeline_id IN (SELECT id FROM timelines WHERE project_id != ?2)").bind(sid, movedTo),
+    ]);
     return json({ shot: await loadShot(env, sid) });
   });
 
@@ -456,8 +459,11 @@ export function registerShotRoutes(r: Router<Ctx>) {
         stmts.push(env.DB.prepare("UPDATE shots SET extra = ?1, updated_at = ?2 WHERE id = ?3").bind(JSON.stringify(extra), now, row.id));
       }
     }
-    // Shots moved to another project leave the shooting days of their old project.
-    if (movedTo) stmts.push(env.DB.prepare("DELETE FROM day_shots WHERE shot_id IN (SELECT value FROM json_each(?1)) AND day_id IN (SELECT id FROM shooting_days WHERE project_id != ?2)").bind(list, movedTo));
+    // Shots moved to another project leave the shooting days and timelines of their old project.
+    if (movedTo) {
+      stmts.push(env.DB.prepare("DELETE FROM day_shots WHERE shot_id IN (SELECT value FROM json_each(?1)) AND day_id IN (SELECT id FROM shooting_days WHERE project_id != ?2)").bind(list, movedTo));
+      stmts.push(env.DB.prepare("DELETE FROM timeline_clips WHERE photo_id IN (SELECT id FROM photos WHERE shot_id IN (SELECT value FROM json_each(?1))) AND timeline_id IN (SELECT id FROM timelines WHERE project_id != ?2)").bind(list, movedTo));
+    }
     await env.DB.batch(stmts);
 
     const { results } = await env.DB.prepare(`${SHOT_SQL} WHERE s.id IN (SELECT value FROM json_each(?1))`).bind(list).all<ShotRow>();

@@ -14,6 +14,7 @@ import { ReviewPage } from "./Review";
 import { RigsPage } from "./Rigs";
 import { DEFAULT_ROUTE, useRoute, type Route, type Stage } from "./router";
 import { ShotsPage } from "./ShotsPage";
+import { TimelinePage } from "./Timeline";
 import { decodeView, emptyQuery, encodeView, runQuery, type Layout, type ShotsQuery } from "./shotsQuery";
 import { shotHints, ShotView } from "./ShotView";
 import { ALL_PROJECTS, Sidebar, type Scope } from "./Sidebar";
@@ -133,6 +134,7 @@ export function App() {
     navigateRaw({ page: "shots", viewId: visible ? loadedView?.id ?? null : null });
   }
   const openDay = (projectId: string, dayId: string) => { if (scope !== projectId && !isAll) setScope(projectId); navigateRaw({ page: "plan", dayId }); };
+  const openTimeline = (projectId: string, timelineId: string) => { if (scope !== projectId) setScope(projectId); navigateRaw({ page: "timeline", timelineId }); };
 
   async function saveView() {
     if (!loadedView) return;
@@ -184,6 +186,7 @@ export function App() {
     s: () => { if (!afterG()) return false; void navigate({ page: "shots", viewId: null }); },
     r: () => { if (!afterG()) return false; void navigate({ page: "review" }); },
     p: () => { if (!afterG()) return false; void navigate({ page: "plan", dayId: null }); },
+    t: () => { if (!afterG()) return false; void navigate({ page: "timeline", timelineId: null }); },
     l: () => { if (!afterG()) return false; void navigate({ page: "library", section: "projects", id: null }); },
     m: () => {
       if (afterG()) { setLayout("map"); void navigate({ page: "shots", viewId }); return; }
@@ -202,8 +205,8 @@ export function App() {
   const byId = new Map((shots ?? []).map((s) => [s.id, s]));
   const fromList = openList.map((id) => byId.get(id)).filter((s): s is Shot => !!s);
   const listForShot = openShotObj && fromList.some((s) => s.id === openShotObj.id) ? fromList : result.shots;
-  const backLabel = returnTo.page === "plan" ? "Plan" : "Shots";
-  const shotLine = returnTo.page === "plan" ? "Planned shots of the day"
+  const backLabel = returnTo.page === "plan" ? "Plan" : returnTo.page === "timeline" ? "Timeline" : "Shots";
+  const shotLine = returnTo.page === "plan" ? "Planned shots of the day" : returnTo.page === "timeline" ? "Shots in the timeline"
     : [query.state === "all" ? "All states" : query.state[0].toUpperCase() + query.state.slice(1), loadedView?.name ?? scopeName, { newest: "newest first", oldest: "oldest first", name: "by name" }[query.sort]].join(" · ");
 
   let main;
@@ -217,17 +220,20 @@ export function App() {
           mode={viewMode} onMode={setViewMode} projects={projects!} presets={presets!} fieldsOf={fieldsOf} locations={locations!} onLocations={setLocations}
           onUpdated={updated}
           onDeleted={(id) => { const i = listForShot.findIndex((s) => s.id === id); const n = listForShot[i + 1] ?? listForShot[i - 1]; deleted([id]); if (n) replace({ page: "shot", shotId: n.id, stage: "photo" }); else navigateRaw(returnTo); }}
-          onShowOnMap={showOnMap} onOpenDay={openDay} />
+          onShowOnMap={showOnMap} onOpenDay={openDay} onOpenTimeline={openTimeline} />
       : <Empty icon="image-off-outline" title="Shot not found" actions={<Button kind="secondary" onClick={() => navigateRaw(returnTo)}>Back to {backLabel}</Button>}>It may have been deleted.</Empty>;
     hints = shotHints(route.stage, false);
   } else if (route.page === "review") {
     main = <ReviewPage shots={scoped} scopeName={scopeName} stage={reviewStage} onStage={setReviewStage} mode={reviewMode} onMode={setReviewMode} projects={projects!} presets={presets!} fieldsOf={fieldsOf}
-      locations={locations!} onLocations={setLocations} onUpdated={updated} onDeleted={(id) => deleted([id])} onShowOnMap={showOnMap} onOpenDay={openDay}
+      locations={locations!} onLocations={setLocations} onUpdated={updated} onDeleted={(id) => deleted([id])} onShowOnMap={showOnMap} onOpenDay={openDay} onOpenTimeline={openTimeline}
       onBrowseApproved={() => { setLoadedView(null); setQuery({ ...emptyQuery(), state: "approved" }); navigateRaw({ page: "shots", viewId: null }); }} onPlan={() => navigateRaw({ page: "plan", dayId: null })} />;
     hints = shotHints(reviewStage, true);
   } else if (route.page === "plan") {
     main = <PlanPage project={scopeProject} projects={projects!} onPickProject={setScope} shots={scoped} mask={mask} dayId={route.dayId} onDay={(id) => replace({ page: "plan", dayId: id })} onOpen={openShot} />;
     hints = [{ k: "↑/↓", t: "Shots" }, { k: "Alt ↑/↓", t: "Reorder" }, { k: "T", t: "Planned time" }, { k: "Del", t: "Remove" }, { k: "N", t: "Add shots" }, { k: "⇧N", t: "New day" }, { k: "↵", t: "Open shot" }];
+  } else if (route.page === "timeline") {
+    main = <TimelinePage project={scopeProject} projects={projects!} onPickProject={setScope} shots={scoped} presets={presets!} mask={mask} timelineId={route.timelineId} onTimeline={(id) => replace({ page: "timeline", timelineId: id })} onOpen={openShot} />;
+    hints = [{ k: "←/→", t: "Clip" }, { k: "Space", t: "Play / pause" }, { k: "Alt ←/→", t: "Reorder" }, { k: "D", t: "Hold time" }, { k: "Del", t: "Remove" }, { k: "N", t: "Add shots" }, { k: "⇧N", t: "New timeline" }, { k: "↵", t: "Open shot" }];
   } else if (route.page === "library") {
     const sel = route.id;
     const setSel = (id: string | null) => replace({ page: "library", section: route.section, id });
@@ -260,6 +266,7 @@ export function App() {
     { id: "a-shots", group: "Go to", icon: "view-grid-outline", title: "Shots", keys: "G S", run: () => void navigate({ page: "shots", viewId: null }) },
     { id: "a-review", group: "Go to", icon: "checkbox-marked-outline", title: "Review", sub: `${unreviewed} to review`, keys: "G R", run: () => void navigate({ page: "review" }) },
     { id: "a-plan", group: "Go to", icon: "calendar-clock", title: "Plan", keys: "G P", run: () => void navigate({ page: "plan", dayId: null }) },
+    { id: "a-timeline", group: "Go to", icon: "filmstrip", title: "Timeline", keys: "G T", run: () => void navigate({ page: "timeline", timelineId: null }) },
     { id: "a-map", group: "Go to", icon: "map-outline", title: "Map", keys: "G M", run: () => { setLayout("map"); void navigate({ page: "shots", viewId }); } },
     { id: "a-lib", group: "Go to", icon: "bookshelf", title: "Library: projects, fields, rigs, locations", keys: "G L", run: () => void navigate({ page: "library", section: "projects", id: null }) },
     { id: "a-all", group: "Actions", icon: "folder-multiple-outline", title: "Switch to all projects", run: () => setScope(ALL_PROJECTS) },
