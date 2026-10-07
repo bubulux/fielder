@@ -270,6 +270,13 @@ button { font: inherit; }
 .tl-ph-view .mdi { font-size: 40px; }
 .tl-ph-view__notes { max-width: 460px; white-space: pre-wrap; opacity: 0.85; font-size: var(--text-caption); }
 
+/* Review workspace (issue #31): the shot browser and the in-place edit stage. */
+.rw-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.rw-card .f-card__img { background: var(--photo-bg); }
+.rw-card__acts { position: absolute; right: 6px; bottom: 6px; display: flex; gap: 4px; opacity: 0; transition: opacity var(--dur-fast) var(--ease); }
+.rw-card:hover .rw-card__acts, .rw-card:focus-within .rw-card__acts { opacity: 1; }
+.rw-edit { flex: 1; display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+
 /* New shot dialog (NewShot.tsx). */
 .newshot { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: var(--space-4); align-items: start; }
 .newshot__main { display: flex; flex-direction: column; gap: var(--space-3); min-width: 0; }
