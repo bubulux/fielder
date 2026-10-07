@@ -1,6 +1,7 @@
 import { View, type StyleProp, type ViewStyle } from "react-native";
 import { Image, type ImageSource } from "expo-image";
 import type { Settings } from "../types";
+import { clampCentre } from "@fielder/vocab";
 import { FIXED, Seg } from "../ui";
 import { Overlay } from "./Overlay";
 
@@ -9,7 +10,8 @@ export type FrameMode = "mask" | "frame" | "fit" | "off";
 export const FRAME_MODES: readonly FrameMode[] = ["mask", "frame", "fit", "off"];
 export const frameModeLabel = (m: FrameMode) => (m === "off" ? "Raw" : m[0].toUpperCase() + m.slice(1));
 
-export interface FrameFractions { width: number; height: number }
+/** Rig frame relative to the photo; x/y is its centre (fractions of the photo, default 0.5: centred). */
+export interface FrameFractions { width: number; height: number; x?: number; y?: number }
 
 interface Props {
   source: ImageSource;
@@ -32,20 +34,25 @@ export function FramedImage({ source, aspect, frame: f, width, settings, mode, s
     ? { width, height: width / (aspect * (f.width / f.height)) }
     : { width, height: width / aspect };
   let img: { width: number; height: number };
+  let imgPos = { left: 0, top: 0 };
   let rect: { left: number; top: number; width: number; height: number } | null = null;
+  // A re-framed frame (issue #29) is off-centre; the centre is clamped to the photo like on the dashboard.
+  const c = f ? clampCentre({ width_fraction: f.width, height_fraction: f.height, x: f.x, y: f.y }) : { x: 0.5, y: 0.5 };
   if (fit && f) {
     img = { width: box.width / f.width, height: box.height / f.height };
+    imgPos = { left: box.width / 2 - c.x * img.width, top: box.height / 2 - c.y * img.height };
   } else {
     const scale = f ? 1 / Math.max(1, f.width, f.height) : 1;
     img = { width: box.width * scale, height: box.height * scale };
-    if (f) rect = { width: f.width * img.width, height: f.height * img.height, left: (box.width - f.width * img.width) / 2, top: (box.height - f.height * img.height) / 2 };
+    imgPos = { left: (box.width - img.width) / 2, top: (box.height - img.height) / 2 };
+    if (f) rect = { width: f.width * img.width, height: f.height * img.height, left: imgPos.left + c.x * img.width - (f.width * img.width) / 2, top: imgPos.top + c.y * img.height - (f.height * img.height) / 2 };
   }
   const shrunk = img.width < box.width - 0.5 || img.height < box.height - 0.5;
   return (
     <View style={[{ width: box.width, height: box.height, backgroundColor: FIXED.photoBg, overflow: "hidden" }, style]}>
       <Image
         source={source}
-        style={{ position: "absolute", width: img.width, height: img.height, left: (box.width - img.width) / 2, top: (box.height - img.height) / 2 }}
+        style={{ position: "absolute", width: img.width, height: img.height, left: imgPos.left, top: imgPos.top }}
         contentFit="fill"
         cachePolicy="disk"
         transition={120}

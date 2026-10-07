@@ -2,11 +2,11 @@ import type { RefObject } from "preact";
 import { useEffect, useMemo, useRef, useState } from "preact/hooks";
 import { PRESENTATION_MODES, type Presentation } from "@fielder/vocab";
 import { deleteTimeline, fetchTimelines, putTimeline, type Overlay, type Photo, type Preset, type Project, type Shot, type Timeline, type TimelineClip } from "./api";
-import { cover, frameModeLabel, frameOf, rigLabel, shotTitle } from "./format";
+import { cover, frameModeLabel, shotTitle } from "./format";
 import { Framed, type MaskMode } from "./Framed";
 import { invalidateTimelines } from "./Inspector";
 import { useKeys } from "./keys";
-import { AS_SHOT, choiceLabel, frameForChoice, Pickers, type RigChoice } from "./RigExplorer";
+import { FramingSelect, presentationFrame, rootPresentation } from "./FramingSelect";
 import { Banner, Button, Checkbox, confirmDialog, cx, Empty, EmptyNote, Field, Icon, IconButton, Input, Kbd, ListRow, MenuItem, Panel, PanelBody, PanelHead, Popover, SaveStatus, Seg, Select, Spinner, toast, Toolbar, ToolbarTitle, type SaveState } from "./ui";
 
 /**
@@ -51,7 +51,7 @@ export function resolveClips(t: Timeline, byId: Map<string, Shot>): ResolvedClip
   return out;
 }
 /** Default presentation of a photo: the view's frame mode and the rig it was shot with. */
-export const defaultPresentation = (photo: Photo, mode: MaskMode): Presentation => ({ mode, frame: frameOf(photo), label: rigLabel(photo), rig_id: null, lens_mm: photo.lens_mm || null });
+export const defaultPresentation = (photo: Photo, mode: MaskMode): Presentation => ({ mode, ...rootPresentation(photo) });
 
 export function TimelinePage({ project, projects, onPickProject, shots, presets, mask, timelineId, onTimeline, onOpen }: Props) {
   const [list, setList] = useState<Timeline[] | null>(null);
@@ -220,7 +220,7 @@ function Editor({ timeline: t, shots, presets, mask, onChange, onDelete, onOpen,
 
           <div class="tl-preview">
             {cur ? (
-              <Framed photo={cur.photo} mode={cur.clip.presentation.mode} frame={cur.clip.presentation.frame} src={cur.overlay?.render_url ?? undefined} maxHeight="calc(100vh - 470px)" />
+              <Framed photo={cur.photo} mode={cur.clip.presentation.mode} frame={presentationFrame(cur.photo, cur.clip.presentation)} src={cur.overlay?.render_url ?? undefined} maxHeight="calc(100vh - 470px)" />
             ) : <div class="tl-preview__empty"><Icon name="filmstrip" /><span>Add shots to start the cut</span></div>}
             <div class="tl-transport">
               <IconButton kind="secondary" icon="skip-previous" label="First clip (Home)" disabled={!cur} onClick={() => clips[0] && select(clips[0].clip.id)} />
@@ -242,7 +242,7 @@ function Editor({ timeline: t, shots, presets, mask, onChange, onDelete, onOpen,
                 <div class="tl-clips">
                   {clips.map((c) => (
                     <button key={c.clip.id} type="button" role="option" aria-selected={c.clip.id === sel} class={cx("tl-clip", c.clip.id === sel && "is-sel")} style={{ width: `${widthPx(c.clip.duration_ms)}px` }} title={`${shotTitle(c.shot)}${c.overlay ? ` · ${c.overlay.name}` : ""} · ${secs(c.clip.duration_ms)}`} onClick={() => select(c.clip.id)} onDblClick={() => onOpen(c.shot, shotList)}>
-                      <div class="tl-clip__thumb"><Framed photo={c.photo} mode={c.clip.presentation.mode === "off" ? "off" : "fit"} frame={c.clip.presentation.frame} src={c.overlay?.render_url ?? undefined} /></div>
+                      <div class="tl-clip__thumb"><Framed photo={c.photo} mode={c.clip.presentation.mode === "off" ? "off" : "fit"} frame={presentationFrame(c.photo, c.clip.presentation)} src={c.overlay?.render_url ?? undefined} /></div>
                       <span class="tl-clip__name ellipsis">{c.overlay ? <Icon name="layers-outline" size={12} /> : null}{shotTitle(c.shot)}{c.shot.photos.length > 1 ? ` · ${c.photo.ordinal + 1}` : ""}</span>
                       <span class="tl-clip__dur num">{secs(c.clip.duration_ms)}</span>
                       {c.clip.id === sel && cur && <span class="tl-clip__head" style={{ left: `${(Math.min(elapsed, cur.clip.duration_ms) / cur.clip.duration_ms) * 100}%` }} />}
@@ -262,28 +262,22 @@ function Editor({ timeline: t, shots, presets, mask, onChange, onDelete, onOpen,
 
 function ClipPanel({ c, presets, count, durRef, onUpdate, onMove, onRemove, onDuplicate, onOpen }: { c: ResolvedClip; presets: Preset[]; count: number; durRef: RefObject<HTMLInputElement>; onUpdate: (p: Partial<TimelineClip>) => void; onMove: (d: number) => void; onRemove: () => void; onDuplicate: () => void; onOpen: () => void }) {
   const pres = c.clip.presentation;
-  const [choice, setChoice] = useState<RigChoice>({ rig: pres.rig_id ?? AS_SHOT, lensMm: pres.lens_mm ?? c.photo.lens_mm });
   const [dur, setDur] = useState((c.clip.duration_ms / 1000).toFixed(1));
   useEffect(() => setDur((c.clip.duration_ms / 1000).toFixed(1)), [c.clip.duration_ms]);
   const commitDur = (v: string) => { const n = Math.round(parseFloat(v.replace(",", ".")) * 10) * 100; if (Number.isFinite(n) && n >= 100 && n <= 3_600_000) onUpdate({ duration_ms: n }); else setDur((c.clip.duration_ms / 1000).toFixed(1)); };
   const bump = (d: number) => onUpdate({ duration_ms: Math.max(100, Math.min(3_600_000, c.clip.duration_ms + d)) });
-  const pickChoice = (ch: RigChoice) => {
-    setChoice(ch);
-    onUpdate({ presentation: { ...pres, frame: frameForChoice(c.photo, presets, ch) ?? frameOf(c.photo), label: choiceLabel(c.photo, presets, ch), rig_id: ch.rig === AS_SHOT ? null : ch.rig, lens_mm: ch.lensMm || null } });
-  };
   const overlays = c.shot.overlays.filter((o) => o.photo_id === c.photo.id);
   const pickOverlay = (id: string) => {
     const o = overlays.find((x) => x.id === id) ?? null;
     // An overlay brings the presentation it was drawn in; "Photo" keeps the current one.
     onUpdate(o ? { overlay_id: o.id, presentation: o.presentation } : { overlay_id: null });
-    if (o) setChoice({ rig: o.presentation.rig_id ?? AS_SHOT, lensMm: o.presentation.lens_mm ?? c.photo.lens_mm });
   };
   const i = c.index;
   return (
     <Panel label="Clip" width="340px">
       <PanelHead title={shotTitle(c.shot)}><span class="meta num">clip {i + 1} of {count}</span></PanelHead>
       <PanelBody>
-        <div class="f-row__thumb" style={{ width: "100%" }}><Framed photo={c.photo} mode={pres.mode} frame={pres.frame} src={c.overlay?.render_url ?? undefined} /></div>
+        <div class="f-row__thumb" style={{ width: "100%" }}><Framed photo={c.photo} mode={pres.mode} frame={presentationFrame(c.photo, pres)} src={c.overlay?.render_url ?? undefined} /></div>
         {c.shot.photos.length > 1 && <span class="meta">Photo {c.photo.ordinal + 1} of {c.shot.photos.length} in this sequence</span>}
         <Field label="Hold time" as="div">
           <div class="btn-row" style={{ flexWrap: "nowrap", gap: "4px" }}>
@@ -300,7 +294,7 @@ function ClipPanel({ c, presets, count, durRef, onUpdate, onMove, onRemove, onDu
         </Field>
         <Field label="Presentation" as="div">
           <Seg label="Frame mode" value={pres.mode} onChange={(m) => onUpdate({ presentation: { ...pres, mode: m } })} options={PRESENTATION_MODES.map((m) => ({ id: m, label: frameModeLabel(m) }))} />
-          {c.photo.source === "camera" && <div class="btn-row" style={{ gap: "6px", marginTop: "6px" }}><Pickers photo={c.photo} presets={presets} choice={choice} onChoice={pickChoice} /></div>}
+          {c.photo.source === "camera" && <div style={{ marginTop: "6px" }}><FramingSelect photo={c.photo} value={pres} onChange={(patch) => onUpdate({ presentation: { ...pres, ...patch } })} /></div>}
           <span class="f-field__help">{pres.label ?? "As shot"}</span>
         </Field>
         <Field label="Notes"><textarea class="f-textarea" rows={3} placeholder="Why this shot here, what it needs…" value={c.clip.notes ?? ""} onInput={(e) => onUpdate({ notes: (e.target as HTMLTextAreaElement).value || null })} /></Field>

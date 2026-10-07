@@ -1,4 +1,5 @@
 import type { ComponentChildren, JSX } from "preact";
+import { withCentre } from "@fielder/vocab";
 import type { Photo } from "./api";
 import { frameLayout, frameOf, imageAspect, type FrameGeometry, type FrameMode, type PctRect } from "./format";
 import { cx } from "./ui";
@@ -36,10 +37,11 @@ export function Framed({ photo, mode, className, maxHeight, frame, imgStyle, src
       <img src={img} alt="" loading="lazy" style={fullImg ? imgStyle : { inset: "auto", ...pct(l.img), ...imgStyle }} />
       {mode === "mask" && l.frame && (
         <>
+          {/* Four bands around the frame; a re-framed frame is off-centre, so each side has its own size. */}
           <div class="tint" style={{ left: 0, top: 0, right: 0, height: `${l.frame.top}%` }} />
-          <div class="tint" style={{ left: 0, bottom: 0, right: 0, height: `${l.frame.top}%` }} />
+          <div class="tint" style={{ left: 0, top: `${l.frame.top + l.frame.height}%`, right: 0, bottom: 0 }} />
           <div class="tint" style={{ left: 0, top: `${l.frame.top}%`, width: `${l.frame.left}%`, height: `${l.frame.height}%` }} />
-          <div class="tint" style={{ right: 0, top: `${l.frame.top}%`, width: `${l.frame.left}%`, height: `${l.frame.height}%` }} />
+          <div class="tint" style={{ left: `${l.frame.left + l.frame.width}%`, right: 0, top: `${l.frame.top}%`, height: `${l.frame.height}%` }} />
         </>
       )}
       {l.frame && <div class={`frame ${l.shrunk ? "dashed" : ""}`} style={pct(l.frame)} />}
@@ -76,10 +78,12 @@ export async function downloadCrop(photo: Photo): Promise<void> {
   const f = frameOf(photo);
   const res = await fetch(photo.image_url, { credentials: "same-origin" });
   const bitmap = await createImageBitmap(await res.blob());
-  const wf = Math.min(1, f?.width_fraction ?? 1);
-  const hf = Math.min(1, f?.height_fraction ?? 1);
+  const c = f ? withCentre(f) : { width_fraction: 1, height_fraction: 1, x: 0.5, y: 0.5 };
+  const wf = Math.min(1, c.width_fraction);
+  const hf = Math.min(1, c.height_fraction);
   const sw = Math.round(bitmap.width * wf), sh = Math.round(bitmap.height * hf);
-  const sx = Math.round((bitmap.width - sw) / 2), sy = Math.round((bitmap.height - sh) / 2);
+  // The crop follows the root framing's centre (issue #29).
+  const sx = Math.round(Math.max(0, Math.min(bitmap.width - sw, c.x * bitmap.width - sw / 2))), sy = Math.round(Math.max(0, Math.min(bitmap.height - sh, c.y * bitmap.height - sh / 2)));
   const canvas = document.createElement("canvas");
   canvas.width = sw; canvas.height = sh;
   canvas.getContext("2d")!.drawImage(bitmap, sx, sy, sw, sh, 0, 0, sw, sh);

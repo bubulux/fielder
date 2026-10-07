@@ -1,17 +1,28 @@
-# Rig explorer
+# Framing (re-framing and the rig explorer)
 
-Dashboard shot view (or Review) → stage **Rigs** (`R`; `apps/dashboard/src/RigExplorer.tsx`). It shows how the same photo would be framed by another rig and/or lens. The inspector stays visible.
+Dashboard shot view (or Review) → stage **Framing** (`R`; `apps/dashboard/src/RigExplorer.tsx`; was "Rigs", [issue #29](https://github.com/bubulux/fielder/issues/29)). The phone usually captures more than the rig frame, so a photo can be **re-framed**: another rig and lens (the size) at another place on the photo (the position). The inspector stays visible.
 
-## Views
+## Framings
 
-- **One rig**: the stage bar has a rig picker ("As shot" = the rig the photo was taken with) and a lens picker, plus the facts (FF-equivalent, horizontal and vertical FOV). The stage shows the photo with that frame; nothing is drawn over the photo. The frame mode applies (Fit crops to the chosen rig's frame). The stage foot is a **lens strip**: a thumbnail per lens of that rig (within its lens range); click one to select it. **←/→ step the lens** here, so shot navigation is paused.
-- **Compare A / B**: two panes side by side, each with its own rig and lens pickers and facts.
-- The frame-mode switch applies. Esc or "Back to photo" returns to the Photo stage.
+- **As captured** is the frame the phone recorded (`photos.framing.frame`, centred). It always exists and is never changed.
+- **Saved framings** (`framings` table, per photo): a name, a rig (or "as shot") + lens, and the frame with its centre (`x`, `y`, fractions of the photo).
+- One framing per photo can be the **root** (`photos.root_framing_id`; null = as captured). Every view shows the root: grid, list, map popups, shot view, Review, Plan, Download crop, and on the phone Shots, Review, Shot details, Day and step-through. Deleting the root falls back to as captured.
+- Size comes only from a rig + lens, so a framing is always something the camera can shoot; there is no free crop. The centre is clamped so the frame stays on the photo; on an axis where the rig sees more than the phone (fraction ≥ 1) it cannot move at all.
+
+## Using it
+
+- **Bar**: Framing · Compare A / B; the framing picker (As captured, the saved ones, "· root" marks the root); rig and lens pickers; "Edited" / "Not saved" when the frame differs from what is selected.
+- **Stage**: the photo in Mask (or Frame) mode with the frame as a **drag handle**. Fit and Raw are not used here because they cannot show where the frame sits. `⇧` + arrows nudge by 1 %, `←/→` step the lens (the centre is kept, clamped to the new size).
+- **Actions**: **Save as new…** (asks for a name), **Update** (`⌘S`) for a saved framing, **Set as root** (saves first when needed; "Root frame" when it already is), delete (confirms; overlays and clips keep their copy). For sequences, **All n photos** saves the same rig, lens and centre on every photo, each with its own size from its own capture.
+- **Foot**: the facts (FF-equivalent, horizontal and vertical FOV, "sees more than this photo"), a hint, and the **lens strip** with the frame at the current centre for every lens of the rig.
+- **Compare A / B**: two rigs side by side as before; A uses the current centre.
+- Uploaded and drawn images ([new shot](new-shot.md)) have no rig: the stage says there is nothing to re-frame.
+
+## Who uses a framing
+
+- `frameOf()` on both clients returns the root (`rootFrame()` in `packages/vocab/src/framing.ts`); `frameLayout()` (dashboard) and `FramedImage` (phone) place an off-centre frame and crop Fit around it.
+- Overlay presentations and timeline clips pick a framing (As captured or a saved one) in a **Framing** select. They store `framing_id` and follow its edits, plus a copy of the frame that is used when the framing is deleted (`referencedFrame()`). New overlays and clips start on the root. Presentations from before #29 (a rig + lens without a framing) show as "Kept: …" until another framing is picked.
 
 ## Math (`packages/fov-math/src/fov.ts`, tested)
 
-A photo only stores what the phone saw. The phone's field of view for that photo is recovered from the rig FOV it was framed with and the stored frame fractions (`phoneViewFromFrame`, the inverse of `overlayRect`). Any rig + lens is then framed on it with `reframe(source, sourceFrame, target)`. Portrait rigs swap axes (`fovOnPhoto`).
-
-The source rig comes from the photo's `framing` snapshot (`sourceRigOf` in `apps/dashboard/src/format.ts`), so it works even if the preset was deleted. A combination wider than the phone's view gives fractions > 1: the frame is drawn beyond the photo (dashed) and the facts line says "sees more than this photo". The photo cannot show what the phone did not capture.
-
-`Framed.tsx` accepts a `frame` override for this.
+A photo only stores what the phone saw. The phone's field of view for that photo is recovered from the rig FOV it was framed with and the **as-captured** frame fractions (`phoneViewFromFrame`, the inverse of `overlayRect`), whatever the root is. Any rig + lens is then sized on it with `reframe(source, sourceFrame, target)`. Portrait rigs swap axes (`fovOnPhoto`). The source rig comes from the photo's `framing` snapshot (`sourceRigOf` in `apps/dashboard/src/format.ts`), so it works even if the preset was deleted. A combination wider than the phone's view gives fractions > 1: the frame is drawn beyond the photo (dashed), it cannot move, and the facts line says "sees more than this photo".

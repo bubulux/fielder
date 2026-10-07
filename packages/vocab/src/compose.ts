@@ -12,6 +12,7 @@
  * The Worker validates with `validateDrawing` / `validatePresentation` (strict: these are
  * interactive edits, never captures).
  */
+import { validateFrame, type Frame } from "./framing.ts";
 
 /** Ten fixed colours, drawn over photos, so they never take the theme (docs/design.md). */
 export const COMPOSE_PALETTE = ["#FFFFFF", "#0B0B0C", "#FF3B30", "#FF9500", "#FFD60A", "#34C759", "#00E5FF", "#0A84FF", "#FF2D95", "#8E8E93"] as const;
@@ -73,8 +74,10 @@ export const emptyDrawing = (withLook: boolean): Drawing => ({ v: 1, shapes: [],
 /** How an overlay is shown by default: the frame mode and the rig frame it was drawn in. */
 export interface Presentation {
   mode: "mask" | "frame" | "fit" | "off";
-  /** Rig frame relative to the photo (same shape as `photos.framing.frame`); null = the photo's own. */
-  frame: { width_fraction: number; height_fraction: number } | null;
+  /** Rig frame relative to the photo, with its centre (framing.ts); null = the photo's root frame. A copy, kept as fallback when `framing_id` is set. */
+  frame: Frame | null;
+  /** The saved framing this follows (issue #29); its edits apply here. Null or absent = as captured / the copy in `frame`. */
+  framing_id?: string | null;
   /** "6K FULL · 24 mm", for display only. */
   label: string | null;
   /** The rig preset and lens the frame came from, so the editor can show the pickers again; null = as shot. */
@@ -171,9 +174,10 @@ export function validatePresentation(v: unknown): string | null {
   const p = v as Record<string, unknown>;
   if (!PRESENTATION_MODES.includes(p.mode as Presentation["mode"])) return `presentation.mode must be one of ${PRESENTATION_MODES.join(", ")}`;
   if (p.frame !== null && p.frame !== undefined) {
-    const f = p.frame as Record<string, unknown>;
-    if (typeof f !== "object" || f === null || !num(f.width_fraction, 0.01, 20) || !num(f.height_fraction, 0.01, 20)) return "presentation.frame must be { width_fraction, height_fraction } (0.01..20)";
+    const err = validateFrame(p.frame, "presentation.frame");
+    if (err) return err;
   }
+  if (p.framing_id !== null && p.framing_id !== undefined && (typeof p.framing_id !== "string" || p.framing_id.length > 40)) return "presentation.framing_id must be a string or null";
   if (p.label !== null && p.label !== undefined && (typeof p.label !== "string" || p.label.length > 80)) return "presentation.label must be a string (max 80) or null";
   if (p.rig_id !== null && p.rig_id !== undefined && (typeof p.rig_id !== "string" || p.rig_id.length > 40)) return "presentation.rig_id must be a string or null";
   if (p.lens_mm !== null && p.lens_mm !== undefined && !num(p.lens_mm, 1, 2000)) return "presentation.lens_mm must be 1..2000 or null";

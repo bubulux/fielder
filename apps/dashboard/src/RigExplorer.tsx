@@ -1,20 +1,44 @@
-import { useMemo } from "preact/hooks";
+import { useMemo, useRef } from "preact/hooks";
 import { computeFraming, LENS_PRESETS_MM, reframe, type RigLens } from "@fielder/fov-math";
-import type { Photo, Preset } from "./api";
-import { sourceRigOf, type FrameGeometry } from "./format";
+import { canMove, clampCentre, resize, withCentre, type Framing } from "@fielder/vocab";
+import { deleteFraming, putFraming, setRootFraming, type Photo, type Preset, type Shot } from "./api";
+import { capturedFrameOf, frameLayout, imageAspect, sourceRigOf, type FrameGeometry } from "./format";
 import { Framed, type MaskMode } from "./Framed";
 import { useKeys } from "./keys";
-import { Button, cx, Empty, Seg, Select, ToolbarSpacer } from "./ui";
+import { Button, Checkbox, confirmDialog, cx, Empty, Icon, IconButton, promptDialog, Seg, Select, toast, ToolbarSpacer } from "./ui";
+
+/**
+ * Shot view stage "Framing" (was Rigs; issue #29). Re-frame a photo for another rig and lens and
+ * move the frame on it: the phone usually saw more than the rig. Framings are saved per photo
+ * ("As captured" always exists and is never changed); one of them can be the photo's root, which
+ * every view on both clients shows. Compare A / B is still here for two rigs side by side.
+ */
 
 /** "as shot" = the rig the photo was framed with; otherwise a preset id. */
 export interface RigChoice { rig: string; lensMm: number }
 export const AS_SHOT = "__as_shot__";
-export interface RigsState { view: "one" | "compare"; a: RigChoice; b: RigChoice }
-export const initialRigs = (photo: Photo, presets: Preset[]): RigsState => ({
-  view: "one",
-  a: { rig: AS_SHOT, lensMm: photo.lens_mm },
-  b: { rig: presets.find((p) => p.id !== photo.preset_id)?.id ?? AS_SHOT, lensMm: photo.lens_mm },
-});
+export interface RigsState {
+  view: "one" | "compare";
+  a: RigChoice;
+  b: RigChoice;
+  /** The saved framing being edited; null = as captured or a new, unsaved one. */
+  framingId: string | null;
+  /** Centre of the frame on the photo (fractions). */
+  centre: { x: number; y: number };
+}
+const CENTRE = { x: 0.5, y: 0.5 };
+const choiceOfFraming = (f: Framing): RigChoice => ({ rig: f.rig_id ?? AS_SHOT, lensMm: f.lens_mm });
+/** Opens on the photo's root framing, or as captured. */
+export function initialRigs(photo: Photo, presets: Preset[]): RigsState {
+  const root = photo.framings.find((f) => f.id === photo.root_framing_id);
+  return {
+    view: "one",
+    a: root ? choiceOfFraming(root) : { rig: AS_SHOT, lensMm: photo.lens_mm },
+    b: { rig: presets.find((p) => p.id !== photo.preset_id)?.id ?? AS_SHOT, lensMm: photo.lens_mm },
+    framingId: root?.id ?? null,
+    centre: root ? clampCentre(root.frame) : CENTRE,
+  };
+}
 
 const lensRange = (p: Preset | undefined) => (p?.lens_min_mm != null && p.lens_max_mm != null ? { min: p.lens_min_mm, max: p.lens_max_mm } : null);
 export function lensesFor(p: Preset | undefined, extra: number[]): number[] {
@@ -24,7 +48,7 @@ export function lensesFor(p: Preset | undefined, extra: number[]): number[] {
   return [...new Set(list)].sort((a, b) => a - b);
 }
 
-/** The rig frame on this photo for a rig + lens choice (as shot = the stored frame); null without framing data. Shared with the compose editor. */
+/** The rig frame's size on this photo for a rig + lens choice (as shot = the captured frame), centred; null without framing data. */
 export function frameForChoice(photo: Photo, presets: Preset[], choice: RigChoice): FrameGeometry | null {
   const source = sourceRigOf(photo);
   if (!source) return null;
@@ -41,72 +65,155 @@ export function choiceLabel(photo: Photo, presets: Preset[], choice: RigChoice):
   return `${name} · ${choice.lensMm} mm`;
 }
 
-interface Props { photo: Photo; presets: Preset[]; mode: MaskMode; state: RigsState; onState: (s: RigsState) => void; onBack: () => void }
+interface Props { shot: Shot; photo: Photo; presets: Preset[]; mode: MaskMode; state: RigsState; onState: (s: RigsState) => void; onBack: () => void; onUpdated: (s: Shot) => void }
 
-/**
- * Stage mode "Rigs": re-frame the photo for other rigs and lenses. The photo only holds what the
- * phone saw, so a combination wider than that shows its frame beyond the photo (dashed).
- */
-export function RigsStage({ photo, presets, mode, state, onState, onBack }: Props) {
+const near = (a: number, b: number) => Math.abs(a - b) < 0.0005;
+
+export function RigsStage({ shot, photo, presets, mode, state, onState, onBack, onUpdated }: Props) {
   const source = sourceRigOf(photo);
   const preset = presets.find((p) => p.id === state.a.rig);
   const lenses = useMemo(() => lensesFor(preset, [photo.lens_mm]), [preset, photo.lens_mm]);
+  const saved = photo.framings.find((f) => f.id === state.framingId) ?? null;
+  const isRoot = (id: string | null) => (photo.root_framing_id ?? null) === id;
+  const allPhotos = useRef(false);
+
+  const size = (c: RigChoice) => frameForChoice(photo, presets, c);
+  const frameA = (): FrameGeometry | null => { const s = size(state.a); return s ? resize({ ...s, ...state.centre }, s) : null; };
+  const isCaptured = !state.framingId && state.a.rig === AS_SHOT && state.a.lensMm === photo.lens_mm && near(state.centre.x, 0.5) && near(state.centre.y, 0.5);
+  const dirty = saved ? (saved.rig_id ?? AS_SHOT) !== state.a.rig || saved.lens_mm !== state.a.lensMm || !near(saved.frame.x ?? 0.5, state.centre.x) || !near(saved.frame.y ?? 0.5, state.centre.y) : !isCaptured;
+
+  const setA = (a: RigChoice) => {
+    const s = size(a);
+    onState({ ...state, a, centre: s ? clampCentre({ ...s, ...state.centre }) : state.centre });
+  };
+  const pick = (id: string) => {
+    if (id === "__captured__") { onState({ ...state, framingId: null, a: { rig: AS_SHOT, lensMm: photo.lens_mm }, centre: CENTRE }); return; }
+    const f = photo.framings.find((x) => x.id === id);
+    if (f) onState({ ...state, framingId: f.id, a: choiceOfFraming(f), centre: clampCentre(f.frame) });
+  };
   const stepLens = (d: number) => {
     const i = lenses.indexOf(state.a.lensMm);
     const n = lenses[Math.max(0, Math.min(lenses.length - 1, (i < 0 ? lenses.findIndex((x) => x > state.a.lensMm) : i) + d))];
-    if (n) onState({ ...state, a: { ...state.a, lensMm: n } });
+    if (n) setA({ ...state.a, lensMm: n });
   };
-  useKeys({ ArrowLeft: () => stepLens(-1), ArrowRight: () => stepLens(1), Escape: onBack }, state.view === "one");
+  const nudge = (dx: number, dy: number) => { const f = frameA(); if (f) onState({ ...state, centre: clampCentre({ ...f, x: state.centre.x + dx, y: state.centre.y + dy }) }); };
+
+  /** Save the current frame as `id` (new or existing) on this photo, or on every photo of the sequence. */
+  async function save(id: string | null, name: string, root: boolean) {
+    const photos = allPhotos.current && shot.photos.length > 1 ? shot.photos : [photo];
+    let last: Shot | null = null;
+    let made: string | null = null;
+    try {
+      for (const ph of photos) {
+        const s = frameForChoice(ph, presets, state.a);
+        if (!s) continue;
+        const fid = ph.id === photo.id && id ? id : crypto.randomUUID();
+        if (ph.id === photo.id) made = fid;
+        last = await putFraming(fid, { photo_id: ph.id, name, rig_id: state.a.rig === AS_SHOT ? null : state.a.rig, lens_mm: state.a.lensMm, frame: withCentre({ ...s, ...state.centre }), root });
+      }
+      if (last) { onUpdated(last); onState({ ...state, framingId: made }); toast(root ? `“${name}” is the root frame${photos.length > 1 ? ` of ${photos.length} photos` : ""}` : `Saved “${name}”${photos.length > 1 ? ` on ${photos.length} photos` : ""}`); }
+    } catch (e) { toast(`Saving the framing failed: ${(e as Error).message}`, "danger"); }
+  }
+  async function saveAsNew(root = false) {
+    const name = await promptDialog({ title: "Save framing", input: { label: "Name", value: `${choiceLabel(photo, presets, state.a)}${isCaptured ? "" : " · moved"}`, placeholder: "e.g. Tighter, door left" }, confirmLabel: root ? "Save and set as root" : "Save" });
+    if (name) await save(null, name, root);
+  }
+  async function setRoot() {
+    if (state.framingId === null && isCaptured) {
+      try { onUpdated(await setRootFraming(photo.id, null)); toast("Root frame: as captured"); } catch (e) { toast(`Failed: ${(e as Error).message}`, "danger"); }
+      return;
+    }
+    if (saved && !dirty) {
+      try { onUpdated(await setRootFraming(photo.id, saved.id)); toast(`“${saved.name}” is the root frame`); } catch (e) { toast(`Failed: ${(e as Error).message}`, "danger"); }
+      return;
+    }
+    if (saved) await save(saved.id, saved.name, true); else await saveAsNew(true);
+  }
+  async function remove() {
+    if (!saved) return;
+    const ok = await confirmDialog({ title: `Delete the framing “${saved.name}”?`, body: `${isRoot(saved.id) ? "It is the root frame: the photo goes back to as captured. " : ""}Overlays and timeline clips that use it keep the frame they had.`, confirmLabel: "Delete", danger: true });
+    if (!ok) return;
+    try { onUpdated(await deleteFraming(saved.id)); onState({ ...state, framingId: null, a: { rig: AS_SHOT, lensMm: photo.lens_mm }, centre: CENTRE }); toast("Framing deleted"); } catch (e) { toast(`Delete failed: ${(e as Error).message}`, "danger"); }
+  }
+
+  useKeys({
+    ArrowLeft: () => stepLens(-1), ArrowRight: () => stepLens(1),
+    "Shift+ArrowLeft": () => nudge(-0.01, 0), "Shift+ArrowRight": () => nudge(0.01, 0), "Shift+ArrowUp": () => nudge(0, -0.01), "Shift+ArrowDown": () => nudge(0, 0.01),
+    "Mod+s": () => { if (saved && dirty) void save(saved.id, saved.name, isRoot(saved.id)); else if (!saved && !isCaptured) void saveAsNew(); },
+    Escape: onBack,
+  }, state.view === "one");
   useKeys({ Escape: onBack }, state.view === "compare");
 
-  if (!source) return <><div class="f-stage__bar"><span class="grow" /><Button kind="ghost" size="sm" kbd="Esc" onClick={onBack}>Back to photo</Button></div><div class="f-stage__view" style={{ color: "#fff" }}><Empty icon="crop-free" title="No framing data">This photo cannot be re-framed.</Empty></div></>;
+  if (!source) return <><div class="f-stage__bar"><span class="grow" /><Button kind="ghost" size="sm" kbd="Esc" onClick={onBack}>Back to photo</Button></div><div class="f-stage__view" style={{ color: "#fff" }}><Empty icon="crop-free" title="No framing data">{photo.source === "camera" ? "This photo cannot be re-framed." : "Uploaded and drawn images have no rig: there is nothing to re-frame."}</Empty></div></>;
 
-  const rigOf = (c: RigChoice): RigLens => {
-    const p = presets.find((x) => x.id === c.rig);
-    if (!p) return { ...source.rigLens, lensMm: c.lensMm };
-    return { rig: { sensor: { widthMm: p.sensor_width_mm, heightMm: p.sensor_height_mm }, speedboosterFactor: p.speedbooster_factor }, lensMm: c.lensMm, portrait: source.rigLens.portrait };
-  };
-  const frameFor = (c: RigChoice): FrameGeometry => {
-    const r = reframe(source.rigLens, source.frame, rigOf(c));
-    return { width_fraction: r.widthFraction, height_fraction: r.heightFraction };
-  };
-  const asShotName = photo.preset_name ?? (photo.framing?.preset_name as string | undefined) ?? "rig";
-  const rigName = (c: RigChoice) => presets.find((p) => p.id === c.rig)?.name ?? `As shot · ${asShotName}`;
-  const setA = (a: RigChoice) => onState({ ...state, a });
+  const fa = frameA();
+  const rigName = (c: RigChoice) => presets.find((p) => p.id === c.rig)?.name ?? `As shot · ${photo.preset_name ?? (photo.framing?.preset_name as string | undefined) ?? "rig"}`;
   const setB = (b: RigChoice) => onState({ ...state, b });
+  const editMode: MaskMode = mode === "frame" ? "frame" : "mask"; // fit and raw cannot show where the frame sits
+  const options = [
+    { value: "__captured__", label: `As captured${isRoot(null) ? " · root" : ""}` },
+    ...photo.framings.map((f) => ({ value: f.id, label: `${f.name}${isRoot(f.id) ? " · root" : ""}`, group: "Saved framings" })),
+  ];
+  const capturedSize = capturedFrameOf(photo);
 
   return (
     <>
       <div class="f-stage__bar">
-        <Seg label="Explorer" value={state.view} onChange={(view) => onState({ ...state, view })} options={[{ id: "one", label: "One rig" }, { id: "compare", label: "Compare A / B" }]} />
-        {state.view === "one" && <><Pickers photo={photo} presets={presets} choice={state.a} onChoice={setA} /><span class="meta num">{factsText(rigOf(state.a), frameFor(state.a))}</span></>}
+        <Seg label="Explorer" value={state.view} onChange={(view) => onState({ ...state, view })} options={[{ id: "one", label: "Framing" }, { id: "compare", label: "Compare A / B" }]} />
+        {state.view === "one" && (
+          <>
+            <Select label="Framing" icon="crop" width="220px" value={state.framingId ?? "__captured__"} onChange={pick} options={options} />
+            <Pickers photo={photo} presets={presets} choice={state.a} onChoice={setA} />
+            {dirty && <span class="f-edited">{saved ? "Edited" : "Not saved"}</span>}
+          </>
+        )}
         <ToolbarSpacer />
-        {state.view === "one" && <span class="meta">←/→ step the lens · shots paused</span>}
+        {state.view === "one" && (
+          <div class="btn-row" style={{ gap: "6px", flexWrap: "nowrap" }}>
+            {shot.photos.length > 1 && <Checkbox checked={allPhotos.current} role="checkbox" aria-checked={allPhotos.current} title="Save the same rig, lens and position on every photo of the sequence" onClick={() => { allPhotos.current = !allPhotos.current; onState({ ...state }); }}>All {shot.photos.length} photos</Checkbox>}
+            {saved && dirty && <Button size="sm" kind="secondary" icon="content-save-outline" kbd="⌘S" onClick={() => void save(saved.id, saved.name, isRoot(saved.id))}>Update</Button>}
+            {(!saved || dirty) && !isCaptured && <Button size="sm" kind="secondary" icon="content-save-plus-outline" kbd={saved ? undefined : "⌘S"} onClick={() => void saveAsNew()}>Save as new…</Button>}
+            {(() => {
+              const rootNow = !dirty && ((saved && isRoot(saved.id)) || (!saved && isCaptured && isRoot(null)));
+              return <Button size="sm" kind={rootNow ? "approve" : "primary"} icon={rootNow ? "check-circle" : "star-outline"} disabled={!!rootNow} title="Every view, the phone and Download crop show the root frame" onClick={() => void setRoot()}>{rootNow ? "Root frame" : "Set as root"}</Button>;
+            })()}
+            {saved && <IconButton icon="delete-outline" label="Delete this framing…" title="Delete this framing…" onClick={() => void remove()} />}
+          </div>
+        )}
         <Button kind="ghost" size="sm" kbd="Esc" onClick={onBack}>Back to photo</Button>
       </div>
       <div class="f-stage__view">
         {state.view === "one" ? (
-          <Reframed photo={photo} mode={mode} frame={frameFor(state.a)} />
+          fa && <Framed photo={photo} mode={editMode} frame={fa} maxHeight="calc(100vh - 290px)">
+            <DragFrame photo={photo} frame={fa} mode={editMode} onMove={(c) => onState({ ...state, centre: c })} />
+          </Framed>
         ) : (
           <div class="compare">
-            {([["A", state.a, setA], ["B", state.b, setB]] as const).map(([tag, c, set]) => (
-              <div key={tag} class="compare__pane">
-                <div class="compare__head"><span class="f-board-lbl">{tag}</span><Pickers photo={photo} presets={presets} choice={c} onChoice={set} /></div>
-                <div class="compare__photo"><Reframed photo={photo} mode={mode === "off" ? "mask" : mode} frame={frameFor(c)} /></div>
-                <span class="compare__facts num">{factsText(rigOf(c), frameFor(c))}</span>
-              </div>
-            ))}
+            {([["A", state.a, (a: RigChoice) => onState({ ...state, a })], ["B", state.b, setB]] as const).map(([tag, c, set]) => {
+              const s = size(c);
+              return (
+                <div key={tag} class="compare__pane">
+                  <div class="compare__head"><span class="f-board-lbl">{tag}</span><Pickers photo={photo} presets={presets} choice={c} onChoice={set} /></div>
+                  <div class="compare__photo">{s && <Framed photo={photo} mode={mode === "off" ? "mask" : mode} frame={tag === "A" ? resize({ ...s, ...state.centre }, s) : s} maxHeight="calc(100vh - 290px)" />}</div>
+                  <span class="compare__facts num">{s ? factsText(rigOf(source.rigLens, presets, c), s) : ""}</span>
+                </div>
+              );
+            })}
           </div>
         )}
       </div>
       {state.view === "one" && (
         <div class="f-stage__foot">
+          <div class="framing-facts">
+            <span class="meta num">{fa ? factsText(rigOf(source.rigLens, presets, state.a), fa) : ""}</span>
+            <span class="meta">{fa && canMove(fa) ? <><Icon name="cursor-move" size={14} />Drag the frame · ⇧ + arrows nudge · ←/→ lens</> : "This rig sees more than the photo: the frame cannot move."}{capturedSize && !isCaptured ? ` · as captured ${Math.round(capturedSize.width_fraction * 100)} % wide` : ""}</span>
+          </div>
           <div class="f-strip" role="listbox" aria-label={`Lenses of ${rigName(state.a)}`}>
             {lenses.map((mm) => {
-              const fr = frameFor({ ...state.a, lensMm: mm });
+              const s = size({ ...state.a, lensMm: mm });
               return (
                 <button key={mm} type="button" role="option" aria-selected={mm === state.a.lensMm} class={cx("f-strip__it", mm === state.a.lensMm && "is-sel")} title={`${mm} mm`} onClick={() => setA({ ...state.a, lensMm: mm })}>
-                  <Framed photo={photo} mode="mask" frame={fr} />
+                  {s && <Framed photo={photo} mode="mask" frame={resize({ ...s, ...state.centre }, s)} />}
                   <span class="f-strip__lbl">{mm} mm</span>
                 </button>
               );
@@ -118,15 +225,41 @@ export function RigsStage({ photo, presets, mode, state, onState, onBack }: Prop
   );
 }
 
+function rigOf(source: RigLens, presets: Preset[], c: RigChoice): RigLens {
+  const p = presets.find((x) => x.id === c.rig);
+  if (!p) return { ...source, lensMm: c.lensMm };
+  return { rig: { sensor: { widthMm: p.sensor_width_mm, heightMm: p.sensor_height_mm }, speedboosterFactor: p.speedbooster_factor }, lensMm: c.lensMm, portrait: source.portrait };
+}
+
 function factsText(rig: RigLens, frame: FrameGeometry): string {
   const f = computeFraming(rig.rig, rig.lensMm);
   const wider = frame.width_fraction > 1 || frame.height_fraction > 1;
   return `FF ${f.fullFrameEquivalentMm.toFixed(1)} mm · HFOV ${f.fov.horizontal.toFixed(1)}° · VFOV ${f.fov.vertical.toFixed(1)}°${wider ? " · sees more than this photo" : ""}`;
 }
 
-/** Nothing is drawn over the photo; "sees more than this photo" is in the facts line (and the frame is dashed). */
-function Reframed({ photo, mode, frame }: { photo: Photo; mode: MaskMode; frame: FrameGeometry }) {
-  return <Framed photo={photo} mode={mode} frame={frame} maxHeight="calc(100vh - 290px)" />;
+/** The frame as a drag handle inside a Framed box: moving it moves the frame's centre over the photo (clamped). */
+function DragFrame({ photo, frame, mode, onMove }: { photo: Photo; frame: FrameGeometry; mode: MaskMode; onMove: (c: { x: number; y: number }) => void }) {
+  const l = frameLayout(frame, mode, imageAspect(photo));
+  const drag = useRef<{ px: number; py: number; x: number; y: number; w: number; h: number } | null>(null);
+  if (!l.frame || !canMove(frame)) return null;
+  const c = withCentre(frame);
+  return (
+    <div class="framing-drag" style={{ left: `${l.frame.left}%`, top: `${l.frame.top}%`, width: `${l.frame.width}%`, height: `${l.frame.height}%` }} title="Drag to move the frame"
+      onPointerDown={(e) => {
+        const box = (e.currentTarget as HTMLElement).parentElement!.getBoundingClientRect();
+        // The photo's size in px inside the box (it is shrunk when the rig sees more on one axis).
+        drag.current = { px: e.clientX, py: e.clientY, x: c.x, y: c.y, w: (box.width * l.img.width) / 100, h: (box.height * l.img.height) / 100 };
+        (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+      }}
+      onPointerMove={(e) => {
+        const d = drag.current;
+        if (!d) return;
+        onMove(clampCentre({ ...frame, x: d.x + (e.clientX - d.px) / d.w, y: d.y + (e.clientY - d.py) / d.h }));
+      }}
+      onPointerUp={() => { drag.current = null; }} onPointerCancel={() => { drag.current = null; }}>
+      <span class="framing-drag__grip"><Icon name="cursor-move" /></span>
+    </div>
+  );
 }
 
 export function Pickers({ photo, presets, choice, onChoice }: { photo: Photo; presets: Preset[]; choice: RigChoice; onChoice: (c: RigChoice) => void }) {

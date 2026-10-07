@@ -40,6 +40,16 @@ All routes live in `apps/worker/src/` and are registered in `index.ts`. Every re
 - Lenient on purpose: unknown `preset_id`/`location_id` become null, names over 120 characters are cut, `extra` is only pruned, not validated.
 - `201` for a new shot, `200` for an existing one; `duplicate: true` when nothing was added.
 
+## Framings (`framings.ts`)
+
+| Method | Path | Notes |
+| --- | --- | --- |
+| PUT | `/api/framings/:id` | Upsert `{ photo_id, name, rig_id?, lens_mm, frame: { width_fraction, height_fraction, x?, y? }, root? }`. The centre is clamped to the photo; `root: true` also makes it the photo's root. A framing cannot move to another photo (`409`). Returns `{ shot }`. |
+| DELETE | `/api/framings/:id` | A deleted root falls back to as captured. Returns `{ deleted, shot }` |
+| PUT | `/api/photos/:id/root` | `{ framing_id: uuid \| null }` (null = as captured) → `{ shot }` |
+
+Overlay and timeline-clip presentations accept `frame.x`/`frame.y` and `framing_id`.
+
 ## Overlays and sketches (`compose.ts`)
 
 Shots embed both lists without the drawing; see [compose](features/compose.md) for the model.

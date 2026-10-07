@@ -1,5 +1,5 @@
 import type { RigLens } from "@fielder/fov-math";
-import { cameraLabel, extraLabel, label, lightLabel, type FilterableShot } from "@fielder/vocab";
+import { cameraLabel, extraLabel, label, lightLabel, rootFrame, withCentre, type FilterableShot } from "@fielder/vocab";
 import type { Photo, Shot } from "./api";
 
 /** The photo that stands for the shot in lists, maps and filters: the first one. */
@@ -51,10 +51,14 @@ const fmt = new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle:
 export const when = (iso: string) => fmt.format(new Date(iso));
 export const coords = (p: Photo) => (p.lat === null || p.lon === null ? "No position" : `${p.lat.toFixed(5)}, ${p.lon.toFixed(5)}`);
 
-export interface FrameGeometry { width_fraction: number; height_fraction: number }
+/** Rig frame relative to the photo; `x`/`y` is its centre (absent = 0.5, centred). */
+export interface FrameGeometry { width_fraction: number; height_fraction: number; x?: number; y?: number }
 
-/** Rig frame relative to the photo, centred. */
-export function frameOf(p: Photo): FrameGeometry | null {
+/** The frame a photo is shown with everywhere: its root framing (issue #29), else as captured. */
+export const frameOf = (p: Photo): FrameGeometry | null => rootFrame(p);
+
+/** The frame as captured on the phone (centred), whatever the root is: the source for re-framing math. */
+export function capturedFrameOf(p: Photo): FrameGeometry | null {
   const f = p.framing?.frame as Partial<FrameGeometry> | undefined;
   if (!f || typeof f.width_fraction !== "number" || typeof f.height_fraction !== "number") return null;
   return { width_fraction: f.width_fraction, height_fraction: f.height_fraction };
@@ -90,8 +94,13 @@ export interface FrameLayout {
   aspect?: number;
 }
 
-/** Same layout rules as the phone: shrink the photo when the rig saw more, crop to the frame in fit mode. */
-export function frameLayout(f: FrameGeometry, mode: FrameMode, photoAspect: number): FrameLayout {
+/**
+ * Same layout rules as the phone: shrink the photo when the rig saw more, crop to the frame in fit
+ * mode, and place the frame at its centre (re-framed frames are off-centre; the centre is clamped
+ * so the frame stays on the photo, see @fielder/vocab framing.ts).
+ */
+export function frameLayout(frame: FrameGeometry, mode: FrameMode, photoAspect: number): FrameLayout {
+  const f = withCentre(frame);
   const full = { left: 0, top: 0, width: 100, height: 100 };
   if (mode === "off") return { img: full, frame: null, shrunk: false };
   if (mode === "fit") {
@@ -99,12 +108,12 @@ export function frameLayout(f: FrameGeometry, mode: FrameMode, photoAspect: numb
     // photo covers less than the container and the rest stays black, like the live view.
     const w = 100 / f.width_fraction, h = 100 / f.height_fraction;
     const shrunk = f.width_fraction > 1 || f.height_fraction > 1;
-    return { img: { left: (100 - w) / 2, top: (100 - h) / 2, width: w, height: h }, frame: null, shrunk, aspect: photoAspect * (f.width_fraction / f.height_fraction) };
+    return { img: { left: 50 - f.x * w, top: 50 - f.y * h, width: w, height: h }, frame: null, shrunk, aspect: photoAspect * (f.width_fraction / f.height_fraction) };
   }
   const scale = 1 / Math.max(1, f.width_fraction, f.height_fraction);
   const img = scale < 1 ? { left: (1 - scale) * 50, top: (1 - scale) * 50, width: scale * 100, height: scale * 100 } : full;
-  const w = f.width_fraction * scale * 100, h = f.height_fraction * scale * 100;
-  return { img, frame: { left: (100 - w) / 2, top: (100 - h) / 2, width: w, height: h }, shrunk: scale < 1 };
+  const w = f.width_fraction * img.width, h = f.height_fraction * img.height;
+  return { img, frame: { left: img.left + f.x * img.width - w / 2, top: img.top + f.y * img.height - h / 2, width: w, height: h }, shrunk: scale < 1 };
 }
 
 /** Map a shot to the shape the shared filter evaluator expects. Rig and lens come from the cover photo. */
@@ -123,7 +132,7 @@ export function filterable(s: Shot): FilterableShot {
 /** The rig and lens a photo was framed with, as fov-math input; null for photos without a framing snapshot. */
 export function sourceRigOf(p: Photo): { rigLens: RigLens; frame: { widthFraction: number; heightFraction: number } } | null {
   const f = p.framing;
-  const fr = frameOf(p);
+  const fr = capturedFrameOf(p);
   if (!f || !fr || typeof f.sensor_width_mm !== "number" || typeof f.sensor_height_mm !== "number") return null;
   return {
     rigLens: {

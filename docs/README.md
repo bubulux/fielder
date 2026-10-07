@@ -23,7 +23,7 @@ Reference documentation for the whole app. Start with [architecture](architectur
 | [features/review-and-tagging.md](features/review-and-tagging.md) | Review flow, tags (light model, INT/EXT, weather, location), view modes (mask/frame/fit/raw) |
 | [features/extra-fields.md](features/extra-fields.md) | User-defined fields as JSON, AI import, per-project selection |
 | [features/positions.md](features/positions.md) | GPS modes (High · Low · Off), photos without a position, manual pin correction, location pins and shots synced to them |
-| [features/rig-explorer.md](features/rig-explorer.md) | Re-framing a photo for other rigs and lenses |
+| [features/rig-explorer.md](features/rig-explorer.md) | Framing: re-frame a photo (other rig + lens, moved), saved framings, the root frame, Compare A / B |
 | [features/new-shot.md](features/new-shot.md) | New shot on the dashboard from uploaded images or a drawn sketch |
 | [features/compose.md](features/compose.md) | Shot descriptions, overlays (drawing + look on a photo), sketches (floor plans, diagrams); dashboard editor, phone viewer, renders |
 | [features/schedule.md](features/schedule.md) | Shooting days, daylight phases, forecast, shootable windows |

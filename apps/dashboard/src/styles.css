@@ -280,3 +280,10 @@ button { font: inherit; }
 .settings__row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--space-4); align-items: center; padding: 14px 16px; border-bottom: var(--bw) solid var(--border-subtle); }
 .settings__row:last-child { border-bottom: 0; }
 .settings__row > div:first-child { display: flex; flex-direction: column; gap: 2px; }
+
+/* Framing stage (RigExplorer.tsx): the frame is a drag handle over the photo. */
+.framing-drag { position: absolute; cursor: grab; touch-action: none; z-index: 2; display: flex; align-items: center; justify-content: center; }
+.framing-drag:active { cursor: grabbing; }
+.framing-drag__grip { display: inline-flex; align-items: center; justify-content: center; width: 36px; height: 36px; border-radius: 50%; background: #000; color: #fff; box-shadow: 0 0 0 2px #fff; font-size: 20px; opacity: 0.85; pointer-events: none; }
+.framing-facts { display: flex; flex-direction: column; gap: 4px; min-width: 0; flex: none; max-width: 340px; }
+.framing-facts .meta { display: inline-flex; align-items: center; gap: 4px; }

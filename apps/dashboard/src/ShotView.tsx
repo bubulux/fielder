@@ -125,7 +125,7 @@ export function ShotView(p: Props) {
         <ToolbarSpacer />
         <Seg label="Stage" value={stage} onChange={setStage} options={[
           { id: "photo", icon: "image-outline", label: "Photo" },
-          { id: "rigs", icon: "camera-control", label: <>Rigs <Kbd>R</Kbd></> },
+          { id: "rigs", icon: "crop", label: <>Framing <Kbd>R</Kbd></> },
           { id: "compose", icon: "draw", label: <>Compose <Kbd>C</Kbd></> },
           { id: "position", icon: "crosshairs-gps", label: "Position" },
         ]} />
@@ -137,7 +137,7 @@ export function ShotView(p: Props) {
         ) : (
         <section class="f-stage" aria-label="Stage">
           {stage === "rigs" ? (
-            <RigsStage photo={photo} presets={p.presets} mode={p.mode} state={rigs} onState={setRigs} onBack={() => p.onStage("photo")} />
+            <RigsStage shot={shot} photo={photo} presets={p.presets} mode={p.mode} state={rigs} onState={setRigs} onBack={() => p.onStage("photo")} onUpdated={p.onUpdated} />
           ) : stage === "position" ? (
             <PositionStage key={photo.id} shot={shot} photo={photo} onSaved={(s) => { p.onUpdated(s); p.onStage("photo"); toast("Position saved"); }} onCancel={() => p.onStage("photo")} onError={(m) => toast(m, "danger")} />
           ) : (
@@ -195,8 +195,8 @@ export function ReviewProgress({ value, children }: { value: number; children: C
 
 /** Hints for the key bar, per stage. */
 export function shotHints(stage: Stage, review: boolean): { k: string; t: string }[] {
-  if (stage === "rigs") return [{ k: "←/→", t: "Lens" }, { k: "Tab", t: "Rig / lens pickers" }, { k: "Esc", t: "Back to photo" }];
+  if (stage === "rigs") return [{ k: "Drag", t: "Move the frame" }, { k: "⇧ arrows", t: "Nudge" }, { k: "←/→", t: "Lens" }, { k: "⌘S", t: "Save framing" }, { k: "Esc", t: "Back to photo" }];
   if (stage === "position") return [{ k: "Drag", t: "Move pin" }, { k: "↵", t: "Save position" }, { k: "Esc", t: "Cancel" }];
   if (stage === "compose") return [{ k: "V P L A R O T S E", t: "Tools" }, { k: "1–0", t: "Colour" }, { k: "⌘Z", t: "Undo" }, { k: "Del", t: "Remove shape" }, { k: ", .", t: "Photos" }, { k: "⌘S", t: "Save" }, { k: "Esc", t: "Back" }];
-  return [{ k: "←/→", t: review ? "Queue" : "Shots" }, { k: ", .", t: "Photos" }, { k: "A", t: "Approve" }, { k: "E", t: "Archive" }, { k: "R", t: "Rigs" }, { k: "C", t: "Compose" }, { k: "M", t: "Frame mode" }, ...(review ? [{ k: "O", t: "Order" }] : []), { k: "Esc", t: review ? "Leave field" : "Close" }];
+  return [{ k: "←/→", t: review ? "Queue" : "Shots" }, { k: ", .", t: "Photos" }, { k: "A", t: "Approve" }, { k: "E", t: "Archive" }, { k: "R", t: "Framing" }, { k: "C", t: "Compose" }, { k: "M", t: "Frame mode" }, ...(review ? [{ k: "O", t: "Order" }] : []), { k: "Esc", t: review ? "Leave field" : "Close" }];
 }
