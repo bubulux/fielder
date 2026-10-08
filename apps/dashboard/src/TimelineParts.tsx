@@ -1,7 +1,7 @@
 import type { ComponentChildren, JSX, RefObject } from "preact";
 import { useEffect, useRef, useState } from "preact/hooks";
 import { CLIP_MAX_MS, EDGE_WEIGHT, GROUP_MAX_MS, PRESENTATION_MODES, splitDuration, type GroupMode, type Presentation } from "@fielder/vocab";
-import { type ClipGroup, copyOverlay, copySketch, deleteTimeline, patchShot, putTimeline, type Overlay, type Photo, type Shot, type ShotState, type Sketch, type Timeline, type TimelineClip } from "./api";
+import { type ClipGroup, copyOverlay, copySketch, deleteTimeline, patchShot, patchShots, putTimeline, type Overlay, type Photo, type Shot, type ShotState, type Sketch, type Timeline, type TimelineClip } from "./api";
 import { frameModeLabel, shotTitle } from "./format";
 import { Framed, type MaskMode } from "./Framed";
 import { invalidateTimelines } from "./Inspector";
@@ -266,6 +266,36 @@ export const DECISIONS: { to: ShotState; label: string; icon: string }[] = [
   { to: "archived", label: "Archive", icon: "archive-arrow-down-outline" },
   { to: "unreviewed", label: "Back to review", icon: "undo-variant" },
 ];
+
+/**
+ * One decision for the whole cut, next to the presentation lock: while any shot in it is still
+ * unreviewed, "Approve all" approves those; once none is, "Back to review" returns the approved ones.
+ * Archived shots are left alone. One bulk request, with Undo in the toast.
+ */
+export function CutDecision({ clips, onUpdated }: { clips: ResolvedClip[]; onUpdated: (s: Shot[]) => void }) {
+  const [busy, setBusy] = useState(false);
+  const shots = [...new Map(clips.flatMap((c) => (c.kind === "photo" ? [[c.shot.id, c.shot] as const] : []))).values()];
+  const unreviewed = shots.filter((s) => s.state === "unreviewed");
+  const approved = shots.filter((s) => s.state === "approved");
+  const [list, from, to] = unreviewed.length ? [unreviewed, "unreviewed", "approved"] as const : [approved, "approved", "unreviewed"] as const;
+  if (list.length === 0) return null;
+  const n = list.length, ids = list.map((s) => s.id);
+  async function run() {
+    setBusy(true);
+    try {
+      onUpdated(await patchShots(ids, { state: to }));
+      toast(`${to === "approved" ? "Approved" : "Back to review"} · ${n} shot${n === 1 ? "" : "s"} in this timeline`, "ok", { label: "Undo", run: () => void patchShots(ids, { state: from }).then(onUpdated).catch((e: Error) => toast(`Undo failed: ${e.message}`, "danger")) });
+    } catch (e) { toast(`Update failed: ${(e as Error).message}`, "danger"); }
+    finally { setBusy(false); }
+  }
+  return (
+    <Field label="Review" as="div">
+      {to === "approved"
+        ? <Button kind="approve" icon="check-all" disabled={busy} title={`Approve the ${n} unreviewed shot${n === 1 ? "" : "s"} in this timeline`} onClick={() => void run()}>Approve all · {n}</Button>
+        : <Button kind="archive" icon="undo-variant" disabled={busy} title={`Every shot in this timeline is decided: send the ${n} approved back to review`} onClick={() => void run()}>Back to review · {n}</Button>}
+    </Field>
+  );
+}
 
 export interface ClipMenuProps {
   menu: { x: number; y: number; ctx: ResolvedClip };

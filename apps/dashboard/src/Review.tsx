@@ -7,7 +7,7 @@ import { ScrubCover, SeqBadges } from "./ShotCard";
 import { afterG, useKeys } from "./keys";
 import type { CutPosition } from "./router";
 import { useSettings } from "./settings";
-import { ClipMenu, ClipPanel, clock, CutPreview, DRAWER_RESIZE, duplicateUnit, fillSpot, insertAfterUnit, insertShot, moveUnitTo, normalizeGroups, restorePhotos, setGroup, stepUnit, ungroup, withoutClip, duplicateTimeline, LockSelect, TimelineRail, newPlaceholder, resolveClips, setShotState, shotDrag, shotUsage, DECISIONS, Strip, useCut, useCutUrl, useTimelineStore, type Cut, type ResolvedClip } from "./TimelineParts";
+import { ClipMenu, ClipPanel, clock, CutDecision, CutPreview, DRAWER_RESIZE, duplicateUnit, fillSpot, insertAfterUnit, insertShot, moveUnitTo, normalizeGroups, restorePhotos, setGroup, stepUnit, ungroup, withoutClip, duplicateTimeline, LockSelect, TimelineRail, newPlaceholder, resolveClips, setShotState, shotDrag, shotUsage, DECISIONS, Strip, useCut, useCutUrl, useTimelineStore, type Cut, type ResolvedClip } from "./TimelineParts";
 import { Banner, Button, ContextMenu, cx, Empty, EmptyNote, Field, Icon, IconButton, Input, MenuItem, Panel, PanelBody, PanelHead, promptDialog, SaveStatus, Seg, Select, StateMarker, toast, Toolbar, ToolbarTitle, useCtxMenu, type SaveState } from "./ui";
 
 /**
@@ -31,7 +31,7 @@ interface Props {
   at?: CutPosition | null;
   onTimeline: (id: string | null) => void;
   onOpen: (s: Shot, list: Shot[]) => void;
-  onUpdated: (s: Shot) => void;
+  onUpdated: (s: Shot | Shot[]) => void;
   onShowOnMap: (s: Shot) => void;
   onNewShot: () => void;
 }
@@ -224,6 +224,7 @@ function Workspace(p: WorkspaceProps) {
             <Field label="Name" style={{ flex: 1, minWidth: "220px" }}><Input value={t.name} maxLength={120} style={{ fontWeight: 700 }} onInput={(e) => p.onChange({ ...t, name: (e.target as HTMLInputElement).value || "Untitled" })} /></Field>
             <Field label="Length"><span class="f-input num" style={{ fontWeight: 700, padding: "0 10px", display: "inline-flex", alignItems: "center" }}>{clock(total)} · {clips.length} clip{clips.length === 1 ? "" : "s"}</span></Field>
             <Field label="Presentation" as="div"><LockSelect value={t.lock_mode} onChange={(m) => p.onChange({ ...t, lock_mode: m })} /></Field>
+            <CutDecision clips={clips} onUpdated={p.onUpdated} />
             <div class="plan-head__status"><SaveStatus state={p.save} onRetry={p.onRetry} /></div>
           </div>
 
