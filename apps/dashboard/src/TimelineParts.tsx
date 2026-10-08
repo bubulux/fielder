@@ -8,6 +8,7 @@ import { invalidateTimelines } from "./Inspector";
 import { FramingSelect, presentationFrame, rootPresentation } from "./FramingSelect";
 import { Button, confirmDialog, ContextMenu, cx, EmptyNote, Field, Icon, IconButton, Input, Kbd, MenuItem, Panel, PanelBody, PanelHead, Seg, Select, Spinner, StateMarker, toast, type SaveState } from "./ui";
 import type { EditKind } from "./ClipEditing";
+import { writeCutPosition, type CutPosition } from "./router";
 
 /**
  * The pieces a timeline is edited with, shared by the Timeline page and the Review workspace
@@ -706,4 +707,32 @@ export function TimelineRail({ list, selectedId, onSelect, onCreate, onContext }
       </PanelBody>
     </Panel>
   );
+}
+
+// ---------- Deep link: the playhead and the inline tool in the URL (issue #35) ----------
+
+/** Whether an inline tool applies to a clip (re-frame needs a camera photo, a sketch a spot without a photo). */
+export const toolFits = (tool: EditKind, c: ResolvedClip) =>
+  tool === "sketch" ? c.kind !== "photo" : c.kind === "photo" && (tool === "overlay" || c.photo.source === "camera");
+
+/**
+ * Restores the URL's cut position once on mount, then keeps it in the URL 300 ms after the playhead
+ * or the tool settles. Playback ticks every 100 ms, so it writes when playback stops, not during it.
+ */
+export function useCutUrl(page: "review" | "timeline", timelineId: string, clips: ResolvedClip[], cut: Cut, editing: EditKind | null, onEdit: (kind: EditKind, c: ResolvedClip) => void, at: CutPosition | null | undefined) {
+  const restored = useRef(false);
+  useEffect(() => {
+    restored.current = true;
+    if (!at || !clips.length) return;
+    const c = clips.find((x) => at.ms < x.startMs + x.clip.duration_ms) ?? clips.at(-1)!;
+    if (at.tool && toolFits(at.tool, c)) onEdit(at.tool, c);
+    // After the edit's select (which rewinds to the clip's start), so the seek wins.
+    cut.seek(c.clip.id, Math.min(at.ms - c.startMs, c.clip.duration_ms));
+  }, []);
+  const ms = cut.playheadMs;
+  useEffect(() => {
+    if (!restored.current) return;
+    const id = setTimeout(() => writeCutPosition(page, timelineId, { ms, tool: editing }), 300);
+    return () => clearTimeout(id);
+  }, [ms, editing]);
 }

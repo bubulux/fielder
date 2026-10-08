@@ -4,8 +4,9 @@ import { guardCut, useClipEditing, type EditKind } from "./ClipEditing";
 import { cover, placeLabel, shotTitle } from "./format";
 import { Framed, type MaskMode } from "./Framed";
 import { afterG, useKeys } from "./keys";
+import type { CutPosition } from "./router";
 import { useSettings } from "./settings";
-import { ClipMenu, ClipPanel, clock, clipsOfShot, copyClip, CutPreview, defaultPresentation, DRAWER_RESIZE, duplicateTimeline, LockSelect, TimelineRail, newPlaceholder, resolveClips, setShotState, shotDrag, shotUsage, Strip, useCut, useTimelineStore, type Cut, type ResolvedClip } from "./TimelineParts";
+import { ClipMenu, ClipPanel, clock, clipsOfShot, copyClip, CutPreview, defaultPresentation, DRAWER_RESIZE, duplicateTimeline, LockSelect, TimelineRail, newPlaceholder, resolveClips, setShotState, shotDrag, shotUsage, DECISIONS, Strip, useCut, useCutUrl, useTimelineStore, type Cut, type ResolvedClip } from "./TimelineParts";
 import { Banner, Button, ContextMenu, cx, Empty, EmptyNote, Field, Icon, IconButton, Input, MenuItem, Panel, PanelBody, PanelHead, promptDialog, SaveStatus, Seg, Select, StateMarker, toast, Toolbar, ToolbarTitle, useCtxMenu, type SaveState } from "./ui";
 
 /**
@@ -25,6 +26,8 @@ interface Props {
   presets: Preset[];
   mask: MaskMode;
   timelineId: string | null;
+  /** The URL's playhead and inline tool, restored when the workspace opens. */
+  at?: CutPosition | null;
   onTimeline: (id: string | null) => void;
   onOpen: (s: Shot, list: Shot[]) => void;
   onUpdated: (s: Shot) => void;
@@ -153,6 +156,7 @@ function Workspace(p: WorkspaceProps) {
   const selectClip = (id: string | null) => { guarded.select(id); if (id && !inline.editing) setPanel("clip"); };
   const guardedCut: Cut = { ...guarded, select: selectClip };
   const edit = (kind: EditKind, c: ResolvedClip) => { cut.select(c.clip.id); setPanel("clip"); inline.start(kind, c); };
+  useCutUrl("review", t.id, clips, cut, inline.editing?.kind ?? null, edit, p.at);
   /** The browser's "in this timeline" badge: the shot's first clip, then the next one on each click. The browser stays open. */
   const jumpTo = (shotId: string) => {
     const ids = usage.get(shotId);
@@ -338,14 +342,20 @@ function Browser(p: BrowserProps) {
                     </button>
                   )}
                 </div>
-                <div class="rw-card__acts">
-                  {s.state !== "approved" && <IconButton kind="secondary" icon="check" label="Approve (A)" title="Approve (A)" onClick={(e) => { e.stopPropagation(); decide(s, "approved"); }} />}
-                  {s.state !== "archived" && <IconButton kind="secondary" icon="archive-arrow-down-outline" label="Archive (E)" title="Archive (E)" onClick={(e) => { e.stopPropagation(); decide(s, "archived"); }} />}
-                </div>
               </div>
-              <div class="f-card__body">
-                <span class="f-card__title">{shotTitle(s)}</span>
-                <span class="f-card__sub">{[placeLabel(s), s.photos.length > 1 ? `${s.photos.length} photos` : "", s.overlays.length ? `${s.overlays.length} overlay${s.overlays.length === 1 ? "" : "s"}` : ""].filter(Boolean).join(" · ") || "—"}</span>
+              <div class="f-card__body rw-card__body">
+                <div class="rw-card__txt">
+                  <span class="f-card__title">{shotTitle(s)}</span>
+                  <span class="f-card__sub">{[placeLabel(s), s.photos.length > 1 ? `${s.photos.length} photos` : "", s.overlays.length ? `${s.overlays.length} overlay${s.overlays.length === 1 ? "" : "s"}` : ""].filter(Boolean).join(" · ") || "—"}</span>
+                </div>
+                {/* The decisions in the foot, always visible (issue #35): the two states the shot is not in. */}
+                <div class="rw-card__acts" onDblClick={(e) => e.stopPropagation()}>
+                  {DECISIONS.filter((d) => d.to !== s.state).map((d) => {
+                    const key = d.to === "approved" ? "A" : d.to === "archived" || s.state === "archived" ? "E" : null;
+                    const tip = key ? `${d.label} (${key})` : d.label;
+                    return <IconButton key={d.to} kind={d.to === "approved" ? "approve" : "archive"} icon={d.icon} label={tip} title={tip} onClick={(e) => { e.stopPropagation(); decide(s, d.to); }} />;
+                  })}
+                </div>
               </div>
             </div>
           ); })}

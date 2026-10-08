@@ -4,8 +4,9 @@ import { cover, shotTitle } from "./format";
 import { Framed, type MaskMode } from "./Framed";
 import { guardCut, useClipEditing, type EditKind } from "./ClipEditing";
 import { afterG, useKeys } from "./keys";
+import type { CutPosition } from "./router";
 import { useSettings } from "./settings";
-import { ClipMenu, ClipPanel, clock, copyClip, CutPreview, DRAWER_RESIZE, LockSelect, TimelineRail, newPlaceholder, resolveClips, setShotState, Strip, useCut, useTimelineStore, clipsOfShot, type ResolvedClip } from "./TimelineParts";
+import { ClipMenu, ClipPanel, clock, copyClip, CutPreview, DRAWER_RESIZE, LockSelect, TimelineRail, newPlaceholder, resolveClips, setShotState, Strip, useCut, useCutUrl, useTimelineStore, clipsOfShot, type ResolvedClip } from "./TimelineParts";
 import { Banner, Button, Checkbox, Empty, Field, Icon, IconButton, Input, Kbd, ListRow, MenuItem, Panel, PanelBody, PanelHead, Popover, SaveStatus, Select, toast, Toolbar, ToolbarTitle, useCtxMenu, type SaveState } from "./ui";
 
 /**
@@ -25,12 +26,14 @@ interface Props {
   presets: Preset[];
   mask: MaskMode;
   timelineId: string | null;
+  /** The URL's playhead and inline tool, restored when the editor opens. */
+  at?: CutPosition | null;
   onTimeline: (id: string | null) => void;
   onOpen: (s: Shot, list: Shot[]) => void;
   onUpdated: (s: Shot) => void;
 }
 
-export function TimelinePage({ project, projects, onPickProject, shots, presets, mask, timelineId, onTimeline, onOpen, onUpdated }: Props) {
+export function TimelinePage({ project, projects, onPickProject, shots, presets, mask, timelineId, at, onTimeline, onOpen, onUpdated }: Props) {
   const projectId = project?.id ?? null;
   const store = useTimelineStore((set, fail) => {
     if (!projectId) return;
@@ -63,15 +66,15 @@ export function TimelinePage({ project, projects, onPickProject, shots, presets,
           Arrange photos and overlays in order, give each a hold time, and play the cut to see which shots carry the sequence.
         </Empty>
       ) : current ? (
-        <Editor key={current.id} timeline={current} shots={shots} presets={presets} mask={mask} onChange={store.change} onDelete={() => void remove(current)} onOpen={onOpen} onUpdated={onUpdated} save={save} onRetry={store.retry} error={save === "error" ? store.error : null} />
+        <Editor key={current.id} at={at} timeline={current} shots={shots} presets={presets} mask={mask} onChange={store.change} onDelete={() => void remove(current)} onOpen={onOpen} onUpdated={onUpdated} save={save} onRetry={store.retry} error={save === "error" ? store.error : null} />
       ) : <Empty icon="filmstrip" title="Pick a timeline" />}
     </div>
   );
 }
 
-interface EditorProps { timeline: Timeline; shots: Shot[]; presets: Preset[]; mask: MaskMode; onChange: (t: Timeline) => void; onDelete: () => void; onOpen: (s: Shot, list: Shot[]) => void; onUpdated: (s: Shot) => void; save: SaveState; onRetry: () => void; error: string | null }
+interface EditorProps { timeline: Timeline; at?: CutPosition | null; shots: Shot[]; presets: Preset[]; mask: MaskMode; onChange: (t: Timeline) => void; onDelete: () => void; onOpen: (s: Shot, list: Shot[]) => void; onUpdated: (s: Shot) => void; save: SaveState; onRetry: () => void; error: string | null }
 
-function Editor({ timeline: t, shots, presets, mask, onChange, onDelete, onOpen, onUpdated, save, onRetry, error }: EditorProps) {
+function Editor({ timeline: t, at, shots, presets, mask, onChange, onDelete, onOpen, onUpdated, save, onRetry, error }: EditorProps) {
   const byId = useMemo(() => new Map(shots.map((s) => [s.id, s])), [shots]);
   const clips = useMemo(() => resolveClips(t, byId), [t, byId]);
   const total = clips.reduce((a, c) => a + c.clip.duration_ms, 0);
@@ -85,6 +88,7 @@ function Editor({ timeline: t, shots, presets, mask, onChange, onDelete, onOpen,
   const inline = useClipEditing({ timeline: t, clips, presets, onChange });
   const guardedCut = guardCut(cut, inline, settings.inlinePlayhead);
   const edit = (kind: EditKind, c: ResolvedClip) => { cut.select(c.clip.id); setAdding(false); inline.start(kind, c); };
+  useCutUrl("timeline", t.id, clips, cut, inline.editing?.kind ?? null, edit, at);
   const latest = useRef(t); latest.current = t;
   const clipMenu = useCtxMenu<ResolvedClip>();
   const decide = (s: Shot, to: Shot["state"]) => void setShotState(s, to, onUpdated);
