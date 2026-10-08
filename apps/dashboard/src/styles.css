@@ -391,3 +391,16 @@ button { font: inherit; }
 .tl-playhead__knob { position: absolute; top: -15px; left: -8px; width: 16px; height: 20px; background: var(--danger); clip-path: polygon(0 0, 100% 0, 100% 60%, 50% 100%, 0 60%); cursor: ew-resize; pointer-events: auto; touch-action: none; }
 .tl-playhead__knob:hover { filter: brightness(1.15); }
 .tl-strip__grip { margin: 0; }
+
+/* Review → Metadata board (issue #42): the unsorted pile on the left, one drop column per value. */
+.mb-board { display: flex; align-items: stretch; gap: 12px; padding: 16px; overflow-x: auto; overflow-y: hidden; }
+.mb-col { flex: none; width: 240px; display: flex; flex-direction: column; min-height: 0; border: var(--bw) solid var(--border-subtle); border-radius: var(--radius-sm); background: var(--surface-sunken); }
+.mb-col.is-over, .mb-drop.is-over { outline: 2px solid var(--accent); outline-offset: -2px; background: var(--accent-tint); }
+.mb-col__head { display: flex; align-items: center; gap: 8px; min-height: 40px; padding: 6px 10px; border-bottom: var(--bw) solid var(--border-subtle); }
+.mb-col__head strong { flex: 1; min-width: 0; }
+.mb-col__list { flex: 1; min-height: 0; overflow-y: auto; scrollbar-gutter: stable; display: flex; flex-direction: column; gap: 8px; padding: 8px; }
+.mb-col__empty { padding: 24px 0; text-align: center; border: 1px dashed var(--border); border-radius: var(--radius-sm); }
+.mb-col--add { gap: 10px; padding-bottom: 10px; }
+.mb-col--add > :not(.mb-col__head) { margin: 0 10px; }
+.mb-drop { display: flex; flex-direction: column; gap: 12px; min-height: 100%; border-radius: var(--radius-sm); }
+.mb-card { cursor: grab; }

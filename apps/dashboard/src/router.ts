@@ -8,6 +8,8 @@ export const LIBRARY_SECTIONS: readonly LibrarySection[] = ["projects", "fields"
  * A position in a cut (issue #35): the playhead (`t`, seconds) and the inline tool open on the
  * clip under it (`tool`). Written silently while working (`writeCutPosition`), read on load.
  */
+import { META_FIELDS, type MetaField } from "./MetadataPage";
+
 export type CutTool = "reframe" | "overlay" | "sketch";
 export interface CutPosition { ms: number; tool: CutTool | null }
 
@@ -33,6 +35,7 @@ export type Route =
   | { page: "shot"; shotId: string; stage: Stage }
   | { page: "review"; timelineId: string | null; at?: CutPosition | null }
   | { page: "plan"; dayId: string | null }
+  | { page: "metadata"; field: MetaField }
   | { page: "timeline"; timelineId: string | null; at?: CutPosition | null }
   | { page: "settings" }
   | { page: "library"; section: LibrarySection; id: string | null };
@@ -52,6 +55,7 @@ export function parseRoute(hash: string): Route {
       return { page: "shots", viewId: q.get("view") };
     case "review": return { page: "review", timelineId: parts[1] ?? null, at: parts[1] ? parseCutPosition(q) : null };
     case "plan": return { page: "plan", dayId: parts[1] ?? null };
+    case "metadata": return { page: "metadata", field: (META_FIELDS as readonly string[]).includes(parts[1]) ? (parts[1] as MetaField) : "location" };
     case "timeline": return { page: "timeline", timelineId: parts[1] ?? null, at: parts[1] ? parseCutPosition(q) : null };
     case "settings": return { page: "settings" };
     case "library": {
@@ -68,6 +72,7 @@ export function routeHash(r: Route): string {
     case "shot": return `#/shots/${r.shotId}${r.stage === "photo" ? "" : `?stage=${r.stage}`}`;
     case "review": return r.timelineId ? `#/review/${r.timelineId}${cutQuery(r.at)}` : "#/review";
     case "plan": return r.dayId ? `#/plan/${r.dayId}` : "#/plan";
+    case "metadata": return `#/metadata/${r.field}`;
     case "timeline": return r.timelineId ? `#/timeline/${r.timelineId}${cutQuery(r.at)}` : "#/timeline";
     case "settings": return "#/settings";
     case "library": return `#/library/${r.section}${r.id ? `/${r.id}` : ""}`;

@@ -35,6 +35,16 @@ Reviewing is finding the shots that carry a sequence, so Review (`Review.tsx`, r
 
 There is no stepper queue any more; the browser's state filter is the queue. The sidebar still counts unreviewed shots.
 
+## Metadata board (dashboard)
+
+Review → **Metadata** (`MetadataPage.tsx`, route `#/metadata/<field>`, issue #42) sets one single-value field on many shots by drag and drop, kanban style. The sidebar shows **Timelines** and **Metadata** under Review while either is open.
+
+- **Head**: the **field** (Location, INT/EXT, Weather, Shot size, Camera support, Review state; multi-value fields and extra fields are not offered), the state filter and search (remembered per browser in `localStorage["metadataBoard"]`), and "n without … · m shots".
+- **Left** (a resizable panel): the shots **without a value**, as cards (hover scrub on sequences); the list empties as you sort. For the review state it holds the unreviewed shots.
+- **Right**: one **column per value** with its shots and a count. Location columns are the locations the project's shots use, plus columns added with **Add a location** (pick or create; remembered per project in `localStorage["metadataColumns.<projectId>"]`, closable while empty). The vocabularies give the other fields' columns; the review state has Approved and Archived.
+- **Drag** a card onto a column to set the value, onto another column to change it, back to the left list to clear it (review state: back to review). Each drop saves at once (`PATCH /api/shots/:id`) with Undo in the toast. Double-click opens the shot view.
+- "All projects" cannot sort: pick a project first.
+
 ## Shot view (dashboard)
 
 The shot view (`ShotView.tsx`) replaces the old dialog. It covers the main area (the sidebar keeps its collapsed or expanded state) and keeps the list it was opened from, from Shots, the map, Plan, Review, Timeline or ⌘K.
