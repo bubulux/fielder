@@ -5,7 +5,7 @@ import { Framed, type MaskMode } from "./Framed";
 import { afterG, useKeys } from "./keys";
 import { Compose, type ComposeGuard } from "./compose/Compose";
 import { initialRigs, RigsStage, type RigsState } from "./RigExplorer";
-import { ClipPanel, clock, clipsOfShot, CutPreview, defaultPresentation, LockSelect, newPlaceholder, resolveClips, shotDrag, Strip, useCut, useTimelineStore, type ResolvedClip } from "./TimelineParts";
+import { ClipPanel, clock, clipsOfShot, CutPreview, defaultPresentation, DRAWER_RESIZE, LockSelect, TimelineRail, newPlaceholder, resolveClips, shotDrag, Strip, useCut, useTimelineStore, type ResolvedClip } from "./TimelineParts";
 import { Banner, Button, ContextMenu, cx, Empty, EmptyNote, Field, IconButton, Input, MenuItem, Panel, PanelBody, PanelHead, promptDialog, SaveStatus, Select, Spinner, StateMarker, toast, Toolbar, ToolbarSpacer, ToolbarTitle, useCtxMenu, type SaveState } from "./ui";
 
 /**
@@ -74,18 +74,7 @@ export function ReviewPage(p: Props) {
   const total = (t: Timeline) => t.clips.reduce((a, c) => a + c.duration_ms, 0);
   return (
     <div class="f-app__body">
-      <Panel left width="240px" label="Timelines">
-        <PanelHead title="Timelines"><Button size="sm" icon="plus" title="New timeline (⇧N)" onClick={() => void create()}>New</Button></PanelHead>
-        <PanelBody flush role="listbox" aria-label="Timelines">
-          {!list ? <div class="status"><Spinner /></div> : list.length === 0 ? <EmptyNote title="No timelines yet">“New” starts an empty cut.</EmptyNote> : list.map((t) => (
-            <div key={t.id} role="option" aria-selected={t.id === p.timelineId} tabIndex={0} class={cx("f-dayitem", t.id === p.timelineId && "is-selected")}
-              onClick={() => p.onTimeline(t.id)} onKeyDown={(e) => { if (e.key === "Enter") p.onTimeline(t.id); }} onContextMenu={(e) => railMenu.openMenu(e, t)}>
-              <span class="f-dayitem__date">{t.name}</span>
-              <span class="f-dayitem__meta num">{t.clips.length} clip{t.clips.length === 1 ? "" : "s"} · {clock(total(t))}</span>
-            </div>
-          ))}
-        </PanelBody>
-      </Panel>
+      <TimelineRail list={list} selectedId={p.timelineId} onSelect={p.onTimeline} onCreate={() => void create()} onContext={(t, e) => railMenu.openMenu(e, t)} />
       {railMenu.menu && (
         <ContextMenu x={railMenu.menu.x} y={railMenu.menu.y} label="Timeline" onClose={railMenu.closeMenu}>
           <MenuItem icon="pencil-outline" onClick={() => void rename(railMenu.menu!.ctx)}>Rename…</MenuItem>
@@ -247,7 +236,7 @@ function Workspace(p: WorkspaceProps) {
             <div class="plan-head__status"><SaveStatus state={p.save} onRetry={p.onRetry} /></div>
           </div>
 
-          <CutPreview cut={cut} clips={clips} total={total} maxHeight="calc(100vh - 470px)" lock={t.lock_mode}>
+          <CutPreview cut={cut} clips={clips} total={total} lock={t.lock_mode}>
             <Button kind="secondary" size="sm" icon="image-off-outline" kbd="P" onClick={addPlaceholder}>Placeholder</Button>
             <Button kind={panel === "browser" ? "secondary" : "primary"} size="sm" icon="view-grid-outline" kbd="N" aria-pressed={panel === "browser"} onClick={() => setPanel(panel === "browser" ? "clip" : "browser")}>Shots</Button>
           </CutPreview>
@@ -320,7 +309,7 @@ function Browser(p: Props & { onAdd: ((s: Shot) => void) | null }) {
 
   const unreviewed = p.shots.filter((s) => s.state === "unreviewed").length;
   return (
-    <Panel label="Shots" width="380px">
+    <Panel label="Shots" width="380px" resize={DRAWER_RESIZE}>
       <PanelHead title="Shots"><span class="meta num">{unreviewed} to review</span><IconButton icon="image-plus" label="New shot" title="New shot: upload or sketch" onClick={p.onNewShot} /></PanelHead>
       <div class="panel-filters">
         <Select label="State" icon="checkbox-marked-outline" value={state} onChange={(v) => setState(v as StateFilter)} options={STATE_OPTIONS} />

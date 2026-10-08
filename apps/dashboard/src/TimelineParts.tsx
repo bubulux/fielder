@@ -6,7 +6,7 @@ import { frameModeLabel, shotTitle } from "./format";
 import { Framed, type MaskMode } from "./Framed";
 import { invalidateTimelines } from "./Inspector";
 import { FramingSelect, presentationFrame, rootPresentation } from "./FramingSelect";
-import { Button, confirmDialog, cx, Field, Icon, IconButton, Input, Kbd, Panel, PanelBody, PanelHead, Seg, Select, toast, type SaveState } from "./ui";
+import { Button, confirmDialog, cx, EmptyNote, Field, Icon, IconButton, Input, Kbd, Panel, PanelBody, PanelHead, Seg, Select, Spinner, toast, type SaveState } from "./ui";
 
 /**
  * The pieces a timeline is edited with, shared by the Timeline page and the Review workspace
@@ -15,6 +15,8 @@ import { Button, confirmDialog, cx, Field, Icon, IconButton, Input, Kbd, Panel, 
  */
 
 export const DEFAULT_MS = 3000;
+/** The right drawer (clip panel, shot browser) shares one remembered width. */
+export const DRAWER_RESIZE = { key: "timelineDrawer", min: 300, max: 720 };
 export const STEP_MS = 500;
 const PX_PER_S = 44;
 const MIN_CLIP_PX = 64;
@@ -159,20 +161,25 @@ export function LockSelect({ value, onChange }: { value: MaskMode | null; onChan
 
 // ---------- Preview + transport ----------
 
-export function CutPreview({ cut, clips, total, maxHeight, lock, children }: { cut: Cut; clips: ResolvedClip[]; total: number; maxHeight: string; lock?: MaskMode | null; children?: ComponentChildren }) {
+/** The stage keeps one height whatever is on it (shot, placeholder, an inline editor): clips letterbox into it. */
+export const STAGE_H = "var(--tl-stage-h)";
+
+export function CutPreview({ cut, clips, total, lock, stage, children }: { cut: Cut; clips: ResolvedClip[]; total: number; lock?: MaskMode | null; /** Replaces the clip on stage (an inline editor). */ stage?: ComponentChildren; children?: ComponentChildren }) {
   const { cur } = cut;
   return (
     <div class="tl-preview">
-      {!cur ? <div class="tl-preview__empty"><Icon name="filmstrip" /><span>Add shots to start the cut</span></div>
-        : cur.kind === "photo" ? <Framed photo={cur.photo} mode={lock ?? cur.pres.mode} frame={presentationFrame(cur.photo, cur.pres)} src={cur.overlay?.render_url ?? undefined} maxHeight={maxHeight} />
-        : (
-          <div class="tl-ph-view" style={{ maxHeight }}>
-            <Icon name="image-off-outline" />
-            <strong>{cur.clip.title}</strong>
-            {cur.clip.notes && <span class="tl-ph-view__notes">{cur.clip.notes}</span>}
-            <span class="meta" style={{ color: "inherit" }}>Placeholder · drop a shot here when you have it</span>
-          </div>
-        )}
+      <div class="tl-stage">
+        {stage ?? (!cur ? <div class="tl-preview__empty"><Icon name="filmstrip" /><span>Add shots to start the cut</span></div>
+          : cur.kind === "photo" ? <Framed photo={cur.photo} mode={lock ?? cur.pres.mode} frame={presentationFrame(cur.photo, cur.pres)} src={cur.overlay?.render_url ?? undefined} maxHeight={STAGE_H} />
+          : (
+            <div class="tl-ph-view">
+              <Icon name="image-off-outline" />
+              <strong>{cur.clip.title}</strong>
+              {cur.clip.notes && <span class="tl-ph-view__notes">{cur.clip.notes}</span>}
+              <span class="meta" style={{ color: "inherit" }}>Placeholder · drop a shot here when you have it</span>
+            </div>
+          ))}
+      </div>
       <div class="tl-transport">
         <IconButton kind="secondary" icon="skip-previous" label="First clip (Home)" disabled={!cur} onClick={() => clips[0] && cut.select(clips[0].clip.id)} />
         <IconButton kind="secondary" icon="chevron-left" label="Previous clip (←)" disabled={!cur || clips.indexOf(cur) === 0} onClick={() => cut.step(-1)} />
@@ -353,7 +360,7 @@ export function ClipPanel({ c, count, lock, durRef, onUpdate, onMove, onRemove, 
 
   if (c.kind === "placeholder") {
     return (
-      <Panel label="Placeholder" width="340px">
+      <Panel label="Placeholder" width="340px" resize={DRAWER_RESIZE}>
         <PanelHead title="Placeholder">{head ?? <span class="meta num">clip {i + 1} of {count}</span>}</PanelHead>
         <PanelBody>
           <span class="meta">Holds this spot in the cut. Drop a shot from the panel onto it to fill it; the hold time is kept.</span>
@@ -378,7 +385,7 @@ export function ClipPanel({ c, count, lock, durRef, onUpdate, onMove, onRemove, 
     onUpdate(o ? { overlay_id: o.id, presentation: o.presentation } : { overlay_id: null });
   };
   return (
-    <Panel label="Clip" width="340px">
+    <Panel label="Clip" width="340px" resize={DRAWER_RESIZE}>
       <PanelHead title={shotTitle(c.shot)}>{head ?? <span class="meta num">clip {i + 1} of {count}</span>}</PanelHead>
       <PanelBody>
         <div class="f-row__thumb" style={{ width: "100%" }}><Framed photo={c.photo} mode={lock ?? pres.mode} frame={presentationFrame(c.photo, pres)} src={c.overlay?.render_url ?? undefined} /></div>
@@ -413,6 +420,48 @@ export function ClipPanel({ c, count, lock, durRef, onUpdate, onMove, onRemove, 
           <span class="grow" />
           <Button kind="danger" size="sm" icon="delete-outline" kbd="Del" onClick={onRemove}>Remove</Button>
         </div>
+      </PanelBody>
+    </Panel>
+  );
+}
+
+// ---------- The project's timelines: a rail that collapses to win width (issue #31) ----------
+
+const loadRail = () => { try { return localStorage.getItem("timelineRail") === "collapsed"; } catch { return false; } };
+
+export function TimelineRail({ list, selectedId, onSelect, onCreate, onContext }: { list: Timeline[] | null; selectedId: string | null; onSelect: (id: string) => void; onCreate: () => void; onContext?: (t: Timeline, e: MouseEvent) => void }) {
+  const [collapsed, setCollapsed] = useState(loadRail);
+  const toggle = () => { const v = !collapsed; setCollapsed(v); try { localStorage.setItem("timelineRail", v ? "collapsed" : "full"); } catch { /* a preference */ } };
+  const total = (t: Timeline) => t.clips.reduce((a, c) => a + c.duration_ms, 0);
+  if (collapsed) {
+    return (
+      <Panel left width="56px" label="Timelines">
+        <div class="tl-rail">
+          <IconButton icon="chevron-double-right" label="Expand the timelines" title="Expand the timelines" onClick={toggle} />
+          <IconButton icon="plus" label="New timeline (⇧N)" title="New timeline (⇧N)" onClick={onCreate} />
+          <span class="tl-rail__sep" />
+          {(list ?? []).map((t, i) => (
+            <button key={t.id} type="button" class={cx("tl-rail__it", t.id === selectedId && "is-selected")} title={`${t.name} · ${t.clips.length} clips · ${clock(total(t))}`} aria-label={t.name} aria-pressed={t.id === selectedId}
+              onClick={() => onSelect(t.id)} onContextMenu={onContext && ((e) => onContext(t, e))}>{i + 1}</button>
+          ))}
+        </div>
+      </Panel>
+    );
+  }
+  return (
+    <Panel left width="240px" label="Timelines">
+      <PanelHead title="Timelines">
+        <Button size="sm" icon="plus" title="New timeline (⇧N)" onClick={onCreate}>New</Button>
+        <IconButton icon="chevron-double-left" label="Collapse the timelines" title="Collapse the timelines" onClick={toggle} />
+      </PanelHead>
+      <PanelBody flush role="listbox" aria-label="Timelines">
+        {!list ? <div class="status"><Spinner /></div> : list.length === 0 ? <EmptyNote title="No timelines yet">“New” starts an empty cut.</EmptyNote> : list.map((t) => (
+          <div key={t.id} role="option" aria-selected={t.id === selectedId} tabIndex={0} class={cx("f-dayitem", t.id === selectedId && "is-selected")}
+            onClick={() => onSelect(t.id)} onKeyDown={(e) => { if (e.key === "Enter") onSelect(t.id); }} onContextMenu={onContext && ((e) => onContext(t, e))}>
+            <span class="f-dayitem__date">{t.name}</span>
+            <span class="f-dayitem__meta num">{t.clips.length} clip{t.clips.length === 1 ? "" : "s"} · {clock(total(t))}</span>
+          </div>
+        ))}
       </PanelBody>
     </Panel>
   );

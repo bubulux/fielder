@@ -3,7 +3,7 @@ import { fetchTimelines, type Preset, type Project, type Shot, type Timeline, ty
 import { cover, shotTitle } from "./format";
 import { Framed, type MaskMode } from "./Framed";
 import { useKeys } from "./keys";
-import { ClipPanel, clock, CutPreview, LockSelect, newPlaceholder, resolveClips, Strip, useCut, useTimelineStore, clipsOfShot, type ResolvedClip } from "./TimelineParts";
+import { ClipPanel, clock, CutPreview, DRAWER_RESIZE, LockSelect, TimelineRail, newPlaceholder, resolveClips, Strip, useCut, useTimelineStore, clipsOfShot, type ResolvedClip } from "./TimelineParts";
 import { Banner, Button, Checkbox, cx, Empty, EmptyNote, Field, Icon, IconButton, Input, Kbd, ListRow, MenuItem, Panel, PanelBody, PanelHead, Popover, SaveStatus, Select, Spinner, Toolbar, ToolbarTitle, type SaveState } from "./ui";
 
 /**
@@ -55,17 +55,7 @@ export function TimelinePage({ project, projects, onPickProject, shots, mask, ti
   const total = (t: Timeline) => t.clips.reduce((a, c) => a + c.duration_ms, 0);
   return (
     <div class="f-app__body">
-      <Panel left width="260px" label="Timelines">
-        <PanelHead title="Timelines"><Button size="sm" icon="plus" title="New timeline (⇧N)" onClick={() => void create()}>New</Button></PanelHead>
-        <PanelBody flush role="listbox" aria-label="Timelines">
-          {!list ? <div class="status"><Spinner /></div> : list.length === 0 ? <EmptyNote title="No timelines yet">“New” starts an empty cut.</EmptyNote> : list.map((t) => (
-            <div key={t.id} role="option" aria-selected={t.id === timelineId} tabIndex={0} class={cx("f-dayitem", t.id === timelineId && "is-selected")} onClick={() => onTimeline(t.id)} onKeyDown={(e) => { if (e.key === "Enter") onTimeline(t.id); }}>
-              <span class="f-dayitem__date">{t.name}</span>
-              <span class="f-dayitem__meta num">{t.clips.length} clip{t.clips.length === 1 ? "" : "s"} · {clock(total(t))}</span>
-            </div>
-          ))}
-        </PanelBody>
-      </Panel>
+      <TimelineRail list={list} selectedId={timelineId} onSelect={onTimeline} onCreate={() => void create()} />
       {list && list.length === 0 ? (
         <Empty icon="filmstrip" title={`No timelines in ${project.name}`} actions={<Button icon="plus" onClick={() => void create()}>New timeline</Button>}>
           Arrange photos and overlays in order, give each a hold time, and play the cut to see which shots carry the sequence.
@@ -138,7 +128,7 @@ function Editor({ timeline: t, shots, mask, onChange, onDelete, onOpen, save, on
             </div>
           </div>
 
-          <CutPreview cut={cut} clips={clips} total={total} maxHeight="calc(100vh - 470px)" lock={t.lock_mode}>
+          <CutPreview cut={cut} clips={clips} total={total} lock={t.lock_mode}>
             <Button kind="secondary" size="sm" icon="image-off-outline" kbd="P" onClick={addPlaceholder}>Placeholder</Button>
             <Button kind={adding ? "secondary" : "primary"} size="sm" icon="plus" kbd="N" aria-pressed={adding} onClick={() => setAdding(!adding)}>Add shots</Button>
           </CutPreview>
@@ -162,7 +152,7 @@ function AddPanel({ shots, mask, onAdd, onClose }: { shots: Shot[]; mask: MaskMo
   for (const s of candidates) { const k = s.location_name ?? "No location"; byLocation.set(k, [...(byLocation.get(k) ?? []), s]); }
   useKeys({ Escape: onClose });
   return (
-    <Panel label="Add shots" width="340px">
+    <Panel label="Add shots" width="340px" resize={DRAWER_RESIZE}>
       <PanelHead title="Add shots"><Kbd>N</Kbd><IconButton icon="close" label="Close" onClick={onClose} /></PanelHead>
       <div class="panel-filters">
         <Select label="Location" icon="map-marker-outline" value={location} onChange={setLocation} options={[{ value: "", label: "All locations" }, ...locations.map(([id, name]) => ({ value: id, label: name }))]} />
