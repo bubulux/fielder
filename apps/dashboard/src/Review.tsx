@@ -7,7 +7,7 @@ import { afterG, useKeys } from "./keys";
 import type { CutPosition } from "./router";
 import { useSettings } from "./settings";
 import { ClipMenu, ClipPanel, clock, clipsOfShot, copyClip, CutPreview, defaultPresentation, DRAWER_RESIZE, duplicateTimeline, LockSelect, TimelineRail, newPlaceholder, resolveClips, setShotState, shotDrag, shotUsage, DECISIONS, Strip, useCut, useCutUrl, useTimelineStore, type Cut, type ResolvedClip } from "./TimelineParts";
-import { Banner, Button, ContextMenu, cx, Empty, EmptyNote, Field, Icon, IconButton, Input, MenuItem, Panel, PanelBody, PanelHead, promptDialog, SaveStatus, Seg, Select, StateMarker, toast, Toolbar, ToolbarTitle, useCtxMenu, type SaveState } from "./ui";
+import { Banner, Button, ContextMenu, cx, Empty, EmptyNote, Field, Icon, IconButton, Input, MenuItem, Panel, PanelBody, PanelHead, promptDialog, SaveStatus, Seg, Select, SeqBadge, StateMarker, toast, Toolbar, ToolbarTitle, useCtxMenu, type SaveState } from "./ui";
 
 /**
  * Review as a timeline-first workspace (issue #31): the selected cut on stage, the project's shots
@@ -270,10 +270,21 @@ const CUT_OPTIONS: { value: CutFilter; label: string }[] = [
   { value: "in", label: "In this timeline" },
 ];
 
-/** Cards per row in the browser (issue #35), remembered per browser. */
-const COLS_KEY = "reviewBrowserCols";
-function readCols(): "1" | "2" {
-  try { return localStorage.getItem(COLS_KEY) === "1" ? "1" : "2"; } catch { return "2"; }
+/** The browser's layout and filters, remembered per browser so they survive leaving Review (issue #35). */
+interface BrowserPrefs { cols: "1" | "2"; state: StateFilter; location: string; inCut: CutFilter; q: string }
+const PREFS_KEY = "reviewBrowser";
+const DEFAULT_PREFS: BrowserPrefs = { cols: "2", state: "review", location: "", inCut: "", q: "" };
+function readPrefs(): BrowserPrefs {
+  try {
+    const v = JSON.parse(localStorage.getItem(PREFS_KEY) ?? "{}") as Partial<BrowserPrefs>;
+    return {
+      cols: v.cols === "1" ? "1" : "2",
+      state: STATE_OPTIONS.some((o) => o.value === v.state) ? v.state! : "review",
+      location: typeof v.location === "string" ? v.location : "",
+      inCut: CUT_OPTIONS.some((o) => o.value === v.inCut) ? v.inCut! : "",
+      q: typeof v.q === "string" ? v.q : "",
+    };
+  } catch { return DEFAULT_PREFS; }
 }
 
 interface BrowserProps extends Props {
@@ -284,15 +295,18 @@ interface BrowserProps extends Props {
 }
 
 function Browser(p: BrowserProps) {
-  const [state, setState] = useState<StateFilter>("review");
-  const [inCut, setInCut] = useState<CutFilter>("");
-  const [cols, setColsState] = useState(readCols);
-  const setCols = (v: "1" | "2") => { setColsState(v); try { localStorage.setItem(COLS_KEY, v); } catch { /* per-browser convenience */ } };
-  const [location, setLocation] = useState("");
-  const [q, setQ] = useState("");
+  const [prefs, setPrefs] = useState(readPrefs);
+  const set = (patch: Partial<BrowserPrefs>) => setPrefs((cur) => {
+    const next = { ...cur, ...patch };
+    try { localStorage.setItem(PREFS_KEY, JSON.stringify(next)); } catch { /* per-browser convenience */ }
+    return next;
+  });
+  const { cols, state, inCut, q } = prefs;
   const menu = useCtxMenu<Shot>();
   const [sel, setSel] = useState<string | null>(null);
   const locations = [...new Map(p.shots.map((s) => [s.location_id ?? "none", s.location_name ?? "No location"])).entries()].sort((a, b) => a[1].localeCompare(b[1]));
+  // A remembered location of another project shows as "All locations".
+  const location = locations.some(([id]) => id === prefs.location) ? prefs.location : "";
   const list = useMemo(() => {
     const needle = q.trim().toLowerCase();
     return p.shots
@@ -313,13 +327,13 @@ function Browser(p: BrowserProps) {
   return (
     <Panel label="Shots" width="380px" resize={DRAWER_RESIZE}>
       <PanelHead title="Shots"><span class="meta num">{unreviewed} to review</span>
-        <Seg label="Cards per row" value={cols} onChange={setCols} options={[{ id: "2", icon: "view-grid-outline", title: "Two per row" }, { id: "1", icon: "view-agenda-outline", title: "One per row: bigger cards" }]} />
+        <Seg label="Cards per row" value={cols} onChange={(v) => set({ cols: v })} options={[{ id: "2", icon: "view-grid-outline", title: "Two per row" }, { id: "1", icon: "view-agenda-outline", title: "One per row: bigger cards" }]} />
         <IconButton icon="image-plus" label="New shot" title="New shot: upload or sketch" onClick={p.onNewShot} /></PanelHead>
       <div class="panel-filters">
-        <Select label="State" icon="checkbox-marked-outline" value={state} onChange={(v) => setState(v as StateFilter)} options={STATE_OPTIONS} />
-        <Select label="Location" icon="map-marker-outline" value={location} onChange={setLocation} options={[{ value: "", label: "All locations" }, ...locations.map(([id, name]) => ({ value: id, label: name }))]} />
-        {p.usage && <Select label="Timeline" icon="filmstrip" value={inCut} onChange={(v) => setInCut(v as CutFilter)} options={CUT_OPTIONS} />}
-        <Input sm value={q} placeholder="Search name or location…" onInput={(e) => setQ((e.target as HTMLInputElement).value)} />
+        <Select label="State" icon="checkbox-marked-outline" value={state} onChange={(v) => set({ state: v as StateFilter })} options={STATE_OPTIONS} />
+        <Select label="Location" icon="map-marker-outline" value={location} onChange={(v) => set({ location: v })} options={[{ value: "", label: "All locations" }, ...locations.map(([id, name]) => ({ value: id, label: name }))]} />
+        {p.usage && <Select label="Timeline" icon="filmstrip" value={inCut} onChange={(v) => set({ inCut: v as CutFilter })} options={CUT_OPTIONS} />}
+        <Input sm value={q} placeholder="Search name or location…" onInput={(e) => set({ q: (e.target as HTMLInputElement).value })} />
       </div>
       <PanelBody>
         <span class="meta">Drag a shot into the strip, or onto a placeholder to fill it. Double-click opens it.</span>
@@ -333,7 +347,8 @@ function Browser(p: BrowserProps) {
               title={`${shotTitle(s)} · drag into the strip`}>
               <div class="f-card__img">
                 <Framed photo={cover(s)} mode={p.mask} />
-                <div class="f-card__tl">
+                {s.photos.length > 1 && <div class="f-card__tl"><SeqBadge count={s.photos.length} /></div>}
+                <div class="f-card__tr rw-card__tr">
                   <StateMarker state={s.state} iconOnly />
                   {uses > 0 && (
                     <button type="button" class="rw-used" title={`In this timeline${uses > 1 ? ` ${uses} times` : ""} · click to jump to ${uses > 1 ? "the next clip" : "the clip"}`} aria-label={`In this timeline, ${uses} clip${uses === 1 ? "" : "s"}`}
