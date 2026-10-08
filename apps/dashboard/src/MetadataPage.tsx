@@ -1,10 +1,11 @@
+import type { JSX } from "preact";
 import { useMemo, useState } from "preact/hooks";
 import { CAMERA_SUPPORTS, INT_EXT, label, SHOT_SIZES, WEATHER } from "@fielder/vocab";
 import { existingIdOf, patchShot, putLocation, type Location, type Project, type Shot, type ShotState, type ShotTags } from "./api";
 import { placeLabel, shotTitle } from "./format";
 import type { MaskMode } from "./Framed";
 import { ScrubCover, SeqBadges } from "./ShotCard";
-import { Combobox, cx, Empty, EmptyNote, Icon, IconButton, Input, MenuItem, Panel, PanelBody, PanelHead, Select, StateMarker, toast, Toolbar, ToolbarTitle } from "./ui";
+import { Combobox, cx, Empty, EmptyNote, Icon, IconButton, Input, MenuItem, Panel, PanelBody, PanelHead, Seg, Select, StateMarker, toast, Toolbar, ToolbarTitle } from "./ui";
 
 /**
  * Review → Metadata (issue #42): sort the project's shots into the values of one single-value field
@@ -42,14 +43,27 @@ const STATE_OPTIONS: { value: StateFilter; label: string }[] = [
 ];
 const inState = (s: Shot, f: StateFilter) => f === "all" || (f === "review" ? s.state !== "archived" : s.state === f);
 
-/** Filters, remembered per browser; added location columns per project. */
-interface Prefs { state: StateFilter; q: string }
+/**
+ * Board layout: values as columns (side by side) or as rows (stacked, cards running sideways), each
+ * in a fixed size that scrolls, or "fit": every lane shares the available space, so nothing scrolls.
+ */
+type Layout = "cols" | "rows";
+type LaneSize = "s" | "m" | "l" | "fit";
+const LANE_PX: Record<Layout, Record<Exclude<LaneSize, "fit">, number>> = { cols: { s: 200, m: 260, l: 340 }, rows: { s: 190, m: 260, l: 360 } };
+const SIZES: LaneSize[] = ["s", "m", "l", "fit"];
+
+/** Filters and layout, remembered per browser; added location columns per project. */
+interface Prefs { state: StateFilter; q: string; layout: Layout; colSize: LaneSize; rowSize: LaneSize }
 const PREFS_KEY = "metadataBoard";
 function readPrefs(): Prefs {
   try {
     const v = JSON.parse(localStorage.getItem(PREFS_KEY) ?? "{}") as Partial<Prefs>;
-    return { state: STATE_OPTIONS.some((o) => o.value === v.state) ? v.state! : "review", q: typeof v.q === "string" ? v.q : "" };
-  } catch { return { state: "review", q: "" }; }
+    const size = (x: unknown): LaneSize => (SIZES.includes(x as LaneSize) ? (x as LaneSize) : "m");
+    return {
+      state: STATE_OPTIONS.some((o) => o.value === v.state) ? v.state! : "review", q: typeof v.q === "string" ? v.q : "",
+      layout: v.layout === "rows" ? "rows" : "cols", colSize: size(v.colSize), rowSize: size(v.rowSize),
+    };
+  } catch { return { state: "review", q: "", layout: "cols", colSize: "m", rowSize: "m" }; }
 }
 const colsKey = (projectId: string) => `metadataColumns.${projectId}`;
 function readAdded(projectId: string): string[] {
@@ -102,6 +116,7 @@ function Board(p: Props & { project: Project }) {
   const [added, setAddedState] = useState(() => readAdded(p.project.id));
   const setAdded = (l: string[]) => { setAddedState(l); try { localStorage.setItem(colsKey(p.project.id), JSON.stringify(l)); } catch { /* per-browser convenience */ } };
   const [over, setOver] = useState<string | null>(null);
+  const size = prefs.layout === "cols" ? prefs.colSize : prefs.rowSize;
 
   const visible = useMemo(() => {
     const needle = prefs.q.trim().toLowerCase();
@@ -199,6 +214,12 @@ function Board(p: Props & { project: Project }) {
         <ToolbarTitle>Metadata</ToolbarTitle>
         <Select label="Field" icon={FIELD_ICONS[field]} value={field} onChange={(v) => p.onField(v as MetaField)} options={META_FIELDS.map((f) => ({ value: f, label: FIELD_LABELS[f] }))} />
         {field !== "state" && <Select label="State" icon="checkbox-marked-outline" value={prefs.state} onChange={(v) => set({ state: v as StateFilter })} options={STATE_OPTIONS} />}
+        <Seg label="Lay the values out as" value={prefs.layout} onChange={(v) => set({ layout: v })}
+          options={[{ id: "cols", icon: "view-column-outline", title: "Columns, side by side" }, { id: "rows", icon: "view-agenda-outline", title: "Rows, stacked" }]} />
+        <Seg label={prefs.layout === "cols" ? "Column width" : "Row height"} value={size} onChange={(v) => set(prefs.layout === "cols" ? { colSize: v } : { rowSize: v })}
+          options={SIZES.map((z) => (z === "fit"
+            ? { id: z, icon: prefs.layout === "cols" ? "arrow-expand-horizontal" : "arrow-expand-vertical", title: `Fit: every ${prefs.layout === "cols" ? "column" : "row"} shares the screen, no scrolling` }
+            : { id: z, label: z.toUpperCase(), title: `${{ s: "Small", m: "Medium", l: "Large" }[z]} ${prefs.layout === "cols" ? "columns" : "rows"} (${LANE_PX[prefs.layout][z]} px)` }))} />
         <Input sm value={prefs.q} placeholder="Search name or location…" style={{ width: "220px" }} onInput={(e) => set({ q: (e.target as HTMLInputElement).value })} />
         <span class="grow" />
         <span class="meta num">{unsorted.length} without {field === "state" ? "a decision" : FIELD_LABELS[field].toLowerCase()} · {visible.length} shots</span>
@@ -214,7 +235,8 @@ function Board(p: Props & { project: Project }) {
             </div>
           </PanelBody>
         </Panel>
-        <div class="f-scroll mb-board">
+        <div class={cx("f-scroll mb-board", prefs.layout === "rows" && "mb-board--rows", size === "fit" && "mb-board--fit")}
+          style={size === "fit" ? undefined : { "--mb-lane": `${LANE_PX[prefs.layout][size]}px` } as JSX.CSSProperties}>
           {columns.map((c) => {
             const list = inColumn(c.value);
             return (
