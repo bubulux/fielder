@@ -12,7 +12,7 @@ import { PlanPage } from "./Plan";
 import { ProjectGate, ProjectsPage } from "./Projects";
 import { ReviewPage } from "./Review";
 import { RigsPage } from "./Rigs";
-import { DEFAULT_ROUTE, useRoute, type Route, type Stage } from "./router";
+import { DEFAULT_ROUTE, useRoute, type Route } from "./router";
 import { NewShotDialog } from "./NewShot";
 import { SettingsPage } from "./SettingsPage";
 import { ShotsPage } from "./ShotsPage";

@@ -28,7 +28,12 @@ export function SettingsPage({ theme, onTheme, mask, onMask }: Props) {
               <Seg label="Review state of new shots" value={s.newShotState} onChange={(v) => updateSettings({ newShotState: v })} options={[{ id: "approved", label: "Approved" }, { id: "unreviewed", label: "To review" }]} />
             </Row>
           </Section>
-          <LinkButton onClick={() => updateSettings(DEFAULT_SETTINGS)}>Reset New shot settings</LinkButton>
+          <Section icon="filmstrip" title="Timeline">
+            <Row label="Playhead while editing" help="When a clip is re-framed or drawn on inline. Pinned: the playhead stays on that clip until you are done. Leave: selecting, stepping or scrubbing to another clip ends the edit (saved first).">
+              <Seg label="Playhead while editing a clip" value={s.inlinePlayhead} onChange={(v) => updateSettings({ inlinePlayhead: v })} options={[{ id: "pin", label: "Pinned to the clip" }, { id: "leave", label: "Leave ends the edit" }]} />
+            </Row>
+          </Section>
+          <LinkButton onClick={() => updateSettings(DEFAULT_SETTINGS)}>Reset these settings</LinkButton>
         </div>
       </div>
     </>

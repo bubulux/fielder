@@ -40,6 +40,8 @@ button { font: inherit; }
 
 /* Shots */
 .shot-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: var(--space-3); padding: var(--space-4); align-content: start; }
+/* Sketch canvases are paper-white in both themes: the render (compose/render.ts SKETCH_BG) is too. */
+:root { --sketch-paper: #FFFFFF; --sketch-ink: #3A3A3C; }
 .f-card .framed { aspect-ratio: 4 / 3; }
 .skel-card { border: var(--bw) solid var(--border-subtle); border-radius: var(--radius-md); overflow: hidden; background: var(--surface); }
 .float-banner { position: absolute; left: 16px; right: 16px; bottom: 16px; z-index: 5; }
@@ -196,7 +198,7 @@ button { font: inherit; }
 /* Compose stage (compose/): the drawing surface sits where the photo would, the SVG on top of it. */
 .compose__view { align-items: center; }
 .compose__surface { position: relative; max-width: 100%; background: var(--photo-bg); user-select: none; }
-.compose__surface--sketch { background: #FFFFFF; box-shadow: 0 0 0 1px var(--border); }
+.compose__surface--sketch { background: var(--sketch-paper); box-shadow: 0 0 0 1px var(--border); }
 .compose__photo { width: 100%; }
 .compose__layer { position: absolute; pointer-events: none; }
 .compose__svg { position: absolute; inset: 0; touch-action: none; }
@@ -315,3 +317,23 @@ button { font: inherit; }
 .tl-rail__it { width: 36px; height: 36px; flex: none; border-radius: var(--radius-sm); border: var(--bw) solid var(--border); background: var(--surface); color: var(--text); font: var(--weight-bold) var(--text-caption)/1 var(--font-sans); cursor: pointer; font-variant-numeric: tabular-nums; }
 .tl-rail__it:hover { border-color: var(--border-strong); }
 .tl-rail__it.is-selected { border-color: var(--accent); background: var(--accent-tint); box-shadow: inset 0 0 0 1px var(--accent); }
+
+/* Sketch clips and inline editing (issue #31). */
+.tl-clip--sk { border-style: dashed; color: var(--text); }
+.tl-clip__thumb--sk { background: var(--sketch-paper); align-items: center; justify-content: center; font-size: 22px; color: var(--sketch-ink); }
+.tl-clip__thumb--sk img { width: 100%; height: 100%; object-fit: contain; }
+.tl-sketch-view { position: relative; max-height: 100%; background: var(--sketch-paper); border-radius: var(--radius-sm); display: flex; align-items: center; justify-content: center; overflow: hidden; color: var(--sketch-ink); }
+.tl-sketch-view img { width: 100%; height: 100%; object-fit: contain; }
+.tl-sketch-thumb { width: 100%; aspect-ratio: 16 / 9; background: var(--sketch-paper); border: var(--bw) solid var(--border-subtle); border-radius: var(--radius-sm); display: flex; align-items: center; justify-content: center; overflow: hidden; font-size: 28px; color: var(--sketch-ink); }
+.tl-sketch-thumb img { width: 100%; height: 100%; object-fit: contain; }
+.tl-sketch-thumb--sm { width: 64px; flex: none; font-size: 18px; }
+.tl-tools { display: flex; gap: 6px; flex-wrap: wrap; }
+.tl-kept { display: flex; align-items: center; gap: 10px; padding: 8px; border: var(--bw) dashed var(--border); border-radius: var(--radius-sm); }
+.tl-kept__txt { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.tl-stage .compose__view, .tl-stage > .draw-surface { max-height: 100%; }
+.tl-stage--edit { outline: 2px solid var(--accent); outline-offset: -2px; border-radius: var(--radius-sm); }
+.tl-sketch-view .meta { color: inherit; }
+.tl-clip.is-editing::after { content: ""; position: absolute; inset: 2px; border: 2px dashed var(--accent); border-radius: 3px; pointer-events: none; }
+.tl-stage__edit { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; }
+.tl-drawbar { flex-direction: row !important; flex-wrap: wrap; align-items: center; gap: 6px; }
+.tl-pickers { display: flex; flex-direction: column; gap: 6px; }

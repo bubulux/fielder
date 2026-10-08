@@ -22,12 +22,13 @@ The light model feeds the [schedule](schedule.md): phases are defined by sun ele
 
 Reviewing is finding the shots that carry a sequence, so Review (`Review.tsx`, route `#/review/<timelineId>`, issue #31) is **timeline-first**: the selected cut on stage, the project's shots in a browser beside it. Metadata work stays in the Shots tab's inspector. The stage, strip, clip panel and autosave are the [timeline](timeline.md)'s, shared via `TimelineParts.tsx`; the Timeline page keeps editing the same cuts without the browser.
 
-- **Left**: the project's timelines; **New** (`⇧N`); right-click for Rename, Duplicate, Delete. "All projects" cannot review: pick a project first.
+- **Left**: the project's timelines (the rail collapses); **New** (`⇧N`); right-click for Rename, Duplicate (copies the clips' own drawings too), Delete. "All projects" cannot review: pick a project first.
 - **Middle**: the timeline's name, length, **presentation lock** (one mode for every clip; the clip panel's presentation controls are inert while locked) and save state, the preview with transport (`Space`, ←/→, `Home`/`End`), and the strip — drag along its ruler to **scrub**. **Placeholder** (`P`) appends a placeholder clip.
-- **Right**: the **shot browser** (`N` toggles it against the clip panel), or the **clip panel** for the selected clip with two extras: **Re-frame** (`R`) opens the [Framing stage](rig-explorer.md) and **Compose** (`C`) the [compose editor](compose.md) for the clip's photo **in place** — save there, come back (Esc, guarded for unsaved compose work) and pick the framing or overlay on the clip.
+- **Right** (a resizable drawer): the **shot browser** (`N` toggles it against the clip panel), or the **clip inspector** for the selected clip. Its tools edit the clip **inline on the stage**, timeline-scoped: **Re-frame** (`R`), **Overlay** (`C`), and for a placeholder **Sketch it** (`C`). See [timeline](timeline.md) → Inline editing and Timeline-scoped edits.
 - **Shot browser**: medium-sized cards (cover in the global frame mode, state marker, name, location · photos · overlays), filtered by state ("To review + Approved" by default), location and a search field, newest first. "New shot" opens the [New shot](new-shot.md) dialog. Click selects (`A` approve / `E` archive then act on it, with an Undo toast), double-click opens the shot view, hover shows quick Approve/Archive, right-click offers Add to timeline, Approve/Archive/Back to review, Open shot, Show on map.
 - **Drag and drop**: drag a card into the strip (an accent line marks the insert position; a sequence adds one clip per photo) or **onto a placeholder** to fill it with the shot's cover photo — the hold time and notes stay. Dropping an unreviewed shot offers "Approve" in a toast: it earned its place. Clips reorder by drag too.
-- Right-clicking a clip offers Re-frame, Compose, Open shot, Duplicate, Remove.
+- Right-clicking a clip offers Re-frame, Overlay (or Sketch it / Edit the sketch), Open shot, Duplicate, Remove.
+- A shot dropped onto a sketch clip fills it; the clip keeps the sketch and offers **Attach to shot**.
 
 There is no stepper queue any more; the browser's state filter is the queue. The sidebar still counts unreviewed shots.
 

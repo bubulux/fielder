@@ -9,13 +9,22 @@ import type { ShotState } from "./api";
 export interface Settings {
   /** Review state a shot made with New shot starts in. */
   newShotState: Extract<ShotState, "approved" | "unreviewed">;
+  /**
+   * While a clip is edited inline on the timeline stage (issue #31): "pin" holds the playhead on that
+   * clip until you are done; "leave" lets you select, step or scrub away, which ends the edit (it is
+   * saved first).
+   */
+  inlinePlayhead: "pin" | "leave";
 }
-export const DEFAULT_SETTINGS: Settings = { newShotState: "approved" };
+export const DEFAULT_SETTINGS: Settings = { newShotState: "approved", inlinePlayhead: "pin" };
 
 function read(): Settings {
   try {
     const raw = JSON.parse(localStorage.getItem("settings") ?? "{}") as Partial<Settings>;
-    return { newShotState: raw.newShotState === "unreviewed" ? "unreviewed" : DEFAULT_SETTINGS.newShotState };
+    return {
+      newShotState: raw.newShotState === "unreviewed" ? "unreviewed" : DEFAULT_SETTINGS.newShotState,
+      inlinePlayhead: raw.inlinePlayhead === "leave" ? "leave" : DEFAULT_SETTINGS.inlinePlayhead,
+    };
   } catch { return { ...DEFAULT_SETTINGS }; }
 }
 let current = read();

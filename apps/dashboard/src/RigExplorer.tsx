@@ -238,7 +238,7 @@ function factsText(rig: RigLens, frame: FrameGeometry): string {
 }
 
 /** The frame as a drag handle inside a Framed box: moving it moves the frame's centre over the photo (clamped). */
-function DragFrame({ photo, frame, mode, onMove }: { photo: Photo; frame: FrameGeometry; mode: MaskMode; onMove: (c: { x: number; y: number }) => void }) {
+export function DragFrame({ photo, frame, mode, onMove }: { photo: Photo; frame: FrameGeometry; mode: MaskMode; onMove: (c: { x: number; y: number }) => void }) {
   const l = frameLayout(frame, mode, imageAspect(photo));
   const drag = useRef<{ px: number; py: number; x: number; y: number; w: number; h: number } | null>(null);
   if (!l.frame || !canMove(frame)) return null;

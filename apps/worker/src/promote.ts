@@ -9,7 +9,8 @@ import { withClips, type TimelineRow } from "./timelines.ts";
  *   - framing: the clip's own re-frame becomes a saved framing of its photo (an identical one is
  *     linked instead of duplicated); the clip then points at it.
  *   - overlay: the clip's own overlay becomes the photo's; the clip keeps pointing at it.
- *   - sketch: a sketch clip's own sketch becomes a sketch of a shot in the project.
+ *   - sketch: the clip's own sketch becomes a sketch of a shot in the project. That is a sketch
+ *     clip's sketch, or (`sketch_id`) the one a clip kept after a shot filled its spot.
  * The clip must be saved (the timeline autosaves); the response carries both sides.
  */
 
@@ -21,7 +22,7 @@ const sameFrame = (a: Frame, b: Frame) => {
 };
 
 export function registerPromote(r: Router<Ctx>) {
-  /** JSON { what: "framing" | "overlay" | "sketch", name? (framing), shot_id? (sketch) }. Returns { timeline, shot }. */
+  /** JSON { what: "framing" | "overlay" | "sketch", name? (framing), shot_id? + sketch_id? (sketch) }. Returns { timeline, shot }. */
   r.on("POST", "/api/timelines/:id/clips/:clip/promote", async ({ env, request }, { id, clip }) => {
     const tid = assertUuid(id, "id");
     const cid = assertUuid(clip, "clip");
@@ -65,14 +66,15 @@ export function registerPromote(r: Router<Ctx>) {
       const position = (await env.DB.prepare("SELECT coalesce(max(position), -1) + 1 AS p FROM overlays WHERE photo_id = ?1 AND timeline_id IS NULL").bind(o.photo_id).first<{ p: number }>())?.p ?? 0;
       await env.DB.prepare("UPDATE overlays SET timeline_id = NULL, clip_id = NULL, position = ?1, updated_at = ?2 WHERE id = ?3").bind(position, now, c.overlay_id).run();
     } else if (b.what === "sketch") {
-      if (!c.sketch_id) throw new HttpError(400, "the clip shows no sketch");
+      const sketchId = b.sketch_id === undefined || b.sketch_id === null ? c.sketch_id : assertUuid(b.sketch_id, "sketch_id");
+      if (!sketchId) throw new HttpError(400, "the clip has no sketch");
       shotId = assertUuid(b.shot_id, "shot_id");
       const shot = await env.DB.prepare("SELECT project_id FROM shots WHERE id = ?1").bind(shotId).first<{ project_id: string }>();
       if (!shot || shot.project_id !== t.project_id) throw new HttpError(400, "the shot is not in the timeline's project");
-      const k = await env.DB.prepare("SELECT timeline_id, clip_id FROM sketches WHERE id = ?1").bind(c.sketch_id).first<{ timeline_id: string | null; clip_id: string | null }>();
+      const k = await env.DB.prepare("SELECT timeline_id, clip_id FROM sketches WHERE id = ?1").bind(sketchId).first<{ timeline_id: string | null; clip_id: string | null }>();
       if (!k || k.timeline_id !== tid || k.clip_id !== cid) throw new HttpError(409, "the sketch is not this clip's own");
       const position = (await env.DB.prepare("SELECT coalesce(max(position), -1) + 1 AS p FROM sketches WHERE shot_id = ?1").bind(shotId).first<{ p: number }>())?.p ?? 0;
-      await env.DB.prepare("UPDATE sketches SET shot_id = ?1, timeline_id = NULL, clip_id = NULL, position = ?2, updated_at = ?3 WHERE id = ?4").bind(shotId, position, now, c.sketch_id).run();
+      await env.DB.prepare("UPDATE sketches SET shot_id = ?1, timeline_id = NULL, clip_id = NULL, position = ?2, updated_at = ?3 WHERE id = ?4").bind(shotId, position, now, sketchId).run();
     } else throw new HttpError(400, "what must be framing, overlay or sketch");
 
     await env.DB.prepare("UPDATE timelines SET updated_at = ?1 WHERE id = ?2").bind(now, tid).run();
