@@ -1,4 +1,4 @@
-import type { ComponentChildren, RefObject } from "preact";
+import type { ComponentChildren, JSX, RefObject } from "preact";
 import { useEffect, useRef, useState } from "preact/hooks";
 import { PRESENTATION_MODES, type Presentation } from "@fielder/vocab";
 import { copyOverlay, copySketch, deleteTimeline, putTimeline, type Overlay, type Photo, type Shot, type Sketch, type Timeline, type TimelineClip } from "./api";
@@ -222,10 +222,33 @@ export function LockSelect({ value, onChange }: { value: MaskMode | null; onChan
 /** The stage keeps one height whatever is on it (shot, placeholder, an inline editor): clips letterbox into it. */
 export const STAGE_H = "var(--tl-stage-h)";
 
+const STAGE_MIN = 200;
+const loadStageH = (): number | null => { try { const v = Number(localStorage.getItem("timelineStageH")); return v >= STAGE_MIN ? v : null; } catch { return null; } };
+
+/**
+ * The stage height: the default fills the window (`--tl-stage-h` in CSS); dragging the grip under
+ * the stage sets a height of its own, remembered per browser; double-click goes back to the default.
+ */
+function useStageHeight() {
+  const [px, setPx] = useState<number | null>(loadStageH);
+  const drag = useRef<{ y: number; h: number } | null>(null);
+  const save = (v: number | null) => { try { if (v === null) localStorage.removeItem("timelineStageH"); else localStorage.setItem("timelineStageH", String(v)); } catch { /* a preference */ } };
+  const grip = (
+    <div class="tl-stage__grip" role="separator" aria-orientation="horizontal" aria-label="Resize the stage" title="Drag to resize the stage · double-click resets"
+      onPointerDown={(e) => { const stage = (e.currentTarget as HTMLElement).previousElementSibling as HTMLElement | null; drag.current = { y: e.clientY, h: stage?.getBoundingClientRect().height ?? 400 }; (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId); e.preventDefault(); }}
+      onPointerMove={(e) => { const d = drag.current; if (!d) return; setPx(Math.round(Math.max(STAGE_MIN, Math.min(window.innerHeight - 160, d.h + e.clientY - d.y)))); }}
+      onPointerUp={() => { if (drag.current) { drag.current = null; setPx((v) => { save(v); return v; }); } }}
+      onPointerCancel={() => { drag.current = null; }}
+      onDblClick={() => { setPx(null); save(null); }}><span /></div>
+  );
+  return { style: px !== null ? { "--tl-stage-h": `${px}px` } : undefined, grip };
+}
+
 export function CutPreview({ cut, clips, total, lock, stage, editing, children }: { cut: Cut; clips: ResolvedClip[]; total: number; lock?: MaskMode | null; /** Replaces the clip on stage (an inline editor). */ stage?: ComponentChildren; editing?: boolean; children?: ComponentChildren }) {
   const { cur } = cut;
+  const height = useStageHeight();
   return (
-    <div class="tl-preview">
+    <div class="tl-preview" style={height.style as JSX.CSSProperties | undefined}>
       <div class={cx("tl-stage", editing && "tl-stage--edit")}>
         {stage ?? (!cur ? <div class="tl-preview__empty"><Icon name="filmstrip" /><span>Add shots to start the cut</span></div>
           : cur.kind === "photo" ? <Framed photo={cur.photo} mode={lock ?? cur.pres.mode} frame={presentationFrame(cur.photo, cur.pres)} src={cur.overlay?.render_url ?? undefined} maxHeight={STAGE_H} />
@@ -239,6 +262,7 @@ export function CutPreview({ cut, clips, total, lock, stage, editing, children }
             </div>
           ))}
       </div>
+      {height.grip}
       <div class="tl-transport">
         <IconButton kind="secondary" icon="skip-previous" label="First clip (Home)" disabled={!cur} onClick={() => clips[0] && cut.select(clips[0].clip.id)} />
         <IconButton kind="secondary" icon="chevron-left" label="Previous clip (←)" disabled={!cur || clips.indexOf(cur) === 0} onClick={() => cut.step(-1)} />
