@@ -1,13 +1,14 @@
 import type { ComponentChildren, JSX, RefObject } from "preact";
 import { useEffect, useRef, useState } from "preact/hooks";
-import { PRESENTATION_MODES, type Presentation } from "@fielder/vocab";
-import { copyOverlay, copySketch, deleteTimeline, patchShot, putTimeline, type Overlay, type Photo, type Shot, type ShotState, type Sketch, type Timeline, type TimelineClip } from "./api";
+import { CLIP_MAX_MS, EDGE_WEIGHT, GROUP_MAX_MS, PRESENTATION_MODES, splitDuration, type GroupMode, type Presentation } from "@fielder/vocab";
+import { type ClipGroup, copyOverlay, copySketch, deleteTimeline, patchShot, putTimeline, type Overlay, type Photo, type Shot, type ShotState, type Sketch, type Timeline, type TimelineClip } from "./api";
 import { frameModeLabel, shotTitle } from "./format";
 import { Framed, type MaskMode } from "./Framed";
 import { invalidateTimelines } from "./Inspector";
 import { FramingSelect, presentationFrame, rootPresentation } from "./FramingSelect";
-import { Button, confirmDialog, ContextMenu, cx, EmptyNote, Field, Icon, IconButton, Input, Kbd, MenuItem, Panel, PanelBody, PanelHead, Seg, Select, Spinner, StateMarker, toast, type SaveState } from "./ui";
+import { Button, confirmDialog, ContextMenu, cx, EmptyNote, Field, Icon, IconButton, Input, Kbd, MenuItem, Panel, PanelBody, PanelHead, Seg, Select, SeqBadge, Spinner, StateMarker, toast, type SaveState } from "./ui";
 import type { EditKind } from "./ClipEditing";
+import { useSettings } from "./settings";
 import { writeCutPosition, type CutPosition } from "./router";
 
 /**
@@ -37,7 +38,7 @@ export const secs = (ms: number) => `${(ms / 1000).toFixed(1)} s`;
  * them on the next save). `ownOverlays` / `ownSketch` are what the clip made inline (issue #31).
  */
 export type ResolvedClip =
-  | { kind: "photo"; clip: TimelineClip; pres: Presentation; shot: Shot; photo: Photo; overlay: Overlay | null; ownOverlays: Overlay[]; ownSketch: Sketch | null; index: number; startMs: number }
+  | { kind: "photo"; clip: TimelineClip; pres: Presentation; shot: Shot; photo: Photo; overlay: Overlay | null; ownOverlays: Overlay[]; ownSketch: Sketch | null; index: number; startMs: number; /** Its sequence block (issue #37): settings, and its place among the block's clips. */ group: ClipGroup | null; seq: { i: number; n: number } | null }
   | { kind: "sketch"; clip: TimelineClip; sketch: Sketch; index: number; startMs: number }
   | { kind: "placeholder"; clip: TimelineClip; index: number; startMs: number };
 
@@ -58,32 +59,192 @@ export function resolveClips(t: Timeline, byId: Map<string, Shot>): ResolvedClip
     if (!shot || !photo || !clip.presentation) return;
     const ownOverlays = own(clip.id);
     const overlay = shot.overlays.find((o) => o.id === clip.overlay_id) ?? ownOverlays.find((o) => o.id === clip.overlay_id) ?? null;
-    out.push({ kind: "photo", clip, pres: clip.presentation, shot, photo, overlay, ownOverlays, ownSketch: t.sketches.find((k) => k.clip_id === clip.id) ?? null, index, startMs: at });
+    out.push({ kind: "photo", clip, pres: clip.presentation, shot, photo, overlay, ownOverlays, ownSketch: t.sketches.find((k) => k.clip_id === clip.id) ?? null, index, startMs: at, group: null, seq: null });
     at += clip.duration_ms;
   });
+  // Blocks, counted over the clips that render (a clip of a deleted photo is skipped).
+  const groups = new Map(t.groups.map((g) => [g.id, g]));
+  for (let i = 0; i < out.length; i++) {
+    const c = out[i];
+    const g = c.kind === "photo" && c.clip.group_id ? groups.get(c.clip.group_id) : undefined;
+    if (!g) continue;
+    let j = i;
+    while (j < out.length && out[j].clip.group_id === g.id) j++;
+    for (let k = i; k < j; k++) { const m = out[k]; if (m.kind === "photo") { m.group = g; m.seq = { i: k - i, n: j - i }; } }
+    i = j - 1;
+  }
   return out;
 }
 /** A clip's own re-frame (issue #31): no saved framing, but a placed frame (re-framed inline). */
 export const ownReframe = (pres: Presentation) => !pres.framing_id && pres.frame?.x !== undefined;
 /** Default presentation of a photo: the view's frame mode and the rig it was shot with. */
 export const defaultPresentation = (photo: Photo, mode: MaskMode): Presentation => ({ mode, ...rootPresentation(photo) });
-/** The clips a shot contributes when added: one per photo, each at the default hold time. */
-export const clipsOfShot = (s: Shot, mode: MaskMode): TimelineClip[] =>
-  s.photos.map((p): TimelineClip => ({ id: crypto.randomUUID(), photo_id: p.id, shot_id: s.id, overlay_id: null, presentation: defaultPresentation(p, mode), duration_ms: DEFAULT_MS, notes: null, title: null, sketch_id: null }));
 export const newPlaceholder = (title: string): TimelineClip =>
-  ({ id: crypto.randomUUID(), photo_id: null, shot_id: null, overlay_id: null, presentation: null, duration_ms: DEFAULT_MS, notes: null, title, sketch_id: null });
+  ({ id: crypto.randomUUID(), photo_id: null, shot_id: null, overlay_id: null, presentation: null, duration_ms: DEFAULT_MS, notes: null, title, sketch_id: null, group_id: null });
+
+// ---------- Sequence blocks (issue #37): a sequence's clips stay together, in photo order ----------
+
+export const newGroup = (totalMs: number, mode: GroupMode = "each"): ClipGroup => ({ id: crypto.randomUUID(), mode, total_ms: totalMs, split: "even", edge_weight: EDGE_WEIGHT.def });
+
+const photoClip = (s: Shot, p: Photo, mode: MaskMode, groupId: string | null): TimelineClip =>
+  ({ id: crypto.randomUUID(), photo_id: p.id, shot_id: s.id, overlay_id: null, presentation: defaultPresentation(p, mode), duration_ms: DEFAULT_MS, notes: null, title: null, sketch_id: null, group_id: groupId });
+
+/** The clips a shot contributes when added: one per photo at the default hold time; a sequence's form a block. */
+export function clipsOfShot(s: Shot, mode: MaskMode): { clips: TimelineClip[]; group: ClipGroup | null } {
+  const group = s.photos.length > 1 ? newGroup(s.photos.length * DEFAULT_MS) : null;
+  return { group, clips: s.photos.map((p) => photoClip(s, p, mode, group?.id ?? null)) };
+}
+
+/**
+ * Keeps blocks consistent after any edit: blocks without clips go, a "total" block's clips share its
+ * length (`splitDuration`, the same the server applies on save).
+ */
+export function normalizeGroups(t: Timeline): Timeline {
+  if (t.groups.length === 0) return t;
+  const used = t.groups.filter((g) => t.clips.some((c) => c.group_id === g.id));
+  let clips = t.clips;
+  for (const g of used) {
+    if (g.mode !== "total") continue;
+    const ids = clips.filter((c) => c.group_id === g.id).map((c) => c.id);
+    const parts = new Map(splitDuration(g.total_ms, ids.length, g.split, g.edge_weight).map((ms, i) => [ids[i], ms]));
+    if (clips.every((c) => !parts.has(c.id) || c.duration_ms === parts.get(c.id))) continue;
+    clips = clips.map((c) => (parts.has(c.id) ? { ...c, duration_ms: parts.get(c.id)! } : c));
+  }
+  return used.length === t.groups.length && clips === t.clips ? t : { ...t, groups: used, clips };
+}
+
+/** The [start, end) range of the unit at index i: its whole block, or the clip alone. */
+export function unitAt(list: { group_id: string | null }[], i: number): [number, number] {
+  const g = list[i]?.group_id;
+  if (!g) return [i, i + 1];
+  let a = i, b = i + 1;
+  while (a > 0 && list[a - 1].group_id === g) a--;
+  while (b < list.length && list[b].group_id === g) b++;
+  return [a, b];
+}
+
+/** An insertion index never splits a block: inside one it moves to the nearer edge. */
+export function snapIndex(list: { group_id: string | null }[], i: number): number {
+  if (i <= 0 || i >= list.length) return i;
+  const g = list[i].group_id;
+  if (!g || list[i - 1].group_id !== g) return i;
+  const [a, b] = unitAt(list, i);
+  return i - a <= b - i ? a : b;
+}
+
+/** Moves the unit holding `clipId` (its block, or the clip) to insertion index `to` (counted before the move). */
+export function moveUnitTo(list: TimelineClip[], clipId: string, to: number): TimelineClip[] {
+  const i = list.findIndex((c) => c.id === clipId);
+  if (i < 0) return list;
+  const [a, b] = unitAt(list, i);
+  const at = snapIndex(list, to);
+  if (at >= a && at <= b) return list;
+  const rest = [...list.slice(0, a), ...list.slice(b)];
+  rest.splice(at > a ? at - (b - a) : at, 0, ...list.slice(a, b));
+  return rest;
+}
+
+/** Alt+←/→: the unit swaps places with its neighbouring unit. */
+export function stepUnit(list: TimelineClip[], clipId: string, d: number): TimelineClip[] {
+  const i = list.findIndex((c) => c.id === clipId);
+  if (i < 0) return list;
+  const [a, b] = unitAt(list, i);
+  if (d < 0) return a === 0 ? list : moveUnitTo(list, clipId, unitAt(list, a - 1)[0]);
+  return b >= list.length ? list : moveUnitTo(list, clipId, unitAt(list, b)[1]);
+}
+
+/** The list without a clip, or with `whole` without the block it is in. */
+export function withoutClip(list: TimelineClip[], clipId: string, whole: boolean): TimelineClip[] {
+  const i = list.findIndex((c) => c.id === clipId);
+  if (i < 0) return list;
+  const [a, b] = whole ? unitAt(list, i) : [i, i + 1];
+  return [...list.slice(0, a), ...list.slice(b)];
+}
+
+/** Inserts a shot (a block for a sequence) at a stored index, never inside a block. */
+export function insertShot(t: Timeline, s: Shot, mode: MaskMode, index?: number): { t: Timeline; first: string } {
+  const { clips, group } = clipsOfShot(s, mode);
+  const l = [...t.clips];
+  l.splice(index === undefined ? l.length : snapIndex(l, index), 0, ...clips);
+  return { t: { ...t, clips: l, groups: group ? [...t.groups, group] : t.groups }, first: clips[0].id };
+}
+
+/**
+ * Fills a placeholder (or sketch clip) with a shot. A single photo takes the spot; a sequence becomes
+ * a block in "total" mode at the spot's hold time. The first clip keeps the spot's id and notes, so
+ * a sketch the spot owns stays with it.
+ */
+export function fillSpot(t: Timeline, spotId: string, s: Shot, mode: MaskMode): Timeline {
+  const i = t.clips.findIndex((c) => c.id === spotId);
+  if (i < 0) return t;
+  const spot = t.clips[i];
+  const group = s.photos.length > 1 ? newGroup(Math.max(spot.duration_ms, s.photos.length * 100), "total") : null;
+  const fresh = s.photos.map((p, k) => (k === 0
+    ? { ...photoClip(s, p, mode, group?.id ?? null), id: spot.id, notes: spot.notes, duration_ms: spot.duration_ms }
+    : photoClip(s, p, mode, group!.id)));
+  const l = [...t.clips];
+  l.splice(i, 1, ...fresh);
+  return normalizeGroups({ ...t, clips: l, groups: group ? [...t.groups, group] : t.groups });
+}
+
+/** Copies a clip's unit for Duplicate: a block's clip duplicates the whole block (a new block, same settings). */
+export async function duplicateUnit(t: Timeline, clipId: string): Promise<{ copies: TimelineClip[]; group: ClipGroup | null }> {
+  const i = t.clips.findIndex((c) => c.id === clipId);
+  const [a, b] = unitAt(t.clips, i);
+  const src = t.clips.slice(a, b);
+  const g0 = src[0].group_id ? t.groups.find((g) => g.id === src[0].group_id) : undefined;
+  const group = g0 ? { ...g0, id: crypto.randomUUID() } : null;
+  const copies = await Promise.all(src.map((c) => copyClip(t, c)));
+  return { copies: copies.map((c) => ({ ...c, group_id: group?.id ?? null })), group };
+}
+
+/** Puts copies right after the unit of `clipId` (the latest timeline: the copy was async). */
+export function insertAfterUnit(t: Timeline, clipId: string, copies: TimelineClip[], group: ClipGroup | null): Timeline {
+  const i = t.clips.findIndex((c) => c.id === clipId);
+  const at = i < 0 ? t.clips.length : unitAt(t.clips, i)[1];
+  const l = [...t.clips];
+  l.splice(at, 0, ...copies);
+  return { ...t, clips: l, groups: group ? [...t.groups, group] : t.groups };
+}
+
+/** Ungroup: the block's clips become loose clips, each keeping its current hold time. */
+export const ungroup = (t: Timeline, groupId: string): Timeline =>
+  ({ ...t, groups: t.groups.filter((g) => g.id !== groupId), clips: t.clips.map((c) => (c.group_id === groupId ? { ...c, group_id: null } : c)) });
+
+/** Brings a block's removed photos back, in photo order, at the default hold time. */
+export function restorePhotos(t: Timeline, groupId: string, s: Shot, mode: MaskMode): Timeline {
+  const i = t.clips.findIndex((c) => c.group_id === groupId);
+  if (i < 0) return t;
+  const [a, b] = unitAt(t.clips, i);
+  const have = new Map(t.clips.slice(a, b).map((c) => [c.photo_id, c]));
+  const next = s.photos.map((p) => have.get(p.id) ?? photoClip(s, p, mode, groupId));
+  const l = [...t.clips];
+  l.splice(a, b - a, ...next);
+  return normalizeGroups({ ...t, clips: l });
+}
+
+/** A block's settings changed: the clips follow. A switch to "total" starts from the block's current length, so nothing jumps. */
+export function setGroup(t: Timeline, g: ClipGroup): Timeline {
+  const prev = t.groups.find((x) => x.id === g.id);
+  const next = prev?.mode === "each" && g.mode === "total"
+    ? { ...g, total_ms: t.clips.filter((c) => c.group_id === g.id).reduce((a, c) => a + c.duration_ms, 0) }
+    : g;
+  return normalizeGroups({ ...t, groups: t.groups.map((x) => (x.id === g.id ? next : x)) });
+}
 
 export const clipLabel = (c: ResolvedClip): string => (c.kind === "photo" ? shotTitle(c.shot) : c.kind === "sketch" ? c.sketch.name : c.clip.title ?? "Placeholder");
 
 /**
  * The clips that use each shot (issue #35): a clip of any of its photos (an overlay hangs off the
- * photo, so it counts too) or a sketch clip showing one of its sketches. One clip is enough.
+ * photo, so it counts too) or a sketch clip showing one of its sketches. One clip is enough; a
+ * sequence block counts once (issue #37).
  */
 export function shotUsage(clips: ResolvedClip[]): Map<string, string[]> {
   const m = new Map<string, string[]>();
   const add = (shotId: string, clipId: string) => m.set(shotId, [...(m.get(shotId) ?? []), clipId]);
   for (const c of clips) {
-    if (c.kind === "photo") add(c.shot.id, c.clip.id);
+    // A block counts once: its first clip.
+    if (c.kind === "photo") { if (!c.seq || c.seq.i === 0) add(c.shot.id, c.clip.id); }
     else if (c.kind === "sketch" && c.sketch.shot_id) add(c.sketch.shot_id, c.clip.id);
   }
   return m;
@@ -151,9 +312,10 @@ export async function copyClip(t: Timeline, clip: TimelineClip): Promise<Timelin
  */
 export async function duplicateTimeline(t: Timeline): Promise<Timeline> {
   const ids = new Map(t.clips.map((c) => [c.id, crypto.randomUUID()]));
+  const gids = new Map(t.groups.map((g) => [g.id, crypto.randomUUID()]));
   const ownOverlay = new Set(t.overlays.map((o) => o.id)), ownSketch = new Set(t.sketches.map((k) => k.id));
-  const base: Timeline = { ...t, id: crypto.randomUUID(), name: `${t.name} (copy)`, overlays: [], sketches: [], created_at: "", updated_at: null, clips: [] };
-  const stripped = t.clips.map((c) => ({ ...c, id: ids.get(c.id)!, overlay_id: c.overlay_id && ownOverlay.has(c.overlay_id) ? null : c.overlay_id, sketch_id: c.sketch_id && ownSketch.has(c.sketch_id) ? null : c.sketch_id }));
+  const base: Timeline = { ...t, id: crypto.randomUUID(), name: `${t.name} (copy)`, groups: t.groups.map((g) => ({ ...g, id: gids.get(g.id)! })), overlays: [], sketches: [], created_at: "", updated_at: null, clips: [] };
+  const stripped = t.clips.map((c) => ({ ...c, id: ids.get(c.id)!, group_id: c.group_id ? gids.get(c.group_id) ?? null : null, overlay_id: c.overlay_id && ownOverlay.has(c.overlay_id) ? null : c.overlay_id, sketch_id: c.sketch_id && ownSketch.has(c.sketch_id) ? null : c.sketch_id }));
   await putTimeline({ ...base, clips: stripped });
   const clips = await Promise.all(t.clips.map(async (c, i) => {
     const owner = { timeline_id: base.id, clip_id: ids.get(c.id)! };
@@ -210,7 +372,7 @@ export function useTimelineStore(load: (set: (t: Timeline[]) => void, fail: (e: 
   };
   const create = async (projectId: string): Promise<Timeline | null> => {
     const n = (list?.length ?? 0) + 1;
-    const t: Timeline = { id: crypto.randomUUID(), project_id: projectId, name: `Cut ${n}`, notes: null, lock_mode: null, clips: [], overlays: [], sketches: [], created_at: "", updated_at: null };
+    const t: Timeline = { id: crypto.randomUUID(), project_id: projectId, name: `Cut ${n}`, notes: null, lock_mode: null, clips: [], groups: [], overlays: [], sketches: [], created_at: "", updated_at: null };
     try { const saved = await putTimeline(t); invalidateTimelines(projectId); setListState((cur) => [...(cur ?? []), saved]); return saved; } catch (e) { toast(`Could not create the timeline: ${(e as Error).message}`, "danger"); return null; }
   };
   const remove = async (t: Timeline): Promise<boolean> => {
@@ -439,7 +601,8 @@ export function Strip({ clips, cut, stripRef, lock, editingId, onOpen, onReorder
     }
     let index = els.length;
     for (let i = 0; i < els.length; i++) { const r = els[i].getBoundingClientRect(); if (e.clientX < r.left + r.width / 2) { index = i; break; } }
-    return { index };
+    // Never into a sequence block: the drop moves to its nearer edge.
+    return { index: snapIndex(clips.map((c) => c.clip), index) };
   }
   const onDragOver = (e: DragEvent) => {
     const k = kinds(e);
@@ -480,6 +643,14 @@ export function Strip({ clips, cut, stripRef, lock, editingId, onOpen, onReorder
   const scrubUp = () => { scrubbing.current = false; };
   const scrub = { onPointerDown: scrubDown, onPointerMove: scrubMove, onPointerUp: scrubUp, onPointerCancel: scrubUp };
   const headX = cut.cur ? xOf(cut.playheadMs) : null;
+  // Sequence blocks (issue #37): one band over each block's clips.
+  const blocks = clips.flatMap((c) => {
+    if (c.kind !== "photo" || !c.seq || c.seq.i !== 0) return [];
+    const members = clips.slice(clips.indexOf(c), clips.indexOf(c) + c.seq.n);
+    const ms = members.reduce((a, m) => a + m.clip.duration_ms, 0);
+    const w = members.reduce((a, m) => a + widthPx(m.clip.duration_ms) + CLIP_GAP, 0) - CLIP_GAP;
+    return [{ c, x: xOf(c.startMs), w, ms, sel: members.some((m) => m.clip.id === sel) }];
+  });
 
   return (
     <div class="tl-strip-box">
@@ -494,7 +665,7 @@ export function Strip({ clips, cut, stripRef, lock, editingId, onOpen, onReorder
     <div class="tl-strip-wrap" ref={stripRef} style={{ "--tl-thumb-h": `${thumbH}px` } as JSX.CSSProperties} onDragOver={onDragOver} onDrop={onDrop} onDragLeave={(e) => { if (!stripRef.current?.contains(e.relatedTarget as Node)) setDrop(null); }}>
       {clips.length === 0 ? (
         <div class={cx("tl-empty", drop && "is-drop")}>
-          <span class="meta">No clips yet. {onDropShot ? "Drag shots here, or add them from the panel." : "Add shots from the panel."} A sequence adds one clip per photo.</span>
+          <span class="meta">No clips yet. {onDropShot ? "Drag shots here, or add them from the panel." : "Add shots from the panel."} A sequence comes in as one block, a clip per photo.</span>
         </div>
       ) : (
         <div class="tl-strip" style={{ width: `${totalPx}px` }} role="listbox" aria-label="Clips">
@@ -504,11 +675,26 @@ export function Strip({ clips, cut, stripRef, lock, editingId, onOpen, onReorder
               <div class="tl-playhead__knob" title="Drag to scrub" {...scrub} />
             </div>
           )}
+          {blocks.length > 0 && (
+            <div class="tl-seqs">
+              {blocks.map(({ c, x, w, ms, sel: on }) => c.kind === "photo" && (
+                <div key={c.clip.id} class={cx("tl-seq", on && "is-sel")} style={{ left: `${x}px`, width: `${w}px` }}
+                  title={`Sequence · ${shotTitle(c.shot)} · ${c.seq!.n} photos · ${secs(ms)}${c.group?.mode === "total" ? ` total, split ${c.group.split === "edges" ? "with longer edges" : "evenly"}` : " (per photo)"} · drag to move the block`}
+                  draggable onDragStart={(e) => { e.dataTransfer?.setData(CLIP_TYPE, c.clip.id); if (e.dataTransfer) e.dataTransfer.effectAllowed = "move"; }}
+                  onClick={() => cut.select(c.clip.id)} onDblClick={() => onOpen(c)}
+                  onContextMenu={onContext && ((e) => { e.preventDefault(); cut.select(c.clip.id); onContext(c, e); })}>
+                  <Icon name={c.group?.mode === "total" ? "timer-outline" : "layers-triple-outline"} size={13} />
+                  <span class="ellipsis">SEQ · {c.seq!.n} · {shotTitle(c.shot)}</span>
+                  <span class="tl-seq__len num">{secs(ms)}</span>
+                </div>
+              ))}
+            </div>
+          )}
           <div class="tl-clips">
             {dropX !== null && <span class="tl-dropline" style={{ left: `${dropX - 2}px` }} />}
             {clips.map((c) => (
               <button key={c.clip.id} type="button" role="option" aria-selected={c.clip.id === sel} data-ph={c.kind !== "photo" ? c.clip.id : undefined}
-                class={cx("tl-clip", c.kind !== "photo" && "tl-clip--ph", c.kind === "sketch" && "tl-clip--sk", c.clip.id === sel && "is-sel", c.clip.id === editingId && "is-editing", drop && "fill" in drop && drop.fill === c.clip.id && "is-fill")}
+                class={cx("tl-clip", c.kind !== "photo" && "tl-clip--ph", c.kind === "photo" && c.seq && "tl-clip--seq", c.kind === "sketch" && "tl-clip--sk", c.clip.id === sel && "is-sel", c.clip.id === editingId && "is-editing", drop && "fill" in drop && drop.fill === c.clip.id && "is-fill")}
                 style={{ width: `${widthPx(c.clip.duration_ms)}px` }}
                 title={`${clipLabel(c)}${c.kind === "photo" && c.overlay ? ` · ${c.overlay.name}` : ""} · ${secs(c.clip.duration_ms)}`}
                 draggable onDragStart={(e) => { e.dataTransfer?.setData(CLIP_TYPE, c.clip.id); if (e.dataTransfer) e.dataTransfer.effectAllowed = "move"; }}
@@ -518,7 +704,7 @@ export function Strip({ clips, cut, stripRef, lock, editingId, onOpen, onReorder
                   ? <div class="tl-clip__thumb"><Framed photo={c.photo} mode={(lock ?? c.pres.mode) === "off" ? "off" : "fit"} frame={presentationFrame(c.photo, c.pres)} src={c.overlay?.render_url ?? undefined} /><span class="tl-clip__state"><StateMarker state={c.shot.state} iconOnly /></span></div>
                   : c.kind === "sketch" ? <div class="tl-clip__thumb tl-clip__thumb--sk">{c.sketch.render_url ? <img src={c.sketch.render_url} alt="" /> : <Icon name="floor-plan" />}</div>
                   : <div class="tl-clip__thumb tl-clip__thumb--ph"><Icon name="image-off-outline" /></div>}
-                <span class="tl-clip__name ellipsis">{c.kind === "photo" && c.overlay ? <Icon name="layers-outline" size={12} /> : null}{clipLabel(c)}{c.kind === "photo" && c.shot.photos.length > 1 ? ` · ${c.photo.ordinal + 1}` : ""}</span>
+                <span class="tl-clip__name ellipsis">{c.kind === "photo" && c.overlay ? <Icon name="layers-outline" size={12} /> : null}{c.kind === "photo" && c.seq ? `${c.photo.ordinal + 1} / ${c.shot.photos.length}` : clipLabel(c)}{c.kind === "photo" && !c.seq && c.shot.photos.length > 1 ? ` · ${c.photo.ordinal + 1}` : ""}</span>
                 <span class="tl-clip__dur num">{secs(c.clip.duration_ms)}</span>
               </button>
             ))}
@@ -552,34 +738,91 @@ export interface ClipPanelProps {
   onAttachSketch?: () => void;
   /** Approve / archive the clip's shot from the timeline (issue #35). */
   onState?: (to: ShotState) => void;
+  /** Its sequence block (issue #37): new settings, Ungroup, bring removed photos back. */
+  onGroup?: (g: ClipGroup) => void;
+  onUngroup?: () => void;
+  onRestore?: () => void;
   head?: ComponentChildren;
 }
 
-export function ClipPanel({ c, count, lock, durRef, onUpdate, onMove, onRemove, onDuplicate, onOpen, onReframe, onOverlay, onSketch, onAttachSketch, onState, head }: ClipPanelProps) {
-  const [dur, setDur] = useState((c.clip.duration_ms / 1000).toFixed(1));
-  useEffect(() => setDur((c.clip.duration_ms / 1000).toFixed(1)), [c.clip.duration_ms]);
-  const commitDur = (v: string) => { const n = Math.round(parseFloat(v.replace(",", ".")) * 10) * 100; if (Number.isFinite(n) && n >= 100 && n <= 3_600_000) onUpdate({ duration_ms: n }); else setDur((c.clip.duration_ms / 1000).toFixed(1)); };
-  const bump = (d: number) => onUpdate({ duration_ms: Math.max(100, Math.min(3_600_000, c.clip.duration_ms + d)) });
-  const i = c.index;
-  const holdTime = (
-    <Field label="Hold time" as="div">
+/** Seconds with one decimal, ±0.5 s buttons; commits on Enter or leaving, Esc reverts. */
+function SecondsField({ label, ms, max, onCommit, disabled, inputRef, kbd, help }: { label: string; ms: number; max: number; onCommit: (ms: number) => void; disabled?: boolean; inputRef?: RefObject<HTMLInputElement>; kbd?: string; help?: ComponentChildren }) {
+  const fmt = (v: number) => (v / 1000).toFixed(1);
+  const [text, setText] = useState(fmt(ms));
+  useEffect(() => setText(fmt(ms)), [ms]);
+  const clamp = (v: number) => Math.max(STEP_MS / 5, Math.min(max, v));
+  const commit = (v: string) => { const n = Math.round(parseFloat(v.replace(",", ".")) * 10) * 100; if (Number.isFinite(n) && n >= 100 && n <= max) onCommit(n); else setText(fmt(ms)); };
+  return (
+    <Field label={label} as="div">
       <div class="btn-row" style={{ flexWrap: "nowrap", gap: "4px" }}>
-        <IconButton kind="secondary" icon="minus" label="Shorter by 0.5 s" onClick={() => bump(-STEP_MS)} />
-        <Input inputRef={durRef} sm class="num" style={{ width: "72px", textAlign: "right", fontWeight: 700 }} value={dur} unit="s" inputMode="decimal" aria-label="Hold time in seconds" onInput={(e) => setDur((e.target as HTMLInputElement).value)} onBlur={() => commitDur(dur)} onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); if (e.key === "Escape") { setDur((c.clip.duration_ms / 1000).toFixed(1)); (e.target as HTMLInputElement).blur(); } }} />
-        <IconButton kind="secondary" icon="plus" label="Longer by 0.5 s" onClick={() => bump(STEP_MS)} />
-        <span class="meta"><Kbd>D</Kbd></span>
+        <IconButton kind="secondary" icon="minus" label="Shorter by 0.5 s" disabled={disabled} onClick={() => onCommit(clamp(ms - STEP_MS))} />
+        <Input inputRef={inputRef} sm class="num" style={{ width: "72px", textAlign: "right", fontWeight: 700 }} value={text} unit="s" inputMode="decimal" aria-label={`${label} in seconds`} disabled={disabled}
+          onInput={(e) => setText((e.target as HTMLInputElement).value)} onBlur={() => commit(text)}
+          onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); if (e.key === "Escape") { setText(fmt(ms)); (e.target as HTMLInputElement).blur(); } }} />
+        <IconButton kind="secondary" icon="plus" label="Longer by 0.5 s" disabled={disabled} onClick={() => onCommit(clamp(ms + STEP_MS))} />
+        {kbd && <span class="meta"><Kbd>{kbd}</Kbd></span>}
       </div>
+      {help && <span class="f-field__help">{help}</span>}
     </Field>
+  );
+}
+
+/** A sequence block's settings in the clip panel: how its length is made, Restore and Ungroup. */
+function SequenceSection({ c, onGroup, onUngroup, onRestore }: { c: Extract<ResolvedClip, { kind: "photo" }>; onGroup: (g: ClipGroup) => void; onUngroup?: () => void; onRestore?: () => void }) {
+  const g = c.group!, seq = c.seq!;
+  const missing = c.shot.photos.length - seq.n;
+  const [weight, setWeight] = useState(g.edge_weight);
+  useEffect(() => setWeight(g.edge_weight), [g.edge_weight]);
+  return (
+    <div class="tl-seqbox" role="group" aria-label="Sequence">
+      <div class="tl-seqbox__head"><SeqBadge count={c.shot.photos.length} small /><span class="meta">Photo {seq.i + 1} of {seq.n} in this block{missing > 0 ? ` · ${missing} removed` : ""}</span></div>
+      <Field label="Length" as="div">
+        <Seg label="How the block's length is made" value={g.mode} onChange={(mode) => onGroup({ ...g, mode })}
+          options={[{ id: "each", label: "Per photo" }, { id: "total", label: "Total" }]} />
+        <span class="f-field__help">{g.mode === "each" ? "Each photo has its own hold time; the block is their sum." : "One length for the block, split across its photos."}</span>
+      </Field>
+      {g.mode === "total" && (
+        <>
+          <SecondsField label="Total" ms={g.total_ms} max={GROUP_MAX_MS} onCommit={(ms) => onGroup({ ...g, total_ms: Math.max(ms, seq.n * 100) })} />
+          <Field label="Split" as="div">
+            <Seg label="Split" value={g.split} onChange={(split) => onGroup({ ...g, split })} options={[{ id: "even", label: "Even" }, { id: "edges", label: "Edges" }]} />
+          </Field>
+          {g.split === "edges" && (
+            <Field label={`Edge weight · ${weight.toFixed(1)}×`} as="div">
+              <input type="range" class="tl-zoom" style={{ width: "100%" }} min={EDGE_WEIGHT.min} max={EDGE_WEIGHT.max} step={0.1} value={weight} aria-label="Edge weight"
+                onInput={(e) => setWeight(Number((e.target as HTMLInputElement).value))} onChange={(e) => onGroup({ ...g, edge_weight: Number((e.target as HTMLInputElement).value) })}
+                onDblClick={() => onGroup({ ...g, edge_weight: EDGE_WEIGHT.def })} />
+              <span class="f-field__help">The first and last photo get {weight.toFixed(1)} shares, the others one (double-click: {EDGE_WEIGHT.def}×).</span>
+            </Field>
+          )}
+        </>
+      )}
+      <div class="btn-row" style={{ gap: "6px" }}>
+        {missing > 0 && onRestore && <Button kind="secondary" size="sm" icon="restore" onClick={onRestore}>Restore all photos</Button>}
+        {onUngroup && <Button kind="ghost" size="sm" icon="link-variant-off" title="Make the block's clips loose clips; each keeps its hold time" onClick={onUngroup}>Ungroup</Button>}
+      </div>
+    </div>
+  );
+}
+
+export function ClipPanel({ c, count, lock, durRef, onUpdate, onMove, onRemove, onDuplicate, onOpen, onReframe, onOverlay, onSketch, onAttachSketch, onState, onGroup, onUngroup, onRestore, head }: ClipPanelProps) {
+  const i = c.index;
+  const seq = c.kind === "photo" ? c.seq : null;
+  const inTotal = c.kind === "photo" && c.group?.mode === "total";
+  const settings = useSettings();
+  const holdTime = (
+    <SecondsField label="Hold time" ms={c.clip.duration_ms} max={CLIP_MAX_MS} inputRef={durRef} kbd="D" disabled={inTotal}
+      onCommit={(ms) => onUpdate({ duration_ms: ms })} help={inTotal ? "Set by the block's total and split." : undefined} />
   );
   const notes = <Field label="Notes"><textarea class="f-textarea" rows={3} placeholder={c.kind === "photo" ? "Why this shot here, what it needs…" : "What the wanted shot looks like…"} value={c.clip.notes ?? ""} onInput={(e) => onUpdate({ notes: (e.target as HTMLTextAreaElement).value || null })} /></Field>;
   const foot = (extra?: ComponentChildren) => (
     <div class="btn-row" style={{ gap: "6px" }}>
-      <IconButton kind="secondary" icon="arrow-left" label="Move earlier (Alt+←)" title="Move earlier (Alt+←)" disabled={i === 0} onClick={() => onMove(-1)} />
-      <IconButton kind="secondary" icon="arrow-right" label="Move later (Alt+→)" title="Move later (Alt+→)" disabled={i === count - 1} onClick={() => onMove(1)} />
-      <Button kind="secondary" size="sm" icon="content-duplicate" onClick={onDuplicate}>Duplicate</Button>
+      <IconButton kind="secondary" icon="arrow-left" label="Move earlier (Alt+←)" title="Move earlier (Alt+←)" disabled={i - (seq?.i ?? 0) === 0} onClick={() => onMove(-1)} />
+      <IconButton kind="secondary" icon="arrow-right" label="Move later (Alt+→)" title="Move later (Alt+→)" disabled={i + (seq ? seq.n - seq.i - 1 : 0) >= count - 1} onClick={() => onMove(1)} />
+      <Button kind="secondary" size="sm" icon="content-duplicate" onClick={onDuplicate}>{seq ? "Duplicate block" : "Duplicate"}</Button>
       {extra}
       <span class="grow" />
-      <Button kind="danger" size="sm" icon="delete-outline" kbd="Del" onClick={onRemove}>Remove</Button>
+      <Button kind="danger" size="sm" icon="delete-outline" kbd="Del" onClick={onRemove}>{seq ? (settings.seqRemove === "block" ? "Remove sequence" : "Remove photo") : "Remove"}</Button>
     </div>
   );
   const headMeta = head ?? <span class="meta num">clip {i + 1} of {count}</span>;
@@ -637,6 +880,7 @@ export function ClipPanel({ c, count, lock, durRef, onUpdate, onMove, onRemove, 
             {onOverlay && <Button kind="secondary" size="sm" icon="layers-outline" kbd="C" onClick={onOverlay}>{c.overlay?.clip_id ? "Edit overlay" : c.overlay ? "Overlay (copy)" : "Overlay"}</Button>}
           </div>
         )}
+        {c.group && seq && onGroup && <SequenceSection c={c} onGroup={onGroup} onUngroup={onUngroup} onRestore={onRestore} />}
         {holdTime}
         <Field label="Show as" as="div">
           <Select label="Show as" width="100%" value={c.clip.overlay_id ?? ""} onChange={pickOverlay}

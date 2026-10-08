@@ -25,7 +25,7 @@ Designed in Claude Design (2026-09-28): four sections plus a shot view, a sideba
 | Review | `Review.tsx`, `TimelineParts.tsx` | The timeline-first review workspace (issue #31): the selected cut on stage, a shot browser beside it. See [review and tagging](review-and-tagging.md). |
 | Plan | `Plan.tsx` | [Shooting days](schedule.md) |
 | Timeline | `Timeline.tsx` | [Timelines](timeline.md): rough cuts with hold times and playback |
-| Settings | `SettingsPage.tsx`, `settings.ts` | Preferences saved on change, per browser (`localStorage["settings"]`; theme and frame mode keep their own keys): theme, default frame mode, the review state of shots made with New shot (Approved by default), and Timeline → the playhead while a clip is edited inline (pinned, or moving away ends the edit). Sidebar footer cog, or ⌘K → Settings. |
+| Settings | `SettingsPage.tsx`, `settings.ts` | Preferences saved on change, per browser (`localStorage["settings"]`; theme and frame mode keep their own keys): theme, default frame mode, the review state of shots made with New shot (Approved by default), and Timeline → the playhead while a clip is edited inline (pinned, or moving away ends the edit) and what Remove takes on a sequence block's clip (the photo, or the whole sequence). Sidebar footer cog, or ⌘K → Settings. |
 | Library › Projects | `Projects.tsx` | [Projects](projects.md): list with counts, detail with name, notes and ordered extra fields |
 | Library › Fields | `Fields.tsx` | [Extra fields](extra-fields.md): list, JSON editor, live preview |
 | Library › Rigs | `Rigs.tsx` | Rig table (body, format, sensor, speedbooster, lens range, shots) and an editor panel |

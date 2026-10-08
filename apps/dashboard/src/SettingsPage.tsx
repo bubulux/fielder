@@ -32,6 +32,9 @@ export function SettingsPage({ theme, onTheme, mask, onMask }: Props) {
             <Row label="Playhead while editing" help="When a clip is re-framed or drawn on inline. Pinned: the playhead stays on that clip until you are done. Leave: selecting, stepping or scrubbing to another clip ends the edit (saved first).">
               <Seg label="Playhead while editing a clip" value={s.inlinePlayhead} onChange={(v) => updateSettings({ inlinePlayhead: v })} options={[{ id: "pin", label: "Pinned to the clip" }, { id: "leave", label: "Leave ends the edit" }]} />
             </Row>
+            <Row label="Removing a sequence's photo" help="Remove on a clip of a sequence block. Just the photo: the block keeps the rest in order (Restore all photos brings it back). Whole sequence: the block goes.">
+              <Seg label="Removing a sequence's photo" value={s.seqRemove} onChange={(v) => updateSettings({ seqRemove: v })} options={[{ id: "photo", label: "Just the photo" }, { id: "block", label: "Whole sequence" }]} />
+            </Row>
           </Section>
           <LinkButton onClick={() => updateSettings(DEFAULT_SETTINGS)}>Reset these settings</LinkButton>
         </div>
