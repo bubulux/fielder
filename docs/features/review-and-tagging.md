@@ -37,7 +37,7 @@ There is no stepper queue any more; the browser's state filter is the queue. The
 
 ## Metadata board (dashboard)
 
-Review → **Metadata** (`MetadataPage.tsx`, route `#/metadata/<field>`, issue #42) sets one single-value field on many shots by drag and drop, kanban style. The sidebar shows **Timelines** and **Metadata** under Review while either is open.
+**Metadata** (`MetadataPage.tsx`, route `#/metadata/<field>`, issue #42; its own sidebar section after Review) sets one single-value field on many shots by drag and drop, kanban style.
 
 - **Head**: the **field** (Location, INT/EXT, Weather, Shot size, Camera support, Review state; multi-value fields and extra fields are not offered), the state filter and search (remembered per browser in `localStorage["metadataBoard"]`), and "n without … · m shots".
 - **Left** (a resizable panel): the shots **without a value**, as cards (hover scrub on sequences); the list empties as you sort. For the review state it holds the unreviewed shots.

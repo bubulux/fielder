@@ -8,7 +8,7 @@ import { ScrubCover, SeqBadges } from "./ShotCard";
 import { Combobox, cx, Empty, EmptyNote, Icon, IconButton, Input, MenuItem, Panel, PanelBody, PanelHead, Seg, Select, StateMarker, toast, Toolbar, ToolbarTitle } from "./ui";
 
 /**
- * Review → Metadata (issue #42): sort the project's shots into the values of one single-value field
+ * Metadata (issue #42): sort the project's shots into the values of one single-value field
  * by drag and drop, kanban style. The left list holds the shots without a value and empties as you
  * sort; each column is a value. A drop saves at once (one PATCH, Undo in the toast); dragging a card
  * back to the left list clears the value. Multi-value fields (light, movement) are not offered.

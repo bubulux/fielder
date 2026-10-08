@@ -38,13 +38,11 @@ const THEME_ICON: Record<ThemeChoice, string> = { auto: "theme-light-dark", sun:
 export function Sidebar({ route, rail, onToggle, scope, projects, views, editedViewId, counts, theme, onTheme, onScope, onNavigate, onNewView, onPalette, onReload, loadedAt }: Props) {
   const scopeName = scope === ALL_PROJECTS ? "All projects" : projects.find((p) => p.id === scope)?.name ?? "—";
   const section = route.page === "shot" ? "shots" : route.page;
-  // Metadata lives under Review: the parent stays marked.
-  const parent = section === "metadata" ? "review" : section;
   const lib = route.page === "library" ? route.section : null;
   const viewId = route.page === "shots" ? route.viewId : null;
   const nav = (id: string, icon: string, text: string, to: Route, count?: number, warn?: boolean) => (
-    <a class={cx("f-nav", parent === id && !(id === "shots" && viewId) && "is-current")} href="#" aria-label={rail ? `${text}${count ? `, ${count}` : ""}` : undefined} title={rail ? text : undefined}
-      aria-current={parent === id ? "page" : undefined} onClick={(e) => { e.preventDefault(); onNavigate(to); }}>
+    <a class={cx("f-nav", section === id && !(id === "shots" && viewId) && "is-current")} href="#" aria-label={rail ? `${text}${count ? `, ${count}` : ""}` : undefined} title={rail ? text : undefined}
+      aria-current={section === id ? "page" : undefined} onClick={(e) => { e.preventDefault(); onNavigate(to); }}>
       <Icon name={icon} />{!rail && <span class="f-nav__txt">{text}</span>}
       {count !== undefined && (warn ? count > 0 && <span class="f-nav__count f-nav__count--warn">{count}</span> : !rail && <span class="f-nav__count">{count}</span>)}
     </a>
@@ -64,12 +62,7 @@ export function Sidebar({ route, rail, onToggle, scope, projects, views, editedV
       <div style={{ height: "10px" }} />
       {nav("shots", "view-grid-outline", "Shots", { page: "shots", viewId: null }, counts.shots)}
       {nav("review", "checkbox-marked-outline", "Review", { page: "review", timelineId: null }, counts.unreviewed, true)}
-      {!rail && (section === "review" || section === "metadata") && (
-        <>
-          <a class={cx("f-nav f-nav--sub", section === "review" && "is-current")} href="#" onClick={(e) => { e.preventDefault(); onNavigate({ page: "review", timelineId: null }); }}><span class="f-nav__txt">Timelines</span></a>
-          <a class={cx("f-nav f-nav--sub", section === "metadata" && "is-current")} href="#" onClick={(e) => { e.preventDefault(); onNavigate({ page: "metadata", field: "location" }); }}><span class="f-nav__txt">Metadata</span></a>
-        </>
-      )}
+      {nav("metadata", "tag-multiple-outline", "Metadata", { page: "metadata", field: "location" })}
       {nav("plan", "calendar-clock", "Plan", { page: "plan", dayId: null })}
       {nav("timeline", "filmstrip", "Timeline", { page: "timeline", timelineId: null })}
       {nav("library", "bookshelf", "Library", { page: "library", section: lib ?? "projects", id: null })}
