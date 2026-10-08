@@ -6,10 +6,10 @@ Designed in Claude Design (2026-09-28): four sections plus a shot view, a sideba
 
 - **Sidebar**, 232 px, or a 56 px rail. Collapse and expand it with the button next to the brand (rail: at the bottom) or Ctrl B / ⌘B; the choice is remembered in `localStorage["sidebar"]`. Without a choice it is a rail below 1100 px. The scope menu opens as a fixed popup, so the rail does not clip it. It holds:
   - the **scope switcher** (a project, "All projects", "Manage projects…"); the choice is remembered in `localStorage["project"]`
-  - the sections: Shots (count), Review (unreviewed count), Plan, Timeline, Library (with Projects · Fields · Rigs · Locations under it)
+  - the sections: Shots (count), Review (unreviewed count), Metadata, Plan, Timeline, Library (with Projects · Fields · Rigs · Locations under it)
   - **saved views**, with a dot while a view has unsaved edits, and "+" for a new view
   - footer: "Go to…" (⌘K), the theme button (Auto → Sun → Set), **Settings** and reload
-- **Hash routes**, so deep links survive a reload: `#/shots`, `#/shots?view=<id>`, `#/shots/<shotId>?stage=rigs|compose|position`, `#/review/<timelineId>?t=12.5&tool=overlay`, `#/plan/<dayId>`, `#/timeline/<timelineId>` (same `t` / `tool`), `#/settings`, `#/library/projects|fields|rigs|locations/<id>`.
+- **Hash routes**, so deep links survive a reload: `#/shots`, `#/shots?view=<id>`, `#/shots/<shotId>?stage=rigs|compose|position`, `#/review/<timelineId>?t=12.5&tool=overlay`, `#/metadata/<field>`, `#/plan/<dayId>`, `#/timeline/<timelineId>` (same `t` / `tool`), `#/settings`, `#/library/projects|fields|rigs|locations/<id>`.
 - **Cut position** (issue #35): Review and Timeline keep the playhead (`t`, seconds) and the inline tool open on the clip under it (`tool` = `reframe` · `overlay` · `sketch`) in the URL. They are written with `history.replaceState` 300 ms after the playhead or tool settles (so not during playback; no history entries, no re-render) and restored when the page opens; back from a shot view returns to the same spot.
 - **Key hint bar** at the bottom: the shortcuts of the current screen; `?` opens all of them.
 - **First run** (no project chosen, or it was deleted): a full-window project picker with "New project" (`ProjectGate` in `Projects.tsx`).
@@ -23,6 +23,7 @@ Designed in Claude Design (2026-09-28): four sections plus a shot view, a sideba
 | Shots | `ShotsPage.tsx`, `shotsQuery.ts`, `FilterBuilder.tsx`, `MapView.tsx`, `ShotCard.tsx` | Gallery, Views and Map merged: one filter model, three layouts (Grid · List · Map, remembered). See below. |
 | Shot view | `ShotView.tsx`, `Inspector.tsx`, `RigExplorer.tsx`, `PositionEditor.tsx`, `compose/` | Replaces the dialog. See [review and tagging](review-and-tagging.md) and [compose](compose.md). |
 | Review | `Review.tsx`, `TimelineParts.tsx` | The timeline-first review workspace (issue #31): the selected cut on stage, a shot browser beside it. See [review and tagging](review-and-tagging.md). |
+| Metadata | `MetadataPage.tsx` | Sort shots into one field's values by drag and drop (issue #42). See [review and tagging](review-and-tagging.md#metadata-board-dashboard). |
 | Plan | `Plan.tsx` | [Shooting days](schedule.md) |
 | Timeline | `Timeline.tsx` | [Timelines](timeline.md): rough cuts with hold times and playback |
 | Settings | `SettingsPage.tsx`, `settings.ts` | Preferences saved on change, per browser (`localStorage["settings"]`; theme and frame mode keep their own keys): theme, default frame mode, the review state of shots made with New shot (Approved by default), and Timeline → the playhead while a clip is edited inline (pinned, or moving away ends the edit) and what Remove takes on a sequence block's clip (the photo, or the whole sequence). Sidebar footer cog, or ⌘K → Settings. |

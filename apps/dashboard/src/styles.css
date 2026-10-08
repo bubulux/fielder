@@ -391,3 +391,34 @@ button { font: inherit; }
 .tl-playhead__knob { position: absolute; top: -15px; left: -8px; width: 16px; height: 20px; background: var(--danger); clip-path: polygon(0 0, 100% 0, 100% 60%, 50% 100%, 0 60%); cursor: ew-resize; pointer-events: auto; touch-action: none; }
 .tl-playhead__knob:hover { filter: brightness(1.15); }
 .tl-strip__grip { margin: 0; }
+
+/* Review → Metadata board (issue #42): the unsorted pile on the left, one drop column per value. */
+.mb-board { display: flex; align-items: stretch; gap: 12px; padding: 16px; overflow-x: auto; overflow-y: hidden; }
+.mb-col { flex: none; width: var(--mb-lane, 260px); display: flex; flex-direction: column; min-height: 0; border: var(--bw) solid var(--border-subtle); border-radius: var(--radius-sm); background: var(--surface-sunken); }
+.mb-col.is-over, .mb-drop.is-over { outline: 2px solid var(--accent); outline-offset: -2px; background: var(--accent-tint); }
+.mb-col__head { display: flex; align-items: center; gap: 8px; min-height: 40px; padding: 6px 10px; border-bottom: var(--bw) solid var(--border-subtle); }
+.mb-col__head strong { flex: 1; min-width: 0; }
+.mb-col__list { flex: 1; min-height: 0; overflow-y: auto; scrollbar-gutter: stable; display: flex; flex-direction: column; gap: 8px; padding: 8px; }
+.mb-col__empty { padding: 24px 0; text-align: center; border: 1px dashed var(--border); border-radius: var(--radius-sm); }
+.mb-col--add { gap: 10px; padding-bottom: 10px; }
+.mb-col--add > :not(.mb-col__head) { margin: 0 10px; }
+.mb-drop { display: flex; flex-direction: column; gap: 12px; min-height: 100%; border-radius: var(--radius-sm); }
+.mb-card { cursor: grab; }
+/* Rows: the values stacked, each lane's cards running sideways and sized by the lane's height (container units). */
+.mb-board--rows { flex-direction: column; overflow-x: hidden; overflow-y: auto; }
+.mb-board--rows .mb-col { width: auto; height: var(--mb-lane, 260px); }
+.mb-board--rows .mb-col__list { flex-direction: row; overflow-x: auto; overflow-y: hidden; scrollbar-gutter: auto; container-type: size; }
+.mb-board--rows .mb-card { flex: none; width: clamp(96px, calc((100cqh - 78px) * 1.5), 420px); }
+/* A short row (Fit with many values) shows the covers only. */
+@container (max-height: 150px) {
+  .mb-board--rows .mb-card { width: clamp(72px, calc((100cqh - 4px) * 1.5), 420px); }
+  .mb-board--rows .mb-card .f-card__body { display: none; }
+}
+.mb-board--rows .mb-col__empty { flex: 1; display: flex; align-items: center; justify-content: center; padding: 0; }
+.mb-board--rows .mb-col--add { height: auto; flex-direction: row; align-items: center; flex-wrap: wrap; padding: 6px 0; }
+.mb-board--rows .mb-col--add .mb-col__head { border-bottom: 0; }
+/* Fit: every lane shares the board, nothing scrolls. */
+.mb-board--fit { overflow: hidden; }
+.mb-board--fit:not(.mb-board--rows) .mb-col:not(.mb-col--add) { flex: 1 1 0; width: auto; min-width: 0; }
+.mb-board--fit:not(.mb-board--rows) .mb-col--add { width: 220px; }
+.mb-board--fit.mb-board--rows .mb-col:not(.mb-col--add) { flex: 1 1 0; height: auto; min-height: 0; }

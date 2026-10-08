@@ -11,6 +11,7 @@ import { LocationsPage } from "./Locations";
 import { PlanPage } from "./Plan";
 import { ProjectGate, ProjectsPage } from "./Projects";
 import { ReviewPage } from "./Review";
+import { MetadataPage } from "./MetadataPage";
 import { RigsPage } from "./Rigs";
 import { DEFAULT_ROUTE, parseRoute, useRoute, type Route } from "./router";
 import { NewShotDialog } from "./NewShot";
@@ -231,6 +232,10 @@ export function App() {
     main = <ReviewPage project={scopeProject} projects={projects!} onPickProject={setScope} shots={scoped} presets={presets!} mask={mask}
       timelineId={route.timelineId} at={route.at} onTimeline={(id) => replace({ page: "review", timelineId: id })} onOpen={openShot} onUpdated={updated} onShowOnMap={showOnMap} onNewShot={() => setNewShot(true)} />;
     hints = [{ k: "←/→", t: "Clip" }, { k: "Space", t: "Play" }, { k: "Drag", t: "Add / reorder" }, { k: "A/E", t: "Approve / archive" }, { k: "R/C", t: "Re-frame / compose" }, { k: "P", t: "Placeholder" }, { k: "N", t: "Shots panel" }, { k: "Right-click", t: "Actions" }];
+  } else if (route.page === "metadata") {
+    main = <MetadataPage project={scopeProject} projects={projects!} onPickProject={setScope} shots={scoped} locations={locations!} onLocations={setLocations} mask={mask}
+      field={route.field} onField={(f) => replace({ page: "metadata", field: f })} onUpdated={updated} onOpen={openShot} />;
+    hints = [{ k: "Drag", t: "Set the value" }, { k: "Drag back", t: "Clear it" }, { k: "Double-click", t: "Open shot" }];
   } else if (route.page === "plan") {
     main = <PlanPage project={scopeProject} projects={projects!} onPickProject={setScope} shots={scoped} mask={mask} dayId={route.dayId} onDay={(id) => replace({ page: "plan", dayId: id })} onOpen={openShot} />;
     hints = [{ k: "↑/↓", t: "Shots" }, { k: "Alt ↑/↓", t: "Reorder" }, { k: "T", t: "Planned time" }, { k: "Del", t: "Remove" }, { k: "N", t: "Add shots" }, { k: "⇧N", t: "New day" }, { k: "↵", t: "Open shot" }];
