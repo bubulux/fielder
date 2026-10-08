@@ -5,8 +5,8 @@ import { Framed, type MaskMode } from "./Framed";
 import { guardCut, useClipEditing, type EditKind } from "./ClipEditing";
 import { afterG, useKeys } from "./keys";
 import { useSettings } from "./settings";
-import { ClipPanel, clock, copyClip, CutPreview, DRAWER_RESIZE, LockSelect, TimelineRail, newPlaceholder, resolveClips, Strip, useCut, useTimelineStore, clipsOfShot, type ResolvedClip } from "./TimelineParts";
-import { Banner, Button, Checkbox, Empty, Field, Icon, IconButton, Input, Kbd, ListRow, MenuItem, Panel, PanelBody, PanelHead, Popover, SaveStatus, Select, toast, Toolbar, ToolbarTitle, type SaveState } from "./ui";
+import { ClipMenu, ClipPanel, clock, copyClip, CutPreview, DRAWER_RESIZE, LockSelect, TimelineRail, newPlaceholder, resolveClips, setShotState, Strip, useCut, useTimelineStore, clipsOfShot, type ResolvedClip } from "./TimelineParts";
+import { Banner, Button, Checkbox, Empty, Field, Icon, IconButton, Input, Kbd, ListRow, MenuItem, Panel, PanelBody, PanelHead, Popover, SaveStatus, Select, toast, Toolbar, ToolbarTitle, useCtxMenu, type SaveState } from "./ui";
 
 /**
  * Timeline (issue #12, part 2): rough cuts of a project out of its photos. A clip is one photo,
@@ -27,9 +27,10 @@ interface Props {
   timelineId: string | null;
   onTimeline: (id: string | null) => void;
   onOpen: (s: Shot, list: Shot[]) => void;
+  onUpdated: (s: Shot) => void;
 }
 
-export function TimelinePage({ project, projects, onPickProject, shots, presets, mask, timelineId, onTimeline, onOpen }: Props) {
+export function TimelinePage({ project, projects, onPickProject, shots, presets, mask, timelineId, onTimeline, onOpen, onUpdated }: Props) {
   const projectId = project?.id ?? null;
   const store = useTimelineStore((set, fail) => {
     if (!projectId) return;
@@ -62,15 +63,15 @@ export function TimelinePage({ project, projects, onPickProject, shots, presets,
           Arrange photos and overlays in order, give each a hold time, and play the cut to see which shots carry the sequence.
         </Empty>
       ) : current ? (
-        <Editor key={current.id} timeline={current} shots={shots} presets={presets} mask={mask} onChange={store.change} onDelete={() => void remove(current)} onOpen={onOpen} save={save} onRetry={store.retry} error={save === "error" ? store.error : null} />
+        <Editor key={current.id} timeline={current} shots={shots} presets={presets} mask={mask} onChange={store.change} onDelete={() => void remove(current)} onOpen={onOpen} onUpdated={onUpdated} save={save} onRetry={store.retry} error={save === "error" ? store.error : null} />
       ) : <Empty icon="filmstrip" title="Pick a timeline" />}
     </div>
   );
 }
 
-interface EditorProps { timeline: Timeline; shots: Shot[]; presets: Preset[]; mask: MaskMode; onChange: (t: Timeline) => void; onDelete: () => void; onOpen: (s: Shot, list: Shot[]) => void; save: SaveState; onRetry: () => void; error: string | null }
+interface EditorProps { timeline: Timeline; shots: Shot[]; presets: Preset[]; mask: MaskMode; onChange: (t: Timeline) => void; onDelete: () => void; onOpen: (s: Shot, list: Shot[]) => void; onUpdated: (s: Shot) => void; save: SaveState; onRetry: () => void; error: string | null }
 
-function Editor({ timeline: t, shots, presets, mask, onChange, onDelete, onOpen, save, onRetry, error }: EditorProps) {
+function Editor({ timeline: t, shots, presets, mask, onChange, onDelete, onOpen, onUpdated, save, onRetry, error }: EditorProps) {
   const byId = useMemo(() => new Map(shots.map((s) => [s.id, s])), [shots]);
   const clips = useMemo(() => resolveClips(t, byId), [t, byId]);
   const total = clips.reduce((a, c) => a + c.clip.duration_ms, 0);
@@ -85,6 +86,8 @@ function Editor({ timeline: t, shots, presets, mask, onChange, onDelete, onOpen,
   const guardedCut = guardCut(cut, inline, settings.inlinePlayhead);
   const edit = (kind: EditKind, c: ResolvedClip) => { cut.select(c.clip.id); setAdding(false); inline.start(kind, c); };
   const latest = useRef(t); latest.current = t;
+  const clipMenu = useCtxMenu<ResolvedClip>();
+  const decide = (s: Shot, to: Shot["state"]) => void setShotState(s, to, onUpdated);
 
   const setClips = (list: TimelineClip[]) => onChange({ ...t, clips: list });
   const update = (id: string, patch: Partial<TimelineClip>) => setClips(t.clips.map((c) => (c.id === id ? { ...c, ...patch } : c)));
@@ -157,12 +160,14 @@ function Editor({ timeline: t, shots, presets, mask, onChange, onDelete, onOpen,
             <Button kind={adding ? "secondary" : "primary"} size="sm" icon="plus" kbd="N" aria-pressed={adding} disabled={!!inline.editing} onClick={() => setAdding(!adding)}>Add shots</Button>
           </CutPreview>
 
-          <Strip clips={clips} cut={guardedCut} stripRef={stripRef} lock={t.lock_mode} editingId={inline.editing?.clipId ?? null} onOpen={open} onReorder={reorder} />
+          <Strip clips={clips} cut={guardedCut} stripRef={stripRef} lock={t.lock_mode} editingId={inline.editing?.clipId ?? null} onOpen={open} onReorder={reorder} onContext={(c, e) => clipMenu.openMenu(e, c)} />
         </div>
       </div>
+      {clipMenu.menu && <ClipMenu menu={clipMenu.menu} onClose={clipMenu.closeMenu} onEdit={edit} onOpen={open} onDuplicate={(c) => void duplicate(c)} onRemove={removeClip} onState={decide} />}
       {inline.panel ?? (adding ? <AddPanel shots={shots} mask={mask} onAdd={addShots} onClose={() => setAdding(false)} />
         : cur && <ClipPanel key={cur.clip.id} c={cur} count={clips.length} lock={t.lock_mode} durRef={durRef} onUpdate={(p) => update(cur.clip.id, p)} onMove={(d) => move(cur, d)} onRemove={() => removeClip(cur)} onDuplicate={() => void duplicate(cur)} onOpen={() => open(cur)}
-            onReframe={() => edit("reframe", cur)} onOverlay={() => edit("overlay", cur)} onSketch={() => edit("sketch", cur)} />)}
+            onReframe={() => edit("reframe", cur)} onOverlay={() => edit("overlay", cur)} onSketch={() => edit("sketch", cur)}
+            onState={cur.kind === "photo" ? (to) => decide(cur.shot, to) : undefined} />)}
     </>
   );
 }

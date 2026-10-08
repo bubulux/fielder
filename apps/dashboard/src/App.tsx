@@ -234,8 +234,8 @@ export function App() {
     main = <PlanPage project={scopeProject} projects={projects!} onPickProject={setScope} shots={scoped} mask={mask} dayId={route.dayId} onDay={(id) => replace({ page: "plan", dayId: id })} onOpen={openShot} />;
     hints = [{ k: "↑/↓", t: "Shots" }, { k: "Alt ↑/↓", t: "Reorder" }, { k: "T", t: "Planned time" }, { k: "Del", t: "Remove" }, { k: "N", t: "Add shots" }, { k: "⇧N", t: "New day" }, { k: "↵", t: "Open shot" }];
   } else if (route.page === "timeline") {
-    main = <TimelinePage project={scopeProject} projects={projects!} onPickProject={setScope} shots={scoped} presets={presets!} mask={mask} timelineId={route.timelineId} onTimeline={(id) => replace({ page: "timeline", timelineId: id })} onOpen={openShot} />;
-    hints = [{ k: "←/→", t: "Clip" }, { k: "Space", t: "Play / pause" }, { k: "Alt ←/→", t: "Reorder" }, { k: "D", t: "Hold time" }, { k: "Del", t: "Remove" }, { k: "N", t: "Add shots" }, { k: "⇧N", t: "New timeline" }, { k: "↵", t: "Open shot" }];
+    main = <TimelinePage project={scopeProject} projects={projects!} onPickProject={setScope} shots={scoped} presets={presets!} mask={mask} timelineId={route.timelineId} onTimeline={(id) => replace({ page: "timeline", timelineId: id })} onOpen={openShot} onUpdated={updated} />;
+    hints = [{ k: "←/→", t: "Clip" }, { k: "Space", t: "Play / pause" }, { k: "Alt ←/→", t: "Reorder" }, { k: "D", t: "Hold time" }, { k: "Del", t: "Remove" }, { k: "N", t: "Add shots" }, { k: "⇧N", t: "New timeline" }, { k: "↵", t: "Open shot" }, { k: "Right-click", t: "Actions" }];
   } else if (route.page === "settings") {
     main = <SettingsPage theme={theme} onTheme={setTheme} mask={mask} onMask={setMask} />;
     hints = [{ k: "G S", t: "Back to Shots" }];

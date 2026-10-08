@@ -1,12 +1,13 @@
 import type { ComponentChildren, JSX, RefObject } from "preact";
 import { useEffect, useRef, useState } from "preact/hooks";
 import { PRESENTATION_MODES, type Presentation } from "@fielder/vocab";
-import { copyOverlay, copySketch, deleteTimeline, putTimeline, type Overlay, type Photo, type Shot, type Sketch, type Timeline, type TimelineClip } from "./api";
+import { copyOverlay, copySketch, deleteTimeline, patchShot, putTimeline, type Overlay, type Photo, type Shot, type ShotState, type Sketch, type Timeline, type TimelineClip } from "./api";
 import { frameModeLabel, shotTitle } from "./format";
 import { Framed, type MaskMode } from "./Framed";
 import { invalidateTimelines } from "./Inspector";
 import { FramingSelect, presentationFrame, rootPresentation } from "./FramingSelect";
-import { Button, confirmDialog, cx, EmptyNote, Field, Icon, IconButton, Input, Kbd, Panel, PanelBody, PanelHead, Seg, Select, Spinner, toast, type SaveState } from "./ui";
+import { Button, confirmDialog, ContextMenu, cx, EmptyNote, Field, Icon, IconButton, Input, Kbd, MenuItem, Panel, PanelBody, PanelHead, Seg, Select, Spinner, StateMarker, toast, type SaveState } from "./ui";
+import type { EditKind } from "./ClipEditing";
 
 /**
  * The pieces a timeline is edited with, shared by the Timeline page and the Review workspace
@@ -72,6 +73,64 @@ export const newPlaceholder = (title: string): TimelineClip =>
   ({ id: crypto.randomUUID(), photo_id: null, shot_id: null, overlay_id: null, presentation: null, duration_ms: DEFAULT_MS, notes: null, title, sketch_id: null });
 
 export const clipLabel = (c: ResolvedClip): string => (c.kind === "photo" ? shotTitle(c.shot) : c.kind === "sketch" ? c.sketch.name : c.clip.title ?? "Placeholder");
+
+/**
+ * The clips that use each shot (issue #35): a clip of any of its photos (an overlay hangs off the
+ * photo, so it counts too) or a sketch clip showing one of its sketches. One clip is enough.
+ */
+export function shotUsage(clips: ResolvedClip[]): Map<string, string[]> {
+  const m = new Map<string, string[]>();
+  const add = (shotId: string, clipId: string) => m.set(shotId, [...(m.get(shotId) ?? []), clipId]);
+  for (const c of clips) {
+    if (c.kind === "photo") add(c.shot.id, c.clip.id);
+    else if (c.kind === "sketch" && c.sketch.shot_id) add(c.sketch.shot_id, c.clip.id);
+  }
+  return m;
+}
+
+/** A review decision taken in a timeline (browser card or clip), with Undo in the toast like the inspector. */
+export async function setShotState(s: Shot, to: ShotState, onUpdated: (s: Shot) => void) {
+  if (s.state === to) return;
+  const before = s.state;
+  try {
+    onUpdated(await patchShot(s.id, { state: to }));
+    toast(`${to === "unreviewed" ? "Back to review" : to === "approved" ? "Approved" : "Archived"} · ${shotTitle(s)}`, "ok", { label: "Undo", run: () => void patchShot(s.id, { state: before }).then(onUpdated).catch((e: Error) => toast(`Undo failed: ${e.message}`, "danger")) });
+  } catch (e) { toast(`Update failed: ${(e as Error).message}`, "danger"); }
+}
+
+/** The decisions a shot can still take: the two states it is not in. */
+export const DECISIONS: { to: ShotState; label: string; icon: string }[] = [
+  { to: "approved", label: "Approve", icon: "check" },
+  { to: "archived", label: "Archive", icon: "archive-arrow-down-outline" },
+  { to: "unreviewed", label: "Back to review", icon: "undo-variant" },
+];
+
+export interface ClipMenuProps {
+  menu: { x: number; y: number; ctx: ResolvedClip };
+  onClose: () => void;
+  onEdit: (kind: EditKind, c: ResolvedClip) => void;
+  onOpen: (c: ResolvedClip) => void;
+  onDuplicate: (c: ResolvedClip) => void;
+  onRemove: (c: ResolvedClip) => void;
+  /** Approve / archive the clip's shot (photo clips only). */
+  onState: (s: Shot, to: ShotState) => void;
+}
+
+/** A clip's right-click menu, the same in Review and Timeline. */
+export function ClipMenu({ menu, onClose, onEdit, onOpen, onDuplicate, onRemove, onState }: ClipMenuProps) {
+  const c = menu.ctx;
+  return (
+    <ContextMenu x={menu.x} y={menu.y} label="Clip" onClose={onClose}>
+      {c.kind === "photo" && c.photo.source === "camera" && <MenuItem icon="crop" onClick={() => onEdit("reframe", c)}>Re-frame</MenuItem>}
+      {c.kind === "photo" && <MenuItem icon="layers-outline" onClick={() => onEdit("overlay", c)}>Overlay</MenuItem>}
+      {c.kind !== "photo" && <MenuItem icon="draw" onClick={() => onEdit("sketch", c)}>{c.kind === "sketch" ? "Edit the sketch" : "Sketch it"}</MenuItem>}
+      {c.kind === "photo" && DECISIONS.filter((d) => d.to !== c.shot.state).map((d) => <MenuItem key={d.to} icon={d.icon} onClick={() => onState(c.shot, d.to)}>{d.label}</MenuItem>)}
+      {c.kind === "photo" && <MenuItem icon="image-outline" onClick={() => onOpen(c)}>Open shot</MenuItem>}
+      <MenuItem icon="content-duplicate" onClick={() => onDuplicate(c)}>Duplicate</MenuItem>
+      <MenuItem icon="delete-outline" danger onClick={() => onRemove(c)}>Remove</MenuItem>
+    </ContextMenu>
+  );
+}
 
 /**
  * Copy a clip for Duplicate: a new id, and its own overlay or sketch copied server-side so the two
@@ -455,7 +514,7 @@ export function Strip({ clips, cut, stripRef, lock, editingId, onOpen, onReorder
                 onClick={() => cut.select(c.clip.id)} onDblClick={() => onOpen(c)}
                 onContextMenu={onContext && ((e) => { e.preventDefault(); cut.select(c.clip.id); onContext(c, e); })}>
                 {c.kind === "photo"
-                  ? <div class="tl-clip__thumb"><Framed photo={c.photo} mode={(lock ?? c.pres.mode) === "off" ? "off" : "fit"} frame={presentationFrame(c.photo, c.pres)} src={c.overlay?.render_url ?? undefined} /></div>
+                  ? <div class="tl-clip__thumb"><Framed photo={c.photo} mode={(lock ?? c.pres.mode) === "off" ? "off" : "fit"} frame={presentationFrame(c.photo, c.pres)} src={c.overlay?.render_url ?? undefined} /><span class="tl-clip__state"><StateMarker state={c.shot.state} iconOnly /></span></div>
                   : c.kind === "sketch" ? <div class="tl-clip__thumb tl-clip__thumb--sk">{c.sketch.render_url ? <img src={c.sketch.render_url} alt="" /> : <Icon name="floor-plan" />}</div>
                   : <div class="tl-clip__thumb tl-clip__thumb--ph"><Icon name="image-off-outline" /></div>}
                 <span class="tl-clip__name ellipsis">{c.kind === "photo" && c.overlay ? <Icon name="layers-outline" size={12} /> : null}{clipLabel(c)}{c.kind === "photo" && c.shot.photos.length > 1 ? ` · ${c.photo.ordinal + 1}` : ""}</span>
@@ -490,10 +549,12 @@ export interface ClipPanelProps {
   onSketch?: () => void;
   /** A photo clip that replaced a sketch clip still owns that sketch: attach it to the clip's shot. */
   onAttachSketch?: () => void;
+  /** Approve / archive the clip's shot from the timeline (issue #35). */
+  onState?: (to: ShotState) => void;
   head?: ComponentChildren;
 }
 
-export function ClipPanel({ c, count, lock, durRef, onUpdate, onMove, onRemove, onDuplicate, onOpen, onReframe, onOverlay, onSketch, onAttachSketch, head }: ClipPanelProps) {
+export function ClipPanel({ c, count, lock, durRef, onUpdate, onMove, onRemove, onDuplicate, onOpen, onReframe, onOverlay, onSketch, onAttachSketch, onState, head }: ClipPanelProps) {
   const [dur, setDur] = useState((c.clip.duration_ms / 1000).toFixed(1));
   useEffect(() => setDur((c.clip.duration_ms / 1000).toFixed(1)), [c.clip.duration_ms]);
   const commitDur = (v: string) => { const n = Math.round(parseFloat(v.replace(",", ".")) * 10) * 100; if (Number.isFinite(n) && n >= 100 && n <= 3_600_000) onUpdate({ duration_ms: n }); else setDur((c.clip.duration_ms / 1000).toFixed(1)); };
@@ -562,6 +623,13 @@ export function ClipPanel({ c, count, lock, durRef, onUpdate, onMove, onRemove, 
       <PanelBody>
         <div class="f-row__thumb" style={{ width: "100%" }}><Framed photo={c.photo} mode={lock ?? pres.mode} frame={presentationFrame(c.photo, pres)} src={c.overlay?.render_url ?? undefined} /></div>
         {c.shot.photos.length > 1 && <span class="meta">Photo {c.photo.ordinal + 1} of {c.shot.photos.length} in this sequence</span>}
+        {onState && (
+          <div class="tl-decide">
+            <StateMarker state={c.shot.state} />
+            <span class="grow" />
+            {DECISIONS.filter((d) => d.to !== c.shot.state).map((d) => <Button key={d.to} kind={d.to === "approved" ? "approve" : "archive"} size="sm" icon={d.icon} onClick={() => onState(d.to)}>{d.label}</Button>)}
+          </div>
+        )}
         {(onReframe || onOverlay) && (
           <div class="tl-tools" role="group" aria-label="Clip tools">
             {onReframe && c.photo.source === "camera" && <Button kind="secondary" size="sm" icon="crop" kbd="R" onClick={onReframe}>Re-frame</Button>}
