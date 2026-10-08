@@ -12,7 +12,7 @@ import { PlanPage } from "./Plan";
 import { ProjectGate, ProjectsPage } from "./Projects";
 import { ReviewPage } from "./Review";
 import { RigsPage } from "./Rigs";
-import { DEFAULT_ROUTE, useRoute, type Route } from "./router";
+import { DEFAULT_ROUTE, parseRoute, useRoute, type Route } from "./router";
 import { NewShotDialog } from "./NewShot";
 import { SettingsPage } from "./SettingsPage";
 import { ShotsPage } from "./ShotsPage";
@@ -126,7 +126,8 @@ export function App() {
   function openShot(s: Shot, list?: Shot[]) {
     setOpenList((list ?? result.shots).map((x) => x.id));
     setViewMode(mask);
-    setReturnTo(route.page === "shot" ? returnTo : route);
+    // From the URL, not `route`: a cut's playhead and tool are written there silently.
+    setReturnTo(route.page === "shot" ? returnTo : parseRoute(location.hash));
     navigateRaw({ page: "shot", shotId: s.id, stage: "photo" });
   }
   function showOnMap(s: Shot) {
@@ -228,14 +229,14 @@ export function App() {
     hints = shotHints(route.stage);
   } else if (route.page === "review") {
     main = <ReviewPage project={scopeProject} projects={projects!} onPickProject={setScope} shots={scoped} presets={presets!} mask={mask}
-      timelineId={route.timelineId} onTimeline={(id) => replace({ page: "review", timelineId: id })} onOpen={openShot} onUpdated={updated} onShowOnMap={showOnMap} onNewShot={() => setNewShot(true)} />;
+      timelineId={route.timelineId} at={route.at} onTimeline={(id) => replace({ page: "review", timelineId: id })} onOpen={openShot} onUpdated={updated} onShowOnMap={showOnMap} onNewShot={() => setNewShot(true)} />;
     hints = [{ k: "←/→", t: "Clip" }, { k: "Space", t: "Play" }, { k: "Drag", t: "Add / reorder" }, { k: "A/E", t: "Approve / archive" }, { k: "R/C", t: "Re-frame / compose" }, { k: "P", t: "Placeholder" }, { k: "N", t: "Shots panel" }, { k: "Right-click", t: "Actions" }];
   } else if (route.page === "plan") {
     main = <PlanPage project={scopeProject} projects={projects!} onPickProject={setScope} shots={scoped} mask={mask} dayId={route.dayId} onDay={(id) => replace({ page: "plan", dayId: id })} onOpen={openShot} />;
     hints = [{ k: "↑/↓", t: "Shots" }, { k: "Alt ↑/↓", t: "Reorder" }, { k: "T", t: "Planned time" }, { k: "Del", t: "Remove" }, { k: "N", t: "Add shots" }, { k: "⇧N", t: "New day" }, { k: "↵", t: "Open shot" }];
   } else if (route.page === "timeline") {
-    main = <TimelinePage project={scopeProject} projects={projects!} onPickProject={setScope} shots={scoped} presets={presets!} mask={mask} timelineId={route.timelineId} onTimeline={(id) => replace({ page: "timeline", timelineId: id })} onOpen={openShot} />;
-    hints = [{ k: "←/→", t: "Clip" }, { k: "Space", t: "Play / pause" }, { k: "Alt ←/→", t: "Reorder" }, { k: "D", t: "Hold time" }, { k: "Del", t: "Remove" }, { k: "N", t: "Add shots" }, { k: "⇧N", t: "New timeline" }, { k: "↵", t: "Open shot" }];
+    main = <TimelinePage project={scopeProject} projects={projects!} onPickProject={setScope} shots={scoped} presets={presets!} mask={mask} timelineId={route.timelineId} at={route.at} onTimeline={(id) => replace({ page: "timeline", timelineId: id })} onOpen={openShot} onUpdated={updated} />;
+    hints = [{ k: "←/→", t: "Clip" }, { k: "Space", t: "Play / pause" }, { k: "Alt ←/→", t: "Reorder" }, { k: "D", t: "Hold time" }, { k: "Del", t: "Remove" }, { k: "N", t: "Add shots" }, { k: "⇧N", t: "New timeline" }, { k: "↵", t: "Open shot" }, { k: "Right-click", t: "Actions" }];
   } else if (route.page === "settings") {
     main = <SettingsPage theme={theme} onTheme={setTheme} mask={mask} onMask={setMask} />;
     hints = [{ k: "G S", t: "Back to Shots" }];

@@ -30,6 +30,7 @@ Switching:
 - **Accent is cobalt.** Amber (`--warn`) means only "warning / unreviewed".
 - **Icons**: Material Design Icons, with the same names on both clients. Shared names (review states, light phases) are `STATE_ICONS` and `PHASE_ICONS` in `packages/vocab`.
 - **Font**: Atkinson Hyperlegible Next, chosen for legibility under glare (1/l/I and 0/O are distinct). Readouts use tabular figures (`.num`).
+- **Scrollbars** (dashboard, `styles.css`): a 6 px pill on a clear track, `--text-disabled`, `--border` on hover, `--accent` while dragged (Chrome's `::-webkit-scrollbar`; setting `scrollbar-color` or `scrollbar-width` anywhere switches them off).
 - **Copy**: sentence case, units spaced (`24 mm`, `±5 m`, `30 %`), `·` between facts, no emoji.
 
 ## Where it lives
