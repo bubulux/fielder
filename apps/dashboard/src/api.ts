@@ -210,7 +210,7 @@ export interface Timeline {
 export const fetchTimelines = (projectId: string) => get<{ timelines: Timeline[] }>(`/api/timelines?project_id=${projectId}`).then((r) => r.timelines);
 /** Replaces the whole timeline. Clips of photos that left the project are dropped by the server. */
 export const putTimeline = (t: Omit<Timeline, "created_at" | "updated_at">) =>
-  send<{ timeline: Timeline }>("PUT", `/api/timelines/${t.id}`, { project_id: t.project_id, name: t.name, notes: t.notes, lock_mode: t.lock_mode, clips: t.clips.map((c) => ({ id: c.id, photo_id: c.photo_id, overlay_id: c.overlay_id, presentation: c.presentation, duration_ms: c.duration_ms, notes: c.notes, title: c.title, sketch_id: c.sketch_id })) }).then((r) => r.timeline);
+  send<{ timeline: Timeline }>("PUT", `/api/timelines/${t.id}`, { project_id: t.project_id, name: t.name, notes: t.notes, lock_mode: t.lock_mode, groups: t.groups, clips: t.clips.map((c) => ({ id: c.id, photo_id: c.photo_id, overlay_id: c.overlay_id, presentation: c.presentation, duration_ms: c.duration_ms, notes: c.notes, title: c.title, sketch_id: c.sketch_id, group_id: c.group_id })) }).then((r) => r.timeline);
 /** A clip's own re-frame, overlay or sketch becomes the shot's (issue #31). */
 export const promoteClip = (timelineId: string, clipId: string, body: { what: "framing" | "overlay" | "sketch"; name?: string; shot_id?: string; sketch_id?: string }) =>
   send<{ timeline: Timeline; shot: Shot }>("POST", `/api/timelines/${timelineId}/clips/${clipId}/promote`, body);
