@@ -11,7 +11,7 @@ import { Framed, framedLayout, type MaskMode } from "./Framed";
 import { FramingSelect, presentationFrame, rootPresentation } from "./FramingSelect";
 import { useKeys } from "./keys";
 import { AS_SHOT, choiceLabel, DragFrame, frameForChoice, lensesFor, Pickers, type RigChoice } from "./RigExplorer";
-import { DRAWER_RESIZE, STAGE_H, type Cut, type ResolvedClip } from "./TimelineParts";
+import { DRAWER_RESIZE, ownReframe, STAGE_H, type Cut, type ResolvedClip } from "./TimelineParts";
 import { Button, confirmDialog, Empty, Icon, Input, Panel, PanelBody, PanelHead, SaveStatus, Seg, Spinner, toast, type SaveState } from "./ui";
 
 /**
@@ -25,8 +25,6 @@ import { Button, confirmDialog, Empty, Icon, Input, Panel, PanelBody, PanelHead,
 
 export type EditKind = "reframe" | "overlay" | "sketch";
 
-/** A clip's own re-frame: no saved framing, but a placed frame (re-framed inline). */
-export const ownReframe = (pres: Presentation) => !pres.framing_id && pres.frame?.x !== undefined;
 
 type OverlayDoc = { kind: "overlay"; id: string; name: string; shapes: Shape[]; look: Look; isNew: boolean };
 type SketchDoc = { kind: "sketch"; id: string; name: string; shapes: Shape[]; aspect: number; isNew: boolean };

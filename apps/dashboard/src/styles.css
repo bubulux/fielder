@@ -337,3 +337,13 @@ button { font: inherit; }
 .tl-stage__edit { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; }
 .tl-drawbar { flex-direction: row !important; flex-wrap: wrap; align-items: center; gap: 6px; }
 .tl-pickers { display: flex; flex-direction: column; gap: 6px; }
+
+/* "From timelines" (issue #31): clip-owned edits that can become the shot's. */
+.fromtl { display: flex; flex-direction: column; gap: 6px; width: 380px; max-height: 60vh; overflow-y: auto; padding: 4px; }
+.fromtl__intro { padding: 2px 4px 6px; }
+.fromtl__row { display: flex; align-items: center; gap: 10px; padding: 6px; border-radius: var(--radius-sm); }
+.fromtl__row:hover { background: var(--accent-tint); }
+.fromtl__thumb { width: 64px; flex: none; aspect-ratio: 4 / 3; border-radius: 3px; overflow: hidden; background: var(--photo-bg); display: flex; align-items: center; justify-content: center; color: var(--text-dim); }
+.fromtl__thumb img { width: 100%; height: 100%; object-fit: contain; background: var(--sketch-paper); }
+.fromtl__thumb .framed { width: 100%; }
+.fromtl__txt { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }

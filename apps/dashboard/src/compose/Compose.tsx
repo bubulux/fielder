@@ -10,6 +10,7 @@ import { emptyDrawing, lookFilter, NEUTRAL_LOOK, PRESENTATION_MODES, SKETCH_ASPE
 import { deleteOverlay, deleteSketch, fetchOverlay, fetchSketch, patchOverlay, patchSketch, putOverlay, putSketch, type Overlay, type Photo, type Preset, type Shot, type Sketch } from "../api";
 import { frameModeLabel } from "../format";
 import { Framed, framedLayout } from "../Framed";
+import { FromTimelines } from "../FromTimelines";
 import { useKeys } from "../keys";
 import { FramingSelect, presentationFrame, rootPresentation } from "../FramingSelect";
 import { Button, Combobox, confirmDialog, cx, Empty, Icon, IconButton, Input, MarkdownField, ReorderButtons, SaveStatus, Seg, toast, ToolbarSpacer, type SaveState } from "../ui";
@@ -194,6 +195,7 @@ export function Compose(p: Props) {
             <>
               <span class="meta">{n > 1 ? `Overlays belong to one photo · photo ${p.photoIndex + 1} of ${n}` : "Overlays draw on the photo; sketches are free canvases"}</span>
               <ToolbarSpacer />
+              <FromTimelines shot={shot} photo={photo} kinds={["overlay", "sketch"]} onUpdated={p.onUpdated} />
               <Button kind="ghost" size="sm" kbd="Esc" onClick={p.onBack}>Back to photo</Button>
             </>
           )}

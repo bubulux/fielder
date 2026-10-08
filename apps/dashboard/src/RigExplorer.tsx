@@ -4,6 +4,7 @@ import { canMove, clampCentre, resize, withCentre, type Framing } from "@fielder
 import { deleteFraming, putFraming, setRootFraming, type Photo, type Preset, type Shot } from "./api";
 import { capturedFrameOf, frameLayout, imageAspect, sourceRigOf, type FrameGeometry } from "./format";
 import { Framed, type MaskMode } from "./Framed";
+import { FromTimelines } from "./FromTimelines";
 import { useKeys } from "./keys";
 import { Button, Checkbox, confirmDialog, cx, Empty, Icon, IconButton, promptDialog, Seg, Select, toast, ToolbarSpacer } from "./ui";
 
@@ -165,6 +166,7 @@ export function RigsStage({ shot, photo, presets, mode, state, onState, onBack, 
             <Select label="Framing" icon="crop" width="220px" value={state.framingId ?? "__captured__"} onChange={pick} options={options} />
             <Pickers photo={photo} presets={presets} choice={state.a} onChoice={setA} />
             {dirty && <span class="f-edited">{saved ? "Edited" : "Not saved"}</span>}
+            <FromTimelines shot={shot} photo={photo} kinds={["framing"]} onUpdated={onUpdated} />
           </>
         )}
         <ToolbarSpacer />

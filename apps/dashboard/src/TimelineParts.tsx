@@ -55,6 +55,8 @@ export function resolveClips(t: Timeline, byId: Map<string, Shot>): ResolvedClip
   });
   return out;
 }
+/** A clip's own re-frame (issue #31): no saved framing, but a placed frame (re-framed inline). */
+export const ownReframe = (pres: Presentation) => !pres.framing_id && pres.frame?.x !== undefined;
 /** Default presentation of a photo: the view's frame mode and the rig it was shot with. */
 export const defaultPresentation = (photo: Photo, mode: MaskMode): Presentation => ({ mode, ...rootPresentation(photo) });
 /** The clips a shot contributes when added: one per photo, each at the default hold time. */
@@ -458,7 +460,7 @@ export function ClipPanel({ c, count, lock, durRef, onUpdate, onMove, onRemove, 
     // An overlay brings the presentation it was drawn in; "Photo" keeps the current one. A clip's own overlay keeps the clip's.
     onUpdate(o ? (o.clip_id ? { overlay_id: o.id } : { overlay_id: o.id, presentation: o.presentation }) : { overlay_id: null });
   };
-  const ownFrame = !pres.framing_id && !!pres.rig_id;
+  const ownFrame = ownReframe(pres);
   return (
     <Panel label="Clip" width="340px" resize={DRAWER_RESIZE}>
       <PanelHead title={shotTitle(c.shot)}>{headMeta}</PanelHead>
