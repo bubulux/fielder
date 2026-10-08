@@ -251,7 +251,7 @@ button { font: inherit; }
 .tl-preview__empty .mdi { font-size: 40px; }
 .tl-transport { display: flex; align-items: center; gap: 8px; width: 100%; padding: 6px 8px; background: var(--surface); border-radius: var(--radius-sm); border: var(--bw) solid var(--border-subtle); flex-wrap: wrap; }
 .tl-clock { font-size: var(--text-body); margin-left: 6px; }
-.tl-strip-wrap { overflow-x: auto; overflow-y: hidden; padding-bottom: 6px; }
+.tl-strip-wrap { overflow-x: auto; overflow-y: hidden; padding: 16px 0 6px; }
 .tl-strip { position: relative; min-width: 100%; }
 .tl-ruler { position: relative; height: 18px; border-bottom: var(--bw) solid var(--border); margin-bottom: 4px; cursor: ew-resize; touch-action: none; user-select: none; }
 .tl-ruler span { position: absolute; top: 0; height: 100%; border-left: 1px solid var(--border); padding-left: 3px; font: var(--weight-semibold) var(--text-micro)/18px var(--font-sans); color: var(--text-dim); font-variant-numeric: tabular-nums; white-space: nowrap; }
@@ -259,12 +259,11 @@ button { font: inherit; }
 .tl-clip { position: relative; flex: none; display: flex; flex-direction: column; gap: 2px; padding: 4px; border: var(--bw) solid var(--border); border-radius: var(--radius-sm); background: var(--surface); color: var(--text); cursor: pointer; text-align: left; overflow: hidden; }
 .tl-clip:hover { border-color: var(--border-strong); }
 .tl-clip.is-sel { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent); background: var(--accent-tint); }
-.tl-clip__thumb { height: 54px; background: var(--photo-bg); border-radius: 3px; overflow: hidden; display: flex; justify-content: center; }
-.tl-clip__thumb .framed { height: 54px; width: 100%; aspect-ratio: auto !important; }
+.tl-clip__thumb { height: var(--tl-thumb-h, 54px); background: var(--photo-bg); border-radius: 3px; overflow: hidden; display: flex; justify-content: center; }
+.tl-clip__thumb .framed { height: var(--tl-thumb-h, 54px); width: 100%; aspect-ratio: auto !important; }
 .tl-clip__thumb .framed img { object-fit: cover; }
 .tl-clip__name { font: var(--weight-semibold) var(--text-micro)/1.2 var(--font-sans); display: flex; align-items: center; gap: 3px; }
 .tl-clip__dur { font: var(--weight-bold) var(--text-micro)/1.2 var(--font-sans); color: var(--text-dim); }
-.tl-clip__head { position: absolute; top: 0; bottom: 0; width: 2px; background: var(--danger); pointer-events: none; }
 /* Placeholder clips and drag targets (issue #31). */
 .tl-clip--ph { border-style: dashed; color: var(--text-dim); background: transparent; }
 .tl-clip__thumb--ph { align-items: center; justify-content: center; background: transparent; border: 1px dashed var(--border); border-radius: 3px; font-size: 22px; }
@@ -351,3 +350,13 @@ button { font: inherit; }
 .tl-stage__grip { width: 100%; height: 10px; margin: -4px 0; display: flex; align-items: center; justify-content: center; cursor: row-resize; touch-action: none; }
 .tl-stage__grip span { width: 48px; height: 4px; border-radius: 2px; background: var(--border-strong); }
 .tl-stage__grip:hover span, .tl-stage__grip:active span { background: var(--accent); }
+/* Strip zoom, height and playhead (issue #31). */
+.tl-strip-box { display: flex; flex-direction: column; gap: 2px; }
+.tl-strip-bar { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.tl-zoom { width: 160px; accent-color: var(--accent); }
+.tl-playhead { position: absolute; top: 0; bottom: 0; width: 0; z-index: 3; pointer-events: none; }
+.tl-playhead::before { content: ""; position: absolute; top: 0; bottom: 0; left: -1px; width: 2px; background: var(--danger); }
+/* The knob sits above the strip so it is easy to grab; it scrubs like the ruler. */
+.tl-playhead__knob { position: absolute; top: -15px; left: -8px; width: 16px; height: 20px; background: var(--danger); clip-path: polygon(0 0, 100% 0, 100% 60%, 50% 100%, 0 60%); cursor: ew-resize; pointer-events: auto; touch-action: none; }
+.tl-playhead__knob:hover { filter: brightness(1.15); }
+.tl-strip__grip { margin: 0; }

@@ -18,8 +18,14 @@ export const DEFAULT_MS = 3000;
 /** The right drawer (clip panel, shot browser) shares one remembered width. */
 export const DRAWER_RESIZE = { key: "timelineDrawer", min: 300, max: 720 };
 export const STEP_MS = 500;
-const PX_PER_S = 44;
-const MIN_CLIP_PX = 64;
+/** Strip zoom (px per second) and clip thumbnail height: defaults, limits, remembered per browser. */
+const ZOOM = { def: 44, min: 6, max: 480 };
+const THUMB = { def: 54, min: 28, max: 220 };
+const CLIP_GAP = 2;
+function stored(key: string, lim: { def: number; min: number; max: number }): number {
+  try { const v = Number(localStorage.getItem(key)); return v >= lim.min && v <= lim.max ? v : lim.def; } catch { return lim.def; }
+}
+const store = (key: string, v: number) => { try { localStorage.setItem(key, String(v)); } catch { /* a preference */ } };
 /** "1:02.5" */
 export const clock = (ms: number) => { const s = ms / 1000; const m = Math.floor(s / 60); const r = s - m * 60; return `${m}:${r < 10 ? "0" : ""}${r.toFixed(1)}`; };
 export const secs = (ms: number) => `${(ms / 1000).toFixed(1)} s`;
@@ -304,13 +310,61 @@ export interface StripProps {
 }
 
 export function Strip({ clips, cut, stripRef, lock, editingId, onOpen, onReorder, onDropShot, onContext }: StripProps) {
-  const { sel, elapsed } = cut;
+  const { sel } = cut;
   const [drop, setDrop] = useState<DropAt | null>(null);
+  const [zoom, setZoomState] = useState(() => stored("timelineZoom", ZOOM));
+  const [thumbH, setThumbH] = useState(() => stored("timelineStripH", THUMB));
+  const setZoom = (z: number) => { const v = Math.round(Math.max(ZOOM.min, Math.min(ZOOM.max, z)) * 10) / 10; setZoomState(v); store("timelineZoom", v); };
   useEffect(() => { stripRef.current?.querySelector(".is-sel")?.scrollIntoView({ block: "nearest", inline: "nearest", behavior: "smooth" }); }, [sel]);
   const total = clips.reduce((a, c) => a + c.clip.duration_ms, 0);
-  const widthPx = (ms: number) => Math.max(MIN_CLIP_PX, (ms / 1000) * PX_PER_S);
-  const totalPx = clips.reduce((a, c) => a + widthPx(c.clip.duration_ms), 0);
-  const ticks = Array.from({ length: Math.floor(total / 1000) + 1 }, (_, i) => i * 1000);
+  // Zoomed out, short clips may shrink further so the strip stays proportional.
+  const minPx = Math.max(20, Math.min(64, zoom * 1.5));
+  const widthPx = (ms: number) => Math.max(minPx, (ms / 1000) * zoom);
+  const totalPx = clips.reduce((a, c) => a + widthPx(c.clip.duration_ms) + CLIP_GAP, 0);
+  /** Where a moment of the cut sits on the strip (clips have a minimum width and gaps, so it is per clip). */
+  const xOf = (ms: number) => {
+    let x = 0;
+    for (const c of clips) {
+      const w = widthPx(c.clip.duration_ms);
+      if (ms < c.startMs + c.clip.duration_ms) return x + w * Math.max(0, (ms - c.startMs) / c.clip.duration_ms);
+      x += w + CLIP_GAP;
+    }
+    return Math.max(0, x - CLIP_GAP);
+  };
+  // Tick spacing that keeps labels apart at every zoom.
+  const step = [1, 2, 5, 10, 15, 30, 60, 120, 300, 600].find((s) => s * zoom >= 60) ?? 600;
+  const ticks = Array.from({ length: Math.floor(total / 1000 / step) + 1 }, (_, i) => i * step * 1000);
+
+  // Ctrl/⌘ + wheel zooms around the pointer (non-passive, so the page does not zoom instead).
+  const zoomRef = useRef(zoom); zoomRef.current = zoom;
+  useEffect(() => {
+    const el = stripRef.current;
+    if (!el) return;
+    const on = (e: WheelEvent) => {
+      if (!e.ctrlKey && !e.metaKey) return;
+      e.preventDefault();
+      const z = zoomRef.current;
+      const next = Math.max(ZOOM.min, Math.min(ZOOM.max, z * Math.exp(-e.deltaY * 0.0015)));
+      const px = e.clientX - el.getBoundingClientRect().left;
+      const anchor = el.scrollLeft + px;
+      setZoom(next);
+      requestAnimationFrame(() => { el.scrollLeft = anchor * (next / z) - px; });
+    };
+    el.addEventListener("wheel", on, { passive: false });
+    return () => el.removeEventListener("wheel", on);
+  }, [stripRef.current]);
+  const fit = () => { const w = (stripRef.current?.clientWidth ?? 800) - 24; if (total > 0) setZoom((w - clips.length * CLIP_GAP) / (total / 1000)); };
+
+  // Strip height: the grip under it sets the thumbnail height.
+  const hDrag = useRef<{ y: number; h: number } | null>(null);
+  const heightGrip = (
+    <div class="tl-stage__grip tl-strip__grip" role="separator" aria-orientation="horizontal" aria-label="Resize the strip" title="Drag to resize the strip · double-click resets"
+      onPointerDown={(e) => { hDrag.current = { y: e.clientY, h: thumbH }; (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId); e.preventDefault(); }}
+      onPointerMove={(e) => { const d = hDrag.current; if (d) setThumbH(Math.round(Math.max(THUMB.min, Math.min(THUMB.max, d.h + e.clientY - d.y)))); }}
+      onPointerUp={() => { if (hDrag.current) { hDrag.current = null; setThumbH((v) => { store("timelineStripH", v); return v; }); } }}
+      onPointerCancel={() => { hDrag.current = null; }}
+      onDblClick={() => { setThumbH(THUMB.def); store("timelineStripH", THUMB.def); }}><span /></div>
+  );
 
   const kinds = (e: DragEvent) => {
     const t = e.dataTransfer?.types ?? [];
@@ -346,7 +400,7 @@ export function Strip({ clips, cut, stripRef, lock, editingId, onOpen, onReorder
     const shotId = e.dataTransfer?.getData(SHOT_TYPE);
     if (shotId && onDropShot) onDropShot(shotId, at);
   };
-  const dropX = drop && "index" in drop ? clips.slice(0, drop.index).reduce((a, c) => a + widthPx(c.clip.duration_ms) + 2, 0) : null;
+  const dropX = drop && "index" in drop ? clips.slice(0, drop.index).reduce((a, c) => a + widthPx(c.clip.duration_ms) + CLIP_GAP, 0) : null;
 
   // Scrubbing: drag along the ruler; the preview follows (playback, if running, continues from there).
   const scrubbing = useRef(false);
@@ -364,16 +418,32 @@ export function Strip({ clips, cut, stripRef, lock, editingId, onOpen, onReorder
   const scrubDown = (e: PointerEvent) => { if (clips.length === 0) return; e.preventDefault(); (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId); scrubbing.current = true; seekFromX(e.clientX); };
   const scrubMove = (e: PointerEvent) => { if (scrubbing.current) seekFromX(e.clientX); };
   const scrubUp = () => { scrubbing.current = false; };
+  const scrub = { onPointerDown: scrubDown, onPointerMove: scrubMove, onPointerUp: scrubUp, onPointerCancel: scrubUp };
+  const headX = cut.cur ? xOf(cut.playheadMs) : null;
 
   return (
-    <div class="tl-strip-wrap" ref={stripRef} onDragOver={onDragOver} onDrop={onDrop} onDragLeave={(e) => { if (!stripRef.current?.contains(e.relatedTarget as Node)) setDrop(null); }}>
+    <div class="tl-strip-box">
+    <div class="tl-strip-bar">
+      <span class="meta">Zoom</span>
+      <IconButton icon="magnify-minus-outline" label="Zoom out" title="Zoom out (Ctrl/⌘ + scroll)" disabled={zoom <= ZOOM.min} onClick={() => setZoom(zoom / 1.5)} />
+      <input type="range" class="tl-zoom" min={Math.log(ZOOM.min)} max={Math.log(ZOOM.max)} step={0.01} value={Math.log(zoom)} aria-label="Zoom" onInput={(e) => setZoom(Math.exp(Number((e.target as HTMLInputElement).value)))} onDblClick={() => setZoom(ZOOM.def)} />
+      <IconButton icon="magnify-plus-outline" label="Zoom in" title="Zoom in (Ctrl/⌘ + scroll)" disabled={zoom >= ZOOM.max} onClick={() => setZoom(zoom * 1.5)} />
+      <Button kind="ghost" size="sm" icon="arrow-expand-horizontal" title="Fit the whole cut into the width" disabled={!total} onClick={fit}>Fit</Button>
+      <span class="meta num">{zoom >= 10 ? `${Math.round(zoom)} px/s` : `${zoom.toFixed(1)} px/s`}</span>
+    </div>
+    <div class="tl-strip-wrap" ref={stripRef} style={{ "--tl-thumb-h": `${thumbH}px` } as JSX.CSSProperties} onDragOver={onDragOver} onDrop={onDrop} onDragLeave={(e) => { if (!stripRef.current?.contains(e.relatedTarget as Node)) setDrop(null); }}>
       {clips.length === 0 ? (
         <div class={cx("tl-empty", drop && "is-drop")}>
           <span class="meta">No clips yet. {onDropShot ? "Drag shots here, or add them from the panel." : "Add shots from the panel."} A sequence adds one clip per photo.</span>
         </div>
       ) : (
         <div class="tl-strip" style={{ width: `${totalPx}px` }} role="listbox" aria-label="Clips">
-          <div class="tl-ruler" title="Drag to scrub" onPointerDown={scrubDown} onPointerMove={scrubMove} onPointerUp={scrubUp} onPointerCancel={scrubUp}>{ticks.map((ms) => { const x = clips.reduce((a, c) => a + (c.startMs + c.clip.duration_ms <= ms ? widthPx(c.clip.duration_ms) : c.startMs < ms ? widthPx(c.clip.duration_ms) * ((ms - c.startMs) / c.clip.duration_ms) : 0), 0); return <span key={ms} style={{ left: `${x}px` }}>{ms % 5000 === 0 ? clock(ms).replace(/\.0$/, "") : ""}</span>; })}</div>
+          <div class="tl-ruler" title="Drag to scrub" {...scrub}>{ticks.map((ms) => <span key={ms} style={{ left: `${xOf(ms)}px` }}>{clock(ms).replace(/\.0$/, "")}</span>)}</div>
+          {headX !== null && (
+            <div class="tl-playhead" style={{ left: `${headX}px` }}>
+              <div class="tl-playhead__knob" title="Drag to scrub" {...scrub} />
+            </div>
+          )}
           <div class="tl-clips">
             {dropX !== null && <span class="tl-dropline" style={{ left: `${dropX - 2}px` }} />}
             {clips.map((c) => (
@@ -390,12 +460,13 @@ export function Strip({ clips, cut, stripRef, lock, editingId, onOpen, onReorder
                   : <div class="tl-clip__thumb tl-clip__thumb--ph"><Icon name="image-off-outline" /></div>}
                 <span class="tl-clip__name ellipsis">{c.kind === "photo" && c.overlay ? <Icon name="layers-outline" size={12} /> : null}{clipLabel(c)}{c.kind === "photo" && c.shot.photos.length > 1 ? ` · ${c.photo.ordinal + 1}` : ""}</span>
                 <span class="tl-clip__dur num">{secs(c.clip.duration_ms)}</span>
-                {c.clip.id === sel && cut.cur && <span class="tl-clip__head" style={{ left: `${(Math.min(elapsed, cut.cur.clip.duration_ms) / cut.cur.clip.duration_ms) * 100}%` }} />}
               </button>
             ))}
           </div>
         </div>
       )}
+    </div>
+    {clips.length > 0 && heightGrip}
     </div>
   );
 }
