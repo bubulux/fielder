@@ -1,13 +1,14 @@
 import { useMemo, useRef, useState } from "preact/hooks";
 import { fetchTimelines, patchShot, promoteClip, type Preset, type Project, type Shot, type Timeline, type TimelineClip } from "./api";
 import { guardCut, useClipEditing, type EditKind } from "./ClipEditing";
-import { cover, placeLabel, shotTitle } from "./format";
-import { Framed, type MaskMode } from "./Framed";
+import { placeLabel, shotTitle } from "./format";
+import type { MaskMode } from "./Framed";
+import { ScrubCover, SeqBadges } from "./ShotCard";
 import { afterG, useKeys } from "./keys";
 import type { CutPosition } from "./router";
 import { useSettings } from "./settings";
 import { ClipMenu, ClipPanel, clock, CutPreview, DRAWER_RESIZE, duplicateUnit, fillSpot, insertAfterUnit, insertShot, moveUnitTo, normalizeGroups, restorePhotos, setGroup, stepUnit, ungroup, withoutClip, duplicateTimeline, LockSelect, TimelineRail, newPlaceholder, resolveClips, setShotState, shotDrag, shotUsage, DECISIONS, Strip, useCut, useCutUrl, useTimelineStore, type Cut, type ResolvedClip } from "./TimelineParts";
-import { Banner, Button, ContextMenu, cx, Empty, EmptyNote, Field, Icon, IconButton, Input, MenuItem, Panel, PanelBody, PanelHead, promptDialog, SaveStatus, Seg, Select, SeqBadge, StateMarker, toast, Toolbar, ToolbarTitle, useCtxMenu, type SaveState } from "./ui";
+import { Banner, Button, ContextMenu, cx, Empty, EmptyNote, Field, Icon, IconButton, Input, MenuItem, Panel, PanelBody, PanelHead, promptDialog, SaveStatus, Seg, Select, StateMarker, toast, Toolbar, ToolbarTitle, useCtxMenu, type SaveState } from "./ui";
 
 /**
  * Review as a timeline-first workspace (issue #31): the selected cut on stage, the project's shots
@@ -340,9 +341,8 @@ function Browser(p: BrowserProps) {
               onClick={() => setSel(s.id)} onDblClick={() => p.onOpen(s, list)} onContextMenu={(e) => { setSel(s.id); menu.openMenu(e, s); }}
               onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); setSel(s.id); } }}
               title={`${shotTitle(s)} · drag into the strip`}>
-              <div class="f-card__img">
-                <Framed photo={cover(s)} mode={p.mask} />
-                {s.photos.length > 1 && <div class="f-card__tl"><SeqBadge count={s.photos.length} /></div>}
+              <ScrubCover shot={s} mask={p.mask} badges={(at) => (<>
+                <SeqBadges count={s.photos.length} at={at} />
                 <div class="f-card__tr rw-card__tr">
                   <StateMarker state={s.state} iconOnly />
                   {uses > 0 && (
@@ -352,7 +352,7 @@ function Browser(p: BrowserProps) {
                     </button>
                   )}
                 </div>
-              </div>
+              </>)} />
               <div class="f-card__body rw-card__body">
                 <div class="rw-card__txt">
                   <span class="f-card__title">{shotTitle(s)}</span>
