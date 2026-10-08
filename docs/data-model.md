@@ -12,6 +12,7 @@ D1 (SQLite) database `fielder-db`, schema in `apps/worker/migrations/`. Images l
 | `0004_shooting_days.sql` | `shooting_days`, `day_shots` |
 | `0005_capture_flow.sql` | `shots.shot_size`, `camera_support`, `movement`; `photos` rebuilt with nullable `lat`/`lon` (copied row by row, both or neither set) |
 | `0006_compose.sql` | `shots.description`; `overlays`, `sketches` ([compose](features/compose.md)) |
+| `0013_clip_owned_compose.sql` | `overlays.timeline_id`, `clip_id`; `sketches` rebuilt (copied) with nullable `shot_id` + `timeline_id`, `clip_id`; `timeline_clips.sketch_id` (sketch clips) ([timeline](features/timeline.md)) |
 | `0012_timeline_lock.sql` | `timelines.lock_mode`: one presentation mode forced on every clip ([timeline](features/timeline.md)) |
 | `0011_placeholder_clips.sql` | `timeline_clips` rebuilt (copied): nullable `photo_id`/`presentation`, new `title` for placeholder clips ([timeline](features/timeline.md)) |
 | `0010_framings.sql` | `framings`; `photos.root_framing_id` ([framing](features/rig-explorer.md)) |
@@ -41,9 +42,9 @@ Add a new numbered file for every change; never edit one that was applied to pro
 
 `photos(id, shot_id → shots CASCADE, ordinal UNIQUE per shot, source camera|upload|drawn (non-camera photos: no framing, lens_mm 0), timestamp, lat, lon (both NULL when captured without GPS), gps_accuracy_m, position_corrected, preset_id → presets SET NULL, lens_mm, r2_object_key UNIQUE, width, height, framing JSON, device JSON, created_at)`
 
-`overlays(id, photo_id → photos CASCADE, name, description, drawing JSON, presentation JSON, render_key UNIQUE, position, created_at, updated_at)`: a drawing + look over one photo. `drawing` = `{ v: 1, shapes: [...], look: {...} }`, `presentation` = `{ mode, frame: { width_fraction, height_fraction } | null, label, rig_id?, lens_mm? }` (shapes in `packages/vocab/src/compose.ts`). `render_key` is the flattened image in R2 (`renders/overlays/<id>.<ext>`). See [compose](features/compose.md).
+`overlays(id, photo_id → photos CASCADE, name, description, drawing JSON, presentation JSON, render_key UNIQUE, position, created_at, updated_at)`: a drawing + look over one photo. `drawing` = `{ v: 1, shapes: [...], look: {...} }`, `presentation` = `{ mode, frame: { width_fraction, height_fraction } | null, label, rig_id?, lens_mm? }` (shapes in `packages/vocab/src/compose.ts`). `render_key` is the flattened image in R2 (`renders/overlays/<id>.<ext>`). See [compose](features/compose.md). `timeline_id → timelines CASCADE` + `clip_id` (no FK) make it a timeline clip's own overlay (issue #31); shots do not embed those.
 
-`sketches(id, shot_id → shots CASCADE, name, kind, description, drawing JSON (look null), aspect REAL w/h, render_key UNIQUE, position, created_at, updated_at)`: a free canvas on the shot. `kind` is free text; `SKETCH_KINDS` are only suggestions.
+`sketches(id, shot_id → shots CASCADE | null, name, kind, description, drawing JSON (look null), aspect REAL w/h, render_key UNIQUE, position, created_at, updated_at, timeline_id → timelines CASCADE, clip_id)`: a free canvas on the shot, or (shot null, timeline + clip set; a CHECK enforces one of the two) a sketch clip's own canvas. `kind` is free text; `SKETCH_KINDS` are only suggestions.
 
 `framings(id, photo_id → photos CASCADE, name, rig_id → presets SET NULL (null = as shot), lens_mm, frame JSON { width_fraction, height_fraction, x, y }, position, created_at, updated_at)` and `photos.root_framing_id → framings SET NULL` (null = as captured). The API embeds `framings` and `root_framing_id` in every photo. See [framing](features/rig-explorer.md).
 
@@ -53,7 +54,7 @@ Add a new numbered file for every change; never edit one that was applied to pro
 
 `shooting_days(id, project_id → CASCADE, date YYYY-MM-DD, title, notes, …)` and `day_shots(day_id, shot_id, position, planned_time HH:MM, notes)`.
 
-`timelines(id, project_id → projects CASCADE, name, notes, lock_mode, created_at, updated_at)` and `timeline_clips(id, timeline_id → CASCADE, position, photo_id → photos CASCADE, overlay_id → overlays SET NULL, presentation JSON, duration_ms 100..3600000, notes, title)`. A clip is either a photo clip (`photo_id` + `presentation`) or a placeholder (`title` only, no photo/overlay/presentation; a CHECK enforces the two shapes). See [timeline](features/timeline.md).
+`timelines(id, project_id → projects CASCADE, name, notes, lock_mode, created_at, updated_at)` and `timeline_clips(id, timeline_id → CASCADE, position, photo_id → photos CASCADE, overlay_id → overlays SET NULL, presentation JSON, duration_ms 100..3600000, notes, title)`. A clip is either a photo clip (`photo_id` + `presentation`) or a placeholder (`title` only, no photo/overlay/presentation; a CHECK enforces the two shapes); a placeholder with `sketch_id → sketches SET NULL` is a sketch clip (deleting the sketch turns it back into a placeholder). See [timeline](features/timeline.md).
 
 ## JSON shapes on photos
 

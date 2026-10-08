@@ -1,12 +1,12 @@
-import type { ComponentChildren, RefObject } from "preact";
+import type { ComponentChildren, JSX, RefObject } from "preact";
 import { useEffect, useRef, useState } from "preact/hooks";
 import { PRESENTATION_MODES, type Presentation } from "@fielder/vocab";
-import { deleteTimeline, putTimeline, type Overlay, type Photo, type Shot, type Timeline, type TimelineClip } from "./api";
+import { copyOverlay, copySketch, deleteTimeline, putTimeline, type Overlay, type Photo, type Shot, type Sketch, type Timeline, type TimelineClip } from "./api";
 import { frameModeLabel, shotTitle } from "./format";
 import { Framed, type MaskMode } from "./Framed";
 import { invalidateTimelines } from "./Inspector";
 import { FramingSelect, presentationFrame, rootPresentation } from "./FramingSelect";
-import { Button, confirmDialog, cx, Field, Icon, IconButton, Input, Kbd, Panel, PanelBody, PanelHead, Seg, Select, toast, type SaveState } from "./ui";
+import { Button, confirmDialog, cx, EmptyNote, Field, Icon, IconButton, Input, Kbd, Panel, PanelBody, PanelHead, Seg, Select, Spinner, toast, type SaveState } from "./ui";
 
 /**
  * The pieces a timeline is edited with, shared by the Timeline page and the Review workspace
@@ -15,44 +15,95 @@ import { Button, confirmDialog, cx, Field, Icon, IconButton, Input, Kbd, Panel, 
  */
 
 export const DEFAULT_MS = 3000;
+/** The right drawer (clip panel, shot browser) shares one remembered width. */
+export const DRAWER_RESIZE = { key: "timelineDrawer", min: 300, max: 720 };
 export const STEP_MS = 500;
-const PX_PER_S = 44;
-const MIN_CLIP_PX = 64;
+/** Strip zoom (px per second) and clip thumbnail height: defaults, limits, remembered per browser. */
+const ZOOM = { def: 44, min: 6, max: 480 };
+const THUMB = { def: 54, min: 28, max: 220 };
+const CLIP_GAP = 2;
+function stored(key: string, lim: { def: number; min: number; max: number }): number {
+  try { const v = Number(localStorage.getItem(key)); return v >= lim.min && v <= lim.max ? v : lim.def; } catch { return lim.def; }
+}
+const store = (key: string, v: number) => { try { localStorage.setItem(key, String(v)); } catch { /* a preference */ } };
 /** "1:02.5" */
 export const clock = (ms: number) => { const s = ms / 1000; const m = Math.floor(s / 60); const r = s - m * 60; return `${m}:${r < 10 ? "0" : ""}${r.toFixed(1)}`; };
 export const secs = (ms: number) => `${(ms / 1000).toFixed(1)} s`;
 
-/** A clip with what it points at; photo clips of deleted shots/photos are skipped (the server drops them on the next save). */
+/**
+ * A clip with what it points at; photo clips of deleted shots/photos are skipped (the server drops
+ * them on the next save). `ownOverlays` / `ownSketch` are what the clip made inline (issue #31).
+ */
 export type ResolvedClip =
-  | { kind: "photo"; clip: TimelineClip; pres: Presentation; shot: Shot; photo: Photo; overlay: Overlay | null; index: number; startMs: number }
+  | { kind: "photo"; clip: TimelineClip; pres: Presentation; shot: Shot; photo: Photo; overlay: Overlay | null; ownOverlays: Overlay[]; ownSketch: Sketch | null; index: number; startMs: number }
+  | { kind: "sketch"; clip: TimelineClip; sketch: Sketch; index: number; startMs: number }
   | { kind: "placeholder"; clip: TimelineClip; index: number; startMs: number };
 
 export function resolveClips(t: Timeline, byId: Map<string, Shot>): ResolvedClip[] {
   const out: ResolvedClip[] = [];
+  const own = (clipId: string) => t.overlays.filter((o) => o.clip_id === clipId);
+  const sketches = new Map<string, Sketch>([...[...byId.values()].flatMap((s) => s.sketches), ...t.sketches].map((k) => [k.id, k]));
   let at = 0;
   t.clips.forEach((clip, index) => {
     if (clip.photo_id === null) {
-      out.push({ kind: "placeholder", clip, index, startMs: at });
+      const sketch = clip.sketch_id ? sketches.get(clip.sketch_id) : undefined;
+      out.push(sketch ? { kind: "sketch", clip, sketch, index, startMs: at } : { kind: "placeholder", clip, index, startMs: at });
       at += clip.duration_ms;
       return;
     }
     const shot = clip.shot_id ? byId.get(clip.shot_id) : undefined;
     const photo = shot?.photos.find((p) => p.id === clip.photo_id);
     if (!shot || !photo || !clip.presentation) return;
-    out.push({ kind: "photo", clip, pres: clip.presentation, shot, photo, overlay: shot.overlays.find((o) => o.id === clip.overlay_id) ?? null, index, startMs: at });
+    const ownOverlays = own(clip.id);
+    const overlay = shot.overlays.find((o) => o.id === clip.overlay_id) ?? ownOverlays.find((o) => o.id === clip.overlay_id) ?? null;
+    out.push({ kind: "photo", clip, pres: clip.presentation, shot, photo, overlay, ownOverlays, ownSketch: t.sketches.find((k) => k.clip_id === clip.id) ?? null, index, startMs: at });
     at += clip.duration_ms;
   });
   return out;
 }
+/** A clip's own re-frame (issue #31): no saved framing, but a placed frame (re-framed inline). */
+export const ownReframe = (pres: Presentation) => !pres.framing_id && pres.frame?.x !== undefined;
 /** Default presentation of a photo: the view's frame mode and the rig it was shot with. */
 export const defaultPresentation = (photo: Photo, mode: MaskMode): Presentation => ({ mode, ...rootPresentation(photo) });
 /** The clips a shot contributes when added: one per photo, each at the default hold time. */
 export const clipsOfShot = (s: Shot, mode: MaskMode): TimelineClip[] =>
-  s.photos.map((p): TimelineClip => ({ id: crypto.randomUUID(), photo_id: p.id, shot_id: s.id, overlay_id: null, presentation: defaultPresentation(p, mode), duration_ms: DEFAULT_MS, notes: null, title: null }));
+  s.photos.map((p): TimelineClip => ({ id: crypto.randomUUID(), photo_id: p.id, shot_id: s.id, overlay_id: null, presentation: defaultPresentation(p, mode), duration_ms: DEFAULT_MS, notes: null, title: null, sketch_id: null }));
 export const newPlaceholder = (title: string): TimelineClip =>
-  ({ id: crypto.randomUUID(), photo_id: null, shot_id: null, overlay_id: null, presentation: null, duration_ms: DEFAULT_MS, notes: null, title });
+  ({ id: crypto.randomUUID(), photo_id: null, shot_id: null, overlay_id: null, presentation: null, duration_ms: DEFAULT_MS, notes: null, title, sketch_id: null });
 
-export const clipLabel = (c: ResolvedClip): string => (c.kind === "photo" ? shotTitle(c.shot) : c.clip.title ?? "Placeholder");
+export const clipLabel = (c: ResolvedClip): string => (c.kind === "photo" ? shotTitle(c.shot) : c.kind === "sketch" ? c.sketch.name : c.clip.title ?? "Placeholder");
+
+/**
+ * Copy a clip for Duplicate: a new id, and its own overlay or sketch copied server-side so the two
+ * clips do not share a drawing. Shot overlays and sketches are shared (they are references).
+ */
+export async function copyClip(t: Timeline, clip: TimelineClip): Promise<TimelineClip> {
+  const copy: TimelineClip = { ...clip, id: crypto.randomUUID() };
+  const owner = { timeline_id: t.id, clip_id: copy.id };
+  if (clip.overlay_id && t.overlays.some((o) => o.id === clip.overlay_id)) copy.overlay_id = (await copyOverlay(clip.overlay_id, crypto.randomUUID(), owner)).id;
+  if (clip.sketch_id && t.sketches.some((k) => k.id === clip.sketch_id)) copy.sketch_id = (await copySketch(clip.sketch_id, crypto.randomUUID(), owner)).id;
+  return copy;
+}
+
+/**
+ * Duplicate a timeline with its clips' own overlays and sketches: the copy is saved first (its clips
+ * can only own drawings once it exists), then the drawings are copied, then the clips point at them.
+ */
+export async function duplicateTimeline(t: Timeline): Promise<Timeline> {
+  const ids = new Map(t.clips.map((c) => [c.id, crypto.randomUUID()]));
+  const ownOverlay = new Set(t.overlays.map((o) => o.id)), ownSketch = new Set(t.sketches.map((k) => k.id));
+  const base: Timeline = { ...t, id: crypto.randomUUID(), name: `${t.name} (copy)`, overlays: [], sketches: [], created_at: "", updated_at: null, clips: [] };
+  const stripped = t.clips.map((c) => ({ ...c, id: ids.get(c.id)!, overlay_id: c.overlay_id && ownOverlay.has(c.overlay_id) ? null : c.overlay_id, sketch_id: c.sketch_id && ownSketch.has(c.sketch_id) ? null : c.sketch_id }));
+  await putTimeline({ ...base, clips: stripped });
+  const clips = await Promise.all(t.clips.map(async (c, i) => {
+    const owner = { timeline_id: base.id, clip_id: ids.get(c.id)! };
+    const next = { ...stripped[i] };
+    if (c.overlay_id && ownOverlay.has(c.overlay_id)) next.overlay_id = (await copyOverlay(c.overlay_id, crypto.randomUUID(), owner)).id;
+    if (c.sketch_id && ownSketch.has(c.sketch_id)) next.sketch_id = (await copySketch(c.sketch_id, crypto.randomUUID(), owner)).id;
+    return next;
+  }));
+  return putTimeline({ ...base, clips });
+}
 
 // ---------- The project's timelines with autosave (600 ms debounce, flush on leave) ----------
 
@@ -65,6 +116,10 @@ export interface TimelineStore {
   create: (projectId: string) => Promise<Timeline | null>;
   remove: (t: Timeline) => Promise<boolean>;
   retry: () => void;
+  /** Send a pending change now (a promotion needs the clip on the server). */
+  saveNow: (id: string) => Promise<void>;
+  /** Take the server's copy (after a promotion changed it there). */
+  replace: (t: Timeline) => void;
 }
 
 export function useTimelineStore(load: (set: (t: Timeline[]) => void, fail: (e: Error) => void) => void, deps: unknown[]): TimelineStore {
@@ -74,10 +129,10 @@ export function useTimelineStore(load: (set: (t: Timeline[]) => void, fail: (e: 
   const pending = useRef(new Map<string, { timer: ReturnType<typeof setTimeout>; t: Timeline }>());
   useEffect(() => { setListState(null); load(setListState, (e) => setError(e.message)); }, deps);
   const setList = (f: (cur: Timeline[] | null) => Timeline[] | null) => setListState(f);
-  const flush = (t: Timeline) => {
+  const flush = (t: Timeline): Promise<void> => {
     pending.current.delete(t.id);
     setSave("saving");
-    putTimeline(t).then((saved) => {
+    return putTimeline(t).then((saved) => {
       invalidateTimelines(t.project_id);
       // The server may have dropped clips of deleted photos; take its list.
       setListState((cur) => (cur ?? []).map((x) => (x.id === saved.id && !pending.current.has(saved.id) ? saved : x)));
@@ -95,7 +150,7 @@ export function useTimelineStore(load: (set: (t: Timeline[]) => void, fail: (e: 
   };
   const create = async (projectId: string): Promise<Timeline | null> => {
     const n = (list?.length ?? 0) + 1;
-    const t: Timeline = { id: crypto.randomUUID(), project_id: projectId, name: `Cut ${n}`, notes: null, lock_mode: null, clips: [], created_at: "", updated_at: null };
+    const t: Timeline = { id: crypto.randomUUID(), project_id: projectId, name: `Cut ${n}`, notes: null, lock_mode: null, clips: [], overlays: [], sketches: [], created_at: "", updated_at: null };
     try { const saved = await putTimeline(t); invalidateTimelines(projectId); setListState((cur) => [...(cur ?? []), saved]); return saved; } catch (e) { toast(`Could not create the timeline: ${(e as Error).message}`, "danger"); return null; }
   };
   const remove = async (t: Timeline): Promise<boolean> => {
@@ -103,7 +158,9 @@ export function useTimelineStore(load: (set: (t: Timeline[]) => void, fail: (e: 
     if (!ok) return false;
     try { await deleteTimeline(t.id); invalidateTimelines(t.project_id); setListState((cur) => (cur ?? []).filter((x) => x.id !== t.id)); return true; } catch (e) { toast(`Delete failed: ${(e as Error).message}`, "danger"); return false; }
   };
-  return { list, setList, error, save, change, create, remove, retry };
+  const saveNow = async (id: string) => { const p = pending.current.get(id); if (!p) return; clearTimeout(p.timer); await flush(p.t); };
+  const replace = (t: Timeline) => setListState((cur) => (cur ?? []).map((x) => (x.id === t.id ? t : x)));
+  return { list, setList, error, save, change, create, remove, retry, saveNow, replace };
 }
 
 // ---------- Playback: 100 ms ticks; the next clip starts when the hold time is up, the end stops ----------
@@ -148,6 +205,15 @@ export function useCut(clips: ResolvedClip[]): Cut {
   return { cur, sel, select, seek, step, toggle, playing, elapsed, playheadMs };
 }
 
+/** A sketch clip on stage: its render on the white canvas, letterboxed like a photo. */
+export function SketchView({ sketch }: { sketch: Sketch }) {
+  return (
+    <div class="tl-sketch-view" style={{ aspectRatio: String(sketch.aspect), width: `min(100%, calc(${STAGE_H} * ${sketch.aspect}))` }}>
+      {sketch.render_url ? <img src={sketch.render_url} alt="" /> : <span class="meta"><Icon name="floor-plan" /> Empty sketch</span>}
+    </div>
+  );
+}
+
 /** The timeline's presentation lock: per clip, or one mode forced on every clip. */
 export function LockSelect({ value, onChange }: { value: MaskMode | null; onChange: (m: MaskMode | null) => void }) {
   return (
@@ -159,20 +225,50 @@ export function LockSelect({ value, onChange }: { value: MaskMode | null; onChan
 
 // ---------- Preview + transport ----------
 
-export function CutPreview({ cut, clips, total, maxHeight, lock, children }: { cut: Cut; clips: ResolvedClip[]; total: number; maxHeight: string; lock?: MaskMode | null; children?: ComponentChildren }) {
+/** The stage keeps one height whatever is on it (shot, placeholder, an inline editor): clips letterbox into it. */
+export const STAGE_H = "var(--tl-stage-h)";
+
+const STAGE_MIN = 200;
+const loadStageH = (): number | null => { try { const v = Number(localStorage.getItem("timelineStageH")); return v >= STAGE_MIN ? v : null; } catch { return null; } };
+
+/**
+ * The stage height: the default fills the window (`--tl-stage-h` in CSS); dragging the grip under
+ * the stage sets a height of its own, remembered per browser; double-click goes back to the default.
+ */
+function useStageHeight() {
+  const [px, setPx] = useState<number | null>(loadStageH);
+  const drag = useRef<{ y: number; h: number } | null>(null);
+  const save = (v: number | null) => { try { if (v === null) localStorage.removeItem("timelineStageH"); else localStorage.setItem("timelineStageH", String(v)); } catch { /* a preference */ } };
+  const grip = (
+    <div class="tl-stage__grip" role="separator" aria-orientation="horizontal" aria-label="Resize the stage" title="Drag to resize the stage · double-click resets"
+      onPointerDown={(e) => { const stage = (e.currentTarget as HTMLElement).previousElementSibling as HTMLElement | null; drag.current = { y: e.clientY, h: stage?.getBoundingClientRect().height ?? 400 }; (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId); e.preventDefault(); }}
+      onPointerMove={(e) => { const d = drag.current; if (!d) return; setPx(Math.round(Math.max(STAGE_MIN, Math.min(window.innerHeight - 160, d.h + e.clientY - d.y)))); }}
+      onPointerUp={() => { if (drag.current) { drag.current = null; setPx((v) => { save(v); return v; }); } }}
+      onPointerCancel={() => { drag.current = null; }}
+      onDblClick={() => { setPx(null); save(null); }}><span /></div>
+  );
+  return { style: px !== null ? { "--tl-stage-h": `${px}px` } : undefined, grip };
+}
+
+export function CutPreview({ cut, clips, total, lock, stage, editing, children }: { cut: Cut; clips: ResolvedClip[]; total: number; lock?: MaskMode | null; /** Replaces the clip on stage (an inline editor). */ stage?: ComponentChildren; editing?: boolean; children?: ComponentChildren }) {
   const { cur } = cut;
+  const height = useStageHeight();
   return (
-    <div class="tl-preview">
-      {!cur ? <div class="tl-preview__empty"><Icon name="filmstrip" /><span>Add shots to start the cut</span></div>
-        : cur.kind === "photo" ? <Framed photo={cur.photo} mode={lock ?? cur.pres.mode} frame={presentationFrame(cur.photo, cur.pres)} src={cur.overlay?.render_url ?? undefined} maxHeight={maxHeight} />
-        : (
-          <div class="tl-ph-view" style={{ maxHeight }}>
-            <Icon name="image-off-outline" />
-            <strong>{cur.clip.title}</strong>
-            {cur.clip.notes && <span class="tl-ph-view__notes">{cur.clip.notes}</span>}
-            <span class="meta" style={{ color: "inherit" }}>Placeholder · drop a shot here when you have it</span>
-          </div>
-        )}
+    <div class="tl-preview" style={height.style as JSX.CSSProperties | undefined}>
+      <div class={cx("tl-stage", editing && "tl-stage--edit")}>
+        {stage ?? (!cur ? <div class="tl-preview__empty"><Icon name="filmstrip" /><span>Add shots to start the cut</span></div>
+          : cur.kind === "photo" ? <Framed photo={cur.photo} mode={lock ?? cur.pres.mode} frame={presentationFrame(cur.photo, cur.pres)} src={cur.overlay?.render_url ?? undefined} maxHeight={STAGE_H} />
+          : cur.kind === "sketch" ? <SketchView sketch={cur.sketch} />
+          : (
+            <div class="tl-ph-view">
+              <Icon name="image-off-outline" />
+              <strong>{cur.clip.title}</strong>
+              {cur.clip.notes && <span class="tl-ph-view__notes">{cur.clip.notes}</span>}
+              <span class="meta" style={{ color: "inherit" }}>Placeholder · drop a shot here when you have it</span>
+            </div>
+          ))}
+      </div>
+      {height.grip}
       <div class="tl-transport">
         <IconButton kind="secondary" icon="skip-previous" label="First clip (Home)" disabled={!cur} onClick={() => clips[0] && cut.select(clips[0].clip.id)} />
         <IconButton kind="secondary" icon="chevron-left" label="Previous clip (←)" disabled={!cur || clips.indexOf(cur) === 0} onClick={() => cut.step(-1)} />
@@ -204,6 +300,8 @@ export interface StripProps {
   cut: Cut;
   stripRef: RefObject<HTMLDivElement>;
   lock?: MaskMode | null;
+  /** The clip edited inline, marked in the strip. */
+  editingId?: string | null;
   onOpen: (c: ResolvedClip) => void;
   onReorder: (clipId: string, index: number) => void;
   /** A shot dropped from the browser; absent = the strip accepts no shots (no browser beside it). */
@@ -211,14 +309,62 @@ export interface StripProps {
   onContext?: (c: ResolvedClip, e: MouseEvent) => void;
 }
 
-export function Strip({ clips, cut, stripRef, lock, onOpen, onReorder, onDropShot, onContext }: StripProps) {
-  const { sel, elapsed } = cut;
+export function Strip({ clips, cut, stripRef, lock, editingId, onOpen, onReorder, onDropShot, onContext }: StripProps) {
+  const { sel } = cut;
   const [drop, setDrop] = useState<DropAt | null>(null);
+  const [zoom, setZoomState] = useState(() => stored("timelineZoom", ZOOM));
+  const [thumbH, setThumbH] = useState(() => stored("timelineStripH", THUMB));
+  const setZoom = (z: number) => { const v = Math.round(Math.max(ZOOM.min, Math.min(ZOOM.max, z)) * 10) / 10; setZoomState(v); store("timelineZoom", v); };
   useEffect(() => { stripRef.current?.querySelector(".is-sel")?.scrollIntoView({ block: "nearest", inline: "nearest", behavior: "smooth" }); }, [sel]);
   const total = clips.reduce((a, c) => a + c.clip.duration_ms, 0);
-  const widthPx = (ms: number) => Math.max(MIN_CLIP_PX, (ms / 1000) * PX_PER_S);
-  const totalPx = clips.reduce((a, c) => a + widthPx(c.clip.duration_ms), 0);
-  const ticks = Array.from({ length: Math.floor(total / 1000) + 1 }, (_, i) => i * 1000);
+  // Zoomed out, short clips may shrink further so the strip stays proportional.
+  const minPx = Math.max(20, Math.min(64, zoom * 1.5));
+  const widthPx = (ms: number) => Math.max(minPx, (ms / 1000) * zoom);
+  const totalPx = clips.reduce((a, c) => a + widthPx(c.clip.duration_ms) + CLIP_GAP, 0);
+  /** Where a moment of the cut sits on the strip (clips have a minimum width and gaps, so it is per clip). */
+  const xOf = (ms: number) => {
+    let x = 0;
+    for (const c of clips) {
+      const w = widthPx(c.clip.duration_ms);
+      if (ms < c.startMs + c.clip.duration_ms) return x + w * Math.max(0, (ms - c.startMs) / c.clip.duration_ms);
+      x += w + CLIP_GAP;
+    }
+    return Math.max(0, x - CLIP_GAP);
+  };
+  // Tick spacing that keeps labels apart at every zoom.
+  const step = [1, 2, 5, 10, 15, 30, 60, 120, 300, 600].find((s) => s * zoom >= 60) ?? 600;
+  const ticks = Array.from({ length: Math.floor(total / 1000 / step) + 1 }, (_, i) => i * step * 1000);
+
+  // Ctrl/⌘ + wheel zooms around the pointer (non-passive, so the page does not zoom instead).
+  const zoomRef = useRef(zoom); zoomRef.current = zoom;
+  useEffect(() => {
+    const el = stripRef.current;
+    if (!el) return;
+    const on = (e: WheelEvent) => {
+      if (!e.ctrlKey && !e.metaKey) return;
+      e.preventDefault();
+      const z = zoomRef.current;
+      const next = Math.max(ZOOM.min, Math.min(ZOOM.max, z * Math.exp(-e.deltaY * 0.0015)));
+      const px = e.clientX - el.getBoundingClientRect().left;
+      const anchor = el.scrollLeft + px;
+      setZoom(next);
+      requestAnimationFrame(() => { el.scrollLeft = anchor * (next / z) - px; });
+    };
+    el.addEventListener("wheel", on, { passive: false });
+    return () => el.removeEventListener("wheel", on);
+  }, [stripRef.current]);
+  const fit = () => { const w = (stripRef.current?.clientWidth ?? 800) - 24; if (total > 0) setZoom((w - clips.length * CLIP_GAP) / (total / 1000)); };
+
+  // Strip height: the grip under it sets the thumbnail height.
+  const hDrag = useRef<{ y: number; h: number } | null>(null);
+  const heightGrip = (
+    <div class="tl-stage__grip tl-strip__grip" role="separator" aria-orientation="horizontal" aria-label="Resize the strip" title="Drag to resize the strip · double-click resets"
+      onPointerDown={(e) => { hDrag.current = { y: e.clientY, h: thumbH }; (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId); e.preventDefault(); }}
+      onPointerMove={(e) => { const d = hDrag.current; if (d) setThumbH(Math.round(Math.max(THUMB.min, Math.min(THUMB.max, d.h + e.clientY - d.y)))); }}
+      onPointerUp={() => { if (hDrag.current) { hDrag.current = null; setThumbH((v) => { store("timelineStripH", v); return v; }); } }}
+      onPointerCancel={() => { hDrag.current = null; }}
+      onDblClick={() => { setThumbH(THUMB.def); store("timelineStripH", THUMB.def); }}><span /></div>
+  );
 
   const kinds = (e: DragEvent) => {
     const t = e.dataTransfer?.types ?? [];
@@ -254,7 +400,7 @@ export function Strip({ clips, cut, stripRef, lock, onOpen, onReorder, onDropSho
     const shotId = e.dataTransfer?.getData(SHOT_TYPE);
     if (shotId && onDropShot) onDropShot(shotId, at);
   };
-  const dropX = drop && "index" in drop ? clips.slice(0, drop.index).reduce((a, c) => a + widthPx(c.clip.duration_ms) + 2, 0) : null;
+  const dropX = drop && "index" in drop ? clips.slice(0, drop.index).reduce((a, c) => a + widthPx(c.clip.duration_ms) + CLIP_GAP, 0) : null;
 
   // Scrubbing: drag along the ruler; the preview follows (playback, if running, continues from there).
   const scrubbing = useRef(false);
@@ -272,21 +418,37 @@ export function Strip({ clips, cut, stripRef, lock, onOpen, onReorder, onDropSho
   const scrubDown = (e: PointerEvent) => { if (clips.length === 0) return; e.preventDefault(); (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId); scrubbing.current = true; seekFromX(e.clientX); };
   const scrubMove = (e: PointerEvent) => { if (scrubbing.current) seekFromX(e.clientX); };
   const scrubUp = () => { scrubbing.current = false; };
+  const scrub = { onPointerDown: scrubDown, onPointerMove: scrubMove, onPointerUp: scrubUp, onPointerCancel: scrubUp };
+  const headX = cut.cur ? xOf(cut.playheadMs) : null;
 
   return (
-    <div class="tl-strip-wrap" ref={stripRef} onDragOver={onDragOver} onDrop={onDrop} onDragLeave={(e) => { if (!stripRef.current?.contains(e.relatedTarget as Node)) setDrop(null); }}>
+    <div class="tl-strip-box">
+    <div class="tl-strip-bar">
+      <span class="meta">Zoom</span>
+      <IconButton icon="magnify-minus-outline" label="Zoom out" title="Zoom out (Ctrl/⌘ + scroll)" disabled={zoom <= ZOOM.min} onClick={() => setZoom(zoom / 1.5)} />
+      <input type="range" class="tl-zoom" min={Math.log(ZOOM.min)} max={Math.log(ZOOM.max)} step={0.01} value={Math.log(zoom)} aria-label="Zoom" onInput={(e) => setZoom(Math.exp(Number((e.target as HTMLInputElement).value)))} onDblClick={() => setZoom(ZOOM.def)} />
+      <IconButton icon="magnify-plus-outline" label="Zoom in" title="Zoom in (Ctrl/⌘ + scroll)" disabled={zoom >= ZOOM.max} onClick={() => setZoom(zoom * 1.5)} />
+      <Button kind="ghost" size="sm" icon="arrow-expand-horizontal" title="Fit the whole cut into the width" disabled={!total} onClick={fit}>Fit</Button>
+      <span class="meta num">{zoom >= 10 ? `${Math.round(zoom)} px/s` : `${zoom.toFixed(1)} px/s`}</span>
+    </div>
+    <div class="tl-strip-wrap" ref={stripRef} style={{ "--tl-thumb-h": `${thumbH}px` } as JSX.CSSProperties} onDragOver={onDragOver} onDrop={onDrop} onDragLeave={(e) => { if (!stripRef.current?.contains(e.relatedTarget as Node)) setDrop(null); }}>
       {clips.length === 0 ? (
         <div class={cx("tl-empty", drop && "is-drop")}>
           <span class="meta">No clips yet. {onDropShot ? "Drag shots here, or add them from the panel." : "Add shots from the panel."} A sequence adds one clip per photo.</span>
         </div>
       ) : (
         <div class="tl-strip" style={{ width: `${totalPx}px` }} role="listbox" aria-label="Clips">
-          <div class="tl-ruler" title="Drag to scrub" onPointerDown={scrubDown} onPointerMove={scrubMove} onPointerUp={scrubUp} onPointerCancel={scrubUp}>{ticks.map((ms) => { const x = clips.reduce((a, c) => a + (c.startMs + c.clip.duration_ms <= ms ? widthPx(c.clip.duration_ms) : c.startMs < ms ? widthPx(c.clip.duration_ms) * ((ms - c.startMs) / c.clip.duration_ms) : 0), 0); return <span key={ms} style={{ left: `${x}px` }}>{ms % 5000 === 0 ? clock(ms).replace(/\.0$/, "") : ""}</span>; })}</div>
+          <div class="tl-ruler" title="Drag to scrub" {...scrub}>{ticks.map((ms) => <span key={ms} style={{ left: `${xOf(ms)}px` }}>{clock(ms).replace(/\.0$/, "")}</span>)}</div>
+          {headX !== null && (
+            <div class="tl-playhead" style={{ left: `${headX}px` }}>
+              <div class="tl-playhead__knob" title="Drag to scrub" {...scrub} />
+            </div>
+          )}
           <div class="tl-clips">
             {dropX !== null && <span class="tl-dropline" style={{ left: `${dropX - 2}px` }} />}
             {clips.map((c) => (
-              <button key={c.clip.id} type="button" role="option" aria-selected={c.clip.id === sel} data-ph={c.kind === "placeholder" ? c.clip.id : undefined}
-                class={cx("tl-clip", c.kind === "placeholder" && "tl-clip--ph", c.clip.id === sel && "is-sel", drop && "fill" in drop && drop.fill === c.clip.id && "is-fill")}
+              <button key={c.clip.id} type="button" role="option" aria-selected={c.clip.id === sel} data-ph={c.kind !== "photo" ? c.clip.id : undefined}
+                class={cx("tl-clip", c.kind !== "photo" && "tl-clip--ph", c.kind === "sketch" && "tl-clip--sk", c.clip.id === sel && "is-sel", c.clip.id === editingId && "is-editing", drop && "fill" in drop && drop.fill === c.clip.id && "is-fill")}
                 style={{ width: `${widthPx(c.clip.duration_ms)}px` }}
                 title={`${clipLabel(c)}${c.kind === "photo" && c.overlay ? ` · ${c.overlay.name}` : ""} · ${secs(c.clip.duration_ms)}`}
                 draggable onDragStart={(e) => { e.dataTransfer?.setData(CLIP_TYPE, c.clip.id); if (e.dataTransfer) e.dataTransfer.effectAllowed = "move"; }}
@@ -294,15 +456,17 @@ export function Strip({ clips, cut, stripRef, lock, onOpen, onReorder, onDropSho
                 onContextMenu={onContext && ((e) => { e.preventDefault(); cut.select(c.clip.id); onContext(c, e); })}>
                 {c.kind === "photo"
                   ? <div class="tl-clip__thumb"><Framed photo={c.photo} mode={(lock ?? c.pres.mode) === "off" ? "off" : "fit"} frame={presentationFrame(c.photo, c.pres)} src={c.overlay?.render_url ?? undefined} /></div>
+                  : c.kind === "sketch" ? <div class="tl-clip__thumb tl-clip__thumb--sk">{c.sketch.render_url ? <img src={c.sketch.render_url} alt="" /> : <Icon name="floor-plan" />}</div>
                   : <div class="tl-clip__thumb tl-clip__thumb--ph"><Icon name="image-off-outline" /></div>}
                 <span class="tl-clip__name ellipsis">{c.kind === "photo" && c.overlay ? <Icon name="layers-outline" size={12} /> : null}{clipLabel(c)}{c.kind === "photo" && c.shot.photos.length > 1 ? ` · ${c.photo.ordinal + 1}` : ""}</span>
                 <span class="tl-clip__dur num">{secs(c.clip.duration_ms)}</span>
-                {c.clip.id === sel && cut.cur && <span class="tl-clip__head" style={{ left: `${(Math.min(elapsed, cut.cur.clip.duration_ms) / cut.cur.clip.duration_ms) * 100}%` }} />}
               </button>
             ))}
           </div>
         </div>
       )}
+    </div>
+    {clips.length > 0 && heightGrip}
     </div>
   );
 }
@@ -320,13 +484,16 @@ export interface ClipPanelProps {
   onRemove: () => void;
   onDuplicate: () => void;
   onOpen: () => void;
-  /** Review workspace extras: re-frame / compose the clip's photo in place. */
+  /** Inline editing (issue #31): re-frame the clip, draw its overlay, draw a sketch for a placeholder or a sketch clip. */
   onReframe?: () => void;
-  onCompose?: () => void;
+  onOverlay?: () => void;
+  onSketch?: () => void;
+  /** A photo clip that replaced a sketch clip still owns that sketch: attach it to the clip's shot. */
+  onAttachSketch?: () => void;
   head?: ComponentChildren;
 }
 
-export function ClipPanel({ c, count, lock, durRef, onUpdate, onMove, onRemove, onDuplicate, onOpen, onReframe, onCompose, head }: ClipPanelProps) {
+export function ClipPanel({ c, count, lock, durRef, onUpdate, onMove, onRemove, onDuplicate, onOpen, onReframe, onOverlay, onSketch, onAttachSketch, head }: ClipPanelProps) {
   const [dur, setDur] = useState((c.clip.duration_ms / 1000).toFixed(1));
   useEffect(() => setDur((c.clip.duration_ms / 1000).toFixed(1)), [c.clip.duration_ms]);
   const commitDur = (v: string) => { const n = Math.round(parseFloat(v.replace(",", ".")) * 10) * 100; if (Number.isFinite(n) && n >= 100 && n <= 3_600_000) onUpdate({ duration_ms: n }); else setDur((c.clip.duration_ms / 1000).toFixed(1)); };
@@ -343,28 +510,38 @@ export function ClipPanel({ c, count, lock, durRef, onUpdate, onMove, onRemove, 
     </Field>
   );
   const notes = <Field label="Notes"><textarea class="f-textarea" rows={3} placeholder={c.kind === "photo" ? "Why this shot here, what it needs…" : "What the wanted shot looks like…"} value={c.clip.notes ?? ""} onInput={(e) => onUpdate({ notes: (e.target as HTMLTextAreaElement).value || null })} /></Field>;
-  const moveRow = (
-    <>
+  const foot = (extra?: ComponentChildren) => (
+    <div class="btn-row" style={{ gap: "6px" }}>
       <IconButton kind="secondary" icon="arrow-left" label="Move earlier (Alt+←)" title="Move earlier (Alt+←)" disabled={i === 0} onClick={() => onMove(-1)} />
       <IconButton kind="secondary" icon="arrow-right" label="Move later (Alt+→)" title="Move later (Alt+→)" disabled={i === count - 1} onClick={() => onMove(1)} />
       <Button kind="secondary" size="sm" icon="content-duplicate" onClick={onDuplicate}>Duplicate</Button>
-    </>
+      {extra}
+      <span class="grow" />
+      <Button kind="danger" size="sm" icon="delete-outline" kbd="Del" onClick={onRemove}>Remove</Button>
+    </div>
   );
+  const headMeta = head ?? <span class="meta num">clip {i + 1} of {count}</span>;
 
-  if (c.kind === "placeholder") {
+  if (c.kind !== "photo") {
+    const sketch = c.kind === "sketch" ? c.sketch : null;
     return (
-      <Panel label="Placeholder" width="340px">
-        <PanelHead title="Placeholder">{head ?? <span class="meta num">clip {i + 1} of {count}</span>}</PanelHead>
+      <Panel label={sketch ? "Sketch clip" : "Placeholder"} width="340px" resize={DRAWER_RESIZE}>
+        <PanelHead title={sketch ? "Sketch clip" : "Placeholder"}>{headMeta}</PanelHead>
         <PanelBody>
-          <span class="meta">Holds this spot in the cut. Drop a shot from the panel onto it to fill it; the hold time is kept.</span>
+          {sketch ? (
+            <div class="tl-sketch-thumb">{sketch.render_url ? <img src={sketch.render_url} alt="" /> : <Icon name="floor-plan" />}</div>
+          ) : <span class="meta">Holds this spot in the cut. Drop a shot from the panel onto it to fill it; the hold time is kept.</span>}
           <Field label="Wanted shot"><Input value={c.clip.title ?? ""} maxLength={120} placeholder="e.g. Wide dusk establisher" onInput={(e) => onUpdate({ title: (e.target as HTMLInputElement).value || "Placeholder" })} /></Field>
+          {onSketch && (
+            <div class="btn-row">
+              <Button kind={sketch ? "secondary" : "primary"} size="sm" icon="draw" kbd="C" onClick={onSketch}>{sketch ? "Edit the sketch" : "Sketch it"}</Button>
+              {sketch && !sketch.clip_id && <span class="meta">A shot's sketch: editing makes a copy for this clip.</span>}
+            </div>
+          )}
+          {sketch && <span class="meta">Dropping a shot here replaces the sketch on stage; the clip keeps the sketch, so you can attach it to that shot.</span>}
           {holdTime}
           {notes}
-          <div class="btn-row" style={{ gap: "6px" }}>
-            {moveRow}
-            <span class="grow" />
-            <Button kind="danger" size="sm" icon="delete-outline" kbd="Del" onClick={onRemove}>Remove</Button>
-          </div>
+          {foot()}
         </PanelBody>
       </Panel>
     );
@@ -372,22 +549,29 @@ export function ClipPanel({ c, count, lock, durRef, onUpdate, onMove, onRemove, 
 
   const pres = c.pres;
   const overlays = c.shot.overlays.filter((o) => o.photo_id === c.photo.id);
+  const all = [...c.ownOverlays, ...overlays];
   const pickOverlay = (id: string) => {
-    const o = overlays.find((x) => x.id === id) ?? null;
-    // An overlay brings the presentation it was drawn in; "Photo" keeps the current one.
-    onUpdate(o ? { overlay_id: o.id, presentation: o.presentation } : { overlay_id: null });
+    const o = all.find((x) => x.id === id) ?? null;
+    // An overlay brings the presentation it was drawn in; "Photo" keeps the current one. A clip's own overlay keeps the clip's.
+    onUpdate(o ? (o.clip_id ? { overlay_id: o.id } : { overlay_id: o.id, presentation: o.presentation }) : { overlay_id: null });
   };
+  const ownFrame = ownReframe(pres);
   return (
-    <Panel label="Clip" width="340px">
-      <PanelHead title={shotTitle(c.shot)}>{head ?? <span class="meta num">clip {i + 1} of {count}</span>}</PanelHead>
+    <Panel label="Clip" width="340px" resize={DRAWER_RESIZE}>
+      <PanelHead title={shotTitle(c.shot)}>{headMeta}</PanelHead>
       <PanelBody>
         <div class="f-row__thumb" style={{ width: "100%" }}><Framed photo={c.photo} mode={lock ?? pres.mode} frame={presentationFrame(c.photo, pres)} src={c.overlay?.render_url ?? undefined} /></div>
         {c.shot.photos.length > 1 && <span class="meta">Photo {c.photo.ordinal + 1} of {c.shot.photos.length} in this sequence</span>}
+        {(onReframe || onOverlay) && (
+          <div class="tl-tools" role="group" aria-label="Clip tools">
+            {onReframe && c.photo.source === "camera" && <Button kind="secondary" size="sm" icon="crop" kbd="R" onClick={onReframe}>Re-frame</Button>}
+            {onOverlay && <Button kind="secondary" size="sm" icon="layers-outline" kbd="C" onClick={onOverlay}>{c.overlay?.clip_id ? "Edit overlay" : c.overlay ? "Overlay (copy)" : "Overlay"}</Button>}
+          </div>
+        )}
         {holdTime}
         <Field label="Show as" as="div">
           <Select label="Show as" width="100%" value={c.clip.overlay_id ?? ""} onChange={pickOverlay}
-            options={[{ value: "", label: "Photo as is" }, ...overlays.map((o) => ({ value: o.id, label: o.name, group: "Overlays" }))]} />
-          {overlays.length === 0 && !onCompose && <span class="f-field__help">No overlays on this photo yet. Make one in the shot view (C).</span>}
+            options={[{ value: "", label: "Photo as is" }, ...c.ownOverlays.map((o) => ({ value: o.id, label: o.name, group: "This clip" })), ...overlays.map((o) => ({ value: o.id, label: o.name, group: "The shot's overlays" }))]} />
         </Field>
         <Field label="Presentation" as="div">
           {lock ? (
@@ -396,23 +580,61 @@ export function ClipPanel({ c, count, lock, durRef, onUpdate, onMove, onRemove, 
             <>
               <Seg label="Frame mode" value={pres.mode} onChange={(m) => onUpdate({ presentation: { ...pres, mode: m } })} options={PRESENTATION_MODES.map((m) => ({ id: m, label: frameModeLabel(m) }))} />
               {c.photo.source === "camera" && <div style={{ marginTop: "6px" }}><FramingSelect photo={c.photo} value={pres} onChange={(patch) => onUpdate({ presentation: { ...pres, ...patch } })} /></div>}
-              <span class="f-field__help">{pres.label ?? "As shot"}</span>
             </>
           )}
+          <span class="f-field__help">{ownFrame ? <><Icon name="crop" size={14} /> This clip's own re-frame · {pres.label}</> : pres.label ?? "As shot"}</span>
         </Field>
-        {(onReframe || onCompose) && (
-          <div class="btn-row" style={{ gap: "6px" }}>
-            {onReframe && c.photo.source === "camera" && <Button kind="secondary" size="sm" icon="crop" kbd="R" onClick={onReframe}>Re-frame</Button>}
-            {onCompose && <Button kind="secondary" size="sm" icon="draw" kbd="C" onClick={onCompose}>Compose</Button>}
+        {c.ownSketch && onAttachSketch && (
+          <div class="tl-kept">
+            <div class="tl-sketch-thumb tl-sketch-thumb--sm">{c.ownSketch.render_url ? <img src={c.ownSketch.render_url} alt="" /> : <Icon name="floor-plan" />}</div>
+            <div class="tl-kept__txt"><strong>{c.ownSketch.name}</strong><span class="meta">The sketch this spot had before the shot.</span></div>
+            <Button kind="secondary" size="sm" icon="link-variant" onClick={onAttachSketch}>Attach to shot</Button>
           </div>
         )}
         {notes}
-        <div class="btn-row" style={{ gap: "6px" }}>
-          {moveRow}
-          <Button kind="secondary" size="sm" icon="image-outline" kbd="↵" onClick={onOpen}>Open shot</Button>
-          <span class="grow" />
-          <Button kind="danger" size="sm" icon="delete-outline" kbd="Del" onClick={onRemove}>Remove</Button>
+        {foot(<Button kind="secondary" size="sm" icon="image-outline" kbd="↵" onClick={onOpen}>Open shot</Button>)}
+      </PanelBody>
+    </Panel>
+  );
+}
+
+// ---------- The project's timelines: a rail that collapses to win width (issue #31) ----------
+
+const loadRail = () => { try { return localStorage.getItem("timelineRail") === "collapsed"; } catch { return false; } };
+
+export function TimelineRail({ list, selectedId, onSelect, onCreate, onContext }: { list: Timeline[] | null; selectedId: string | null; onSelect: (id: string) => void; onCreate: () => void; onContext?: (t: Timeline, e: MouseEvent) => void }) {
+  const [collapsed, setCollapsed] = useState(loadRail);
+  const toggle = () => { const v = !collapsed; setCollapsed(v); try { localStorage.setItem("timelineRail", v ? "collapsed" : "full"); } catch { /* a preference */ } };
+  const total = (t: Timeline) => t.clips.reduce((a, c) => a + c.duration_ms, 0);
+  if (collapsed) {
+    return (
+      <Panel left width="56px" label="Timelines">
+        <div class="tl-rail">
+          <IconButton icon="chevron-double-right" label="Expand the timelines" title="Expand the timelines" onClick={toggle} />
+          <IconButton icon="plus" label="New timeline (⇧N)" title="New timeline (⇧N)" onClick={onCreate} />
+          <span class="tl-rail__sep" />
+          {(list ?? []).map((t, i) => (
+            <button key={t.id} type="button" class={cx("tl-rail__it", t.id === selectedId && "is-selected")} title={`${t.name} · ${t.clips.length} clips · ${clock(total(t))}`} aria-label={t.name} aria-pressed={t.id === selectedId}
+              onClick={() => onSelect(t.id)} onContextMenu={onContext && ((e) => onContext(t, e))}>{i + 1}</button>
+          ))}
         </div>
+      </Panel>
+    );
+  }
+  return (
+    <Panel left width="240px" label="Timelines">
+      <PanelHead title="Timelines">
+        <Button size="sm" icon="plus" title="New timeline (⇧N)" onClick={onCreate}>New</Button>
+        <IconButton icon="chevron-double-left" label="Collapse the timelines" title="Collapse the timelines" onClick={toggle} />
+      </PanelHead>
+      <PanelBody flush role="listbox" aria-label="Timelines">
+        {!list ? <div class="status"><Spinner /></div> : list.length === 0 ? <EmptyNote title="No timelines yet">“New” starts an empty cut.</EmptyNote> : list.map((t) => (
+          <div key={t.id} role="option" aria-selected={t.id === selectedId} tabIndex={0} class={cx("f-dayitem", t.id === selectedId && "is-selected")}
+            onClick={() => onSelect(t.id)} onKeyDown={(e) => { if (e.key === "Enter") onSelect(t.id); }} onContextMenu={onContext && ((e) => onContext(t, e))}>
+            <span class="f-dayitem__date">{t.name}</span>
+            <span class="f-dayitem__meta num">{t.clips.length} clip{t.clips.length === 1 ? "" : "s"} · {clock(total(t))}</span>
+          </div>
+        ))}
       </PanelBody>
     </Panel>
   );

@@ -1,18 +1,19 @@
-import { useEffect, useMemo, useRef, useState } from "preact/hooks";
-import { fetchTimelines, patchShot, type Preset, type Project, type Shot, type ShotState, type Timeline, type TimelineClip } from "./api";
+import { useMemo, useRef, useState } from "preact/hooks";
+import { fetchTimelines, patchShot, promoteClip, type Preset, type Project, type Shot, type ShotState, type Timeline, type TimelineClip } from "./api";
+import { guardCut, useClipEditing, type EditKind } from "./ClipEditing";
 import { cover, placeLabel, rigLabel, shotTitle } from "./format";
 import { Framed, type MaskMode } from "./Framed";
 import { afterG, useKeys } from "./keys";
-import { Compose, type ComposeGuard } from "./compose/Compose";
-import { initialRigs, RigsStage, type RigsState } from "./RigExplorer";
-import { ClipPanel, clock, clipsOfShot, CutPreview, defaultPresentation, LockSelect, newPlaceholder, resolveClips, shotDrag, Strip, useCut, useTimelineStore, type ResolvedClip } from "./TimelineParts";
-import { Banner, Button, ContextMenu, cx, Empty, EmptyNote, Field, IconButton, Input, MenuItem, Panel, PanelBody, PanelHead, promptDialog, SaveStatus, Select, Spinner, StateMarker, toast, Toolbar, ToolbarSpacer, ToolbarTitle, useCtxMenu, type SaveState } from "./ui";
+import { useSettings } from "./settings";
+import { ClipPanel, clock, clipsOfShot, copyClip, CutPreview, defaultPresentation, DRAWER_RESIZE, duplicateTimeline, LockSelect, TimelineRail, newPlaceholder, resolveClips, shotDrag, Strip, useCut, useTimelineStore, type Cut, type ResolvedClip } from "./TimelineParts";
+import { Banner, Button, ContextMenu, cx, Empty, EmptyNote, Field, IconButton, Input, MenuItem, Panel, PanelBody, PanelHead, promptDialog, SaveStatus, Select, StateMarker, toast, Toolbar, ToolbarTitle, useCtxMenu, type SaveState } from "./ui";
 
 /**
  * Review as a timeline-first workspace (issue #31): the selected cut on stage, the project's shots
  * in a browser beside it. Reviewing means finding the shots that carry a sequence — drag them into
- * the strip, re-frame or compose a clip in place, approve or archive from the browser, and hold
- * spots with placeholder clips. The Timeline page edits the same timelines without the browser.
+ * the strip, re-frame a clip or draw its overlay inline on the stage (ClipEditing.tsx), sketch the
+ * shots you still lack, approve or archive from the browser. The Timeline page edits the same
+ * timelines without the browser.
  */
 
 interface Props {
@@ -31,9 +32,6 @@ interface Props {
   onNewShot: () => void;
 }
 
-/** A clip's photo being re-framed or composed in place; resolved live so saves show at once. */
-type Edit = { kind: "framing" | "compose"; shotId: string; photoId: string };
-
 export function ReviewPage(p: Props) {
   const projectId = p.project?.id ?? null;
   const store = useTimelineStore((set, fail) => {
@@ -49,11 +47,13 @@ export function ReviewPage(p: Props) {
     const name = await promptDialog({ title: "Rename timeline", input: { label: "Name", value: t.name }, confirmLabel: "Rename" });
     if (name && name !== t.name) store.change({ ...t, name });
   }
-  function duplicate(t: Timeline) {
-    const copy: Timeline = { ...t, id: crypto.randomUUID(), name: `${t.name} (copy)`, clips: t.clips.map((c) => ({ ...c, id: crypto.randomUUID() })), created_at: "", updated_at: null };
-    store.setList((cur) => [...(cur ?? []), copy]);
-    store.change(copy);
-    p.onTimeline(copy.id);
+  async function duplicate(t: Timeline) {
+    try {
+      await store.saveNow(t.id);
+      const copy = await duplicateTimeline(t);
+      store.setList((cur) => [...(cur ?? []), copy]);
+      p.onTimeline(copy.id);
+    } catch (e) { toast(`Duplicate failed: ${(e as Error).message}`, "danger"); }
   }
   const remove = async (t: Timeline) => { if (await store.remove(t)) p.onTimeline(null); };
 
@@ -71,32 +71,20 @@ export function ReviewPage(p: Props) {
     );
   }
   const current = list?.find((t) => t.id === p.timelineId) ?? null;
-  const total = (t: Timeline) => t.clips.reduce((a, c) => a + c.duration_ms, 0);
   return (
     <div class="f-app__body">
-      <Panel left width="240px" label="Timelines">
-        <PanelHead title="Timelines"><Button size="sm" icon="plus" title="New timeline (⇧N)" onClick={() => void create()}>New</Button></PanelHead>
-        <PanelBody flush role="listbox" aria-label="Timelines">
-          {!list ? <div class="status"><Spinner /></div> : list.length === 0 ? <EmptyNote title="No timelines yet">“New” starts an empty cut.</EmptyNote> : list.map((t) => (
-            <div key={t.id} role="option" aria-selected={t.id === p.timelineId} tabIndex={0} class={cx("f-dayitem", t.id === p.timelineId && "is-selected")}
-              onClick={() => p.onTimeline(t.id)} onKeyDown={(e) => { if (e.key === "Enter") p.onTimeline(t.id); }} onContextMenu={(e) => railMenu.openMenu(e, t)}>
-              <span class="f-dayitem__date">{t.name}</span>
-              <span class="f-dayitem__meta num">{t.clips.length} clip{t.clips.length === 1 ? "" : "s"} · {clock(total(t))}</span>
-            </div>
-          ))}
-        </PanelBody>
-      </Panel>
+      <TimelineRail list={list} selectedId={p.timelineId} onSelect={p.onTimeline} onCreate={() => void create()} onContext={(t, e) => railMenu.openMenu(e, t)} />
       {railMenu.menu && (
         <ContextMenu x={railMenu.menu.x} y={railMenu.menu.y} label="Timeline" onClose={railMenu.closeMenu}>
           <MenuItem icon="pencil-outline" onClick={() => void rename(railMenu.menu!.ctx)}>Rename…</MenuItem>
-          <MenuItem icon="content-duplicate" onClick={() => duplicate(railMenu.menu!.ctx)}>Duplicate</MenuItem>
+          <MenuItem icon="content-duplicate" onClick={() => void duplicate(railMenu.menu!.ctx)}>Duplicate</MenuItem>
           <MenuItem icon="delete-outline" danger onClick={() => void remove(railMenu.menu!.ctx)}>Delete timeline…</MenuItem>
         </ContextMenu>
       )}
       {current
-        ? <Workspace key={current.id} timeline={current} {...p} save={save} onChange={store.change} onRetry={store.retry} error={save === "error" ? store.error : null} onDelete={() => void remove(current)} onRename={() => void rename(current)} />
+        ? <Workspace key={current.id} timeline={current} {...p} save={save} onChange={store.change} onRetry={store.retry} error={save === "error" ? store.error : null} onDelete={() => void remove(current)} onRename={() => void rename(current)} onSaveNow={store.saveNow} onReplace={store.replace} />
         : list && list.length === 0
-          ? <><Empty icon="filmstrip" title={`No timelines in ${p.project.name}`} actions={<Button icon="plus" onClick={() => void create()}>New timeline</Button>}>Reviewing is building a cut: drag shots in, hold spots with placeholders, re-frame and compose clips in place.</Empty><Browser {...p} onAdd={null} /></>
+          ? <><Empty icon="filmstrip" title={`No timelines in ${p.project.name}`} actions={<Button icon="plus" onClick={() => void create()}>New timeline</Button>}>Reviewing is building a cut: drag shots in, hold spots with placeholders or sketches, re-frame clips and draw on them right on the stage.</Empty><Browser {...p} onAdd={null} /></>
           : <Empty icon="filmstrip" title="Pick a timeline" />}
     </div>
   );
@@ -104,6 +92,8 @@ export function ReviewPage(p: Props) {
 
 interface WorkspaceProps extends Props {
   timeline: Timeline;
+  onSaveNow: (id: string) => Promise<void>;
+  onReplace: (t: Timeline) => void;
   save: SaveState;
   onChange: (t: Timeline) => void;
   onRetry: () => void;
@@ -120,12 +110,11 @@ function Workspace(p: WorkspaceProps) {
   const cut = useCut(clips);
   const { cur } = cut;
   const [panel, setPanel] = useState<"browser" | "clip">("browser");
-  const [edit, setEdit] = useState<Edit | null>(null);
-  const [rigs, setRigs] = useState<RigsState | null>(null);
-  const composeGuard: ComposeGuard = useRef(null);
   const stripRef = useRef<HTMLDivElement>(null);
   const durRef = useRef<HTMLInputElement>(null);
   const clipMenu = useCtxMenu<ResolvedClip>();
+  const settings = useSettings();
+  const inline = useClipEditing({ timeline: t, clips, presets: p.presets, onChange: p.onChange });
 
   const setClips = (list: TimelineClip[]) => p.onChange({ ...t, clips: list });
   const update = (id: string, patch: Partial<TimelineClip>) => setClips(t.clips.map((c) => (c.id === id ? { ...c, ...patch } : c)));
@@ -143,11 +132,26 @@ function Workspace(p: WorkspaceProps) {
     setClips(l);
   };
   const removeClip = (c: ResolvedClip) => { const i = clips.indexOf(c); setClips(t.clips.filter((x) => x !== c.clip)); const n = clips[i + 1] ?? clips[i - 1]; cut.select(n?.clip.id ?? null); };
-  const duplicate = (c: ResolvedClip) => { const i = t.clips.indexOf(c.clip); const copy = { ...c.clip, id: crypto.randomUUID() }; const l = [...t.clips]; l.splice(i + 1, 0, copy); setClips(l); cut.select(copy.id); };
+  const duplicate = async (c: ResolvedClip) => {
+    try {
+      const copy = await copyClip(t, c.clip);
+      const now = latest.current;
+      const i = now.clips.findIndex((x) => x.id === c.clip.id);
+      const l = [...now.clips]; l.splice(i + 1, 0, copy);
+      p.onChange({ ...now, clips: l });
+      cut.select(copy.id);
+    } catch (e) { toast(`Duplicate failed: ${(e as Error).message}`, "danger"); }
+  };
+  const latest = useRef(t); latest.current = t;
   const addPlaceholder = () => { const ph = newPlaceholder("Placeholder"); setClips([...t.clips, ph]); cut.select(ph.id); setPanel("clip"); };
   const shotList = [...new Map(clips.flatMap((c) => (c.kind === "photo" ? [[c.shot.id, c.shot] as const] : []))).values()];
   const open = (c: ResolvedClip) => { if (c.kind === "photo") p.onOpen(c.shot, shotList.length ? shotList : [c.shot]); };
-  const selectClip = (id: string | null) => { cut.select(id); if (id) setPanel("clip"); };
+
+  // While a clip is edited inline the playhead is pinned to it, or moving away ends the edit (Settings → Timeline).
+  const guarded = guardCut(cut, inline, settings.inlinePlayhead);
+  const selectClip = (id: string | null) => { guarded.select(id); if (id && !inline.editing) setPanel("clip"); };
+  const guardedCut: Cut = { ...guarded, select: selectClip };
+  const edit = (kind: EditKind, c: ResolvedClip) => { cut.select(c.clip.id); setPanel("clip"); inline.start(kind, c); };
 
   /** An unreviewed shot that earned a place in the cut can be approved right away. */
   const offerApprove = (s: Shot) => {
@@ -159,34 +163,34 @@ function Workspace(p: WorkspaceProps) {
     const l = [...t.clips];
     l.splice(index === undefined ? l.length : index, 0, ...fresh);
     setClips(l);
-    cut.select(fresh[0].id);
+    if (!inline.editing) cut.select(fresh[0].id);
     offerApprove(s);
   };
   const onDropShot = (shotId: string, at: { index: number } | { fill: string }) => {
     const s = byId.get(shotId);
     if (!s) return;
     if ("index" in at) return addShot(s, storedIndex(at.index));
-    // Fill the placeholder with the shot's cover photo; its hold time and notes stay.
+    // Fill the placeholder (or sketch clip) with the shot's cover photo; hold time and notes stay, a sketch stays the clip's own.
     const ph = t.clips.find((c) => c.id === at.fill);
     if (!ph) return;
+    if (inline.editing?.clipId === ph.id) { toast("Finish editing this clip first", "info"); return; }
     const photo = cover(s);
-    setClips(t.clips.map((c) => (c === ph ? { ...c, photo_id: photo.id, shot_id: s.id, overlay_id: null, presentation: defaultPresentation(photo, mask), title: null } : c)));
-    cut.select(ph.id);
-    if (s.photos.length > 1) toast(`Sequence: the placeholder took the first photo of ${s.photos.length}`, "info");
+    setClips(t.clips.map((c) => (c === ph ? { ...c, photo_id: photo.id, shot_id: s.id, overlay_id: null, presentation: defaultPresentation(photo, mask), title: null, sketch_id: null } : c)));
+    if (!inline.editing) cut.select(ph.id);
+    if (s.photos.length > 1) toast(`Sequence: the spot took the first photo of ${s.photos.length}`, "info");
     offerApprove(s);
   };
-
-  // Re-frame / compose the selected clip's photo in place; the clip picks up saved framings/overlays afterwards.
-  const startEdit = (kind: Edit["kind"], c: ResolvedClip) => {
-    if (c.kind !== "photo") return;
-    if (kind === "framing" && c.photo.source !== "camera") return;
-    if (kind === "framing") setRigs(initialRigs(c.photo, p.presets));
-    setEdit({ kind, shotId: c.shot.id, photoId: c.photo.id });
-  };
-  const endEdit = async () => {
-    if (edit?.kind === "compose" && composeGuard.current && !(await composeGuard.current())) return;
-    setEdit(null);
-  };
+  /** The sketch a spot had before a shot filled it becomes that shot's sketch. */
+  async function attachSketch(c: ResolvedClip) {
+    if (c.kind !== "photo" || !c.ownSketch) return;
+    try {
+      await p.onSaveNow(t.id);
+      const r = await promoteClip(t.id, c.clip.id, { what: "sketch", shot_id: c.shot.id, sketch_id: c.ownSketch.id });
+      p.onReplace(r.timeline);
+      p.onUpdated(r.shot);
+      toast(`“${c.ownSketch.name}” is now a sketch of ${shotTitle(r.shot)}`);
+    } catch (e) { toast(`Attaching failed: ${(e as Error).message}`, "danger"); }
+  }
 
   useKeys({
     ArrowRight: () => cut.step(1),
@@ -200,40 +204,10 @@ function Workspace(p: WorkspaceProps) {
     d: () => durRef.current?.focus(),
     n: () => setPanel(panel === "browser" ? "clip" : "browser"),
     p: addPlaceholder,
-    r: () => { if (afterG()) return false; if (cur) startEdit("framing", cur); },
-    c: () => { if (afterG()) return false; if (cur) startEdit("compose", cur); },
+    r: () => { if (afterG()) return false; if (cur?.kind === "photo") edit("reframe", cur); },
+    c: () => { if (afterG()) return false; if (cur) edit(cur.kind === "photo" ? "overlay" : "sketch", cur); },
     Enter: () => { if (cur) open(cur); },
-  }, !edit);
-
-  // The edited shot can vanish under us (deleted elsewhere, reload): back to the workspace then.
-  useEffect(() => { if (edit && !byId.get(edit.shotId)) setEdit(null); }, [edit, byId]);
-
-  // The stage swaps to Framing or Compose for the clip's photo; everything else waits behind it.
-  if (edit) {
-    const shot = byId.get(edit.shotId);
-    const photo = shot?.photos.find((x) => x.id === edit.photoId) ?? shot?.photos[0];
-    if (!shot || !photo) return null;
-    const photoIndex = shot.photos.indexOf(photo);
-    return (
-      <div class="rw-edit">
-        <Toolbar>
-          <Button kind="secondary" size="sm" icon="arrow-left" kbd="Esc" onClick={() => void endEdit()}>Review</Button>
-          <ToolbarTitle>{edit.kind === "framing" ? "Framing" : "Compose"} · {shotTitle(shot)}</ToolbarTitle>
-          <ToolbarSpacer />
-          <span class="meta">in “{t.name}”</span>
-        </Toolbar>
-        <div class="f-app__body">
-          {edit.kind === "compose" ? (
-            <Compose key={shot.id} shot={shot} photo={photo} photoIndex={photoIndex} onPhotoIndex={(i) => setEdit({ ...edit, photoId: shot.photos[i].id })} presets={p.presets} mode={mask} onUpdated={p.onUpdated} onBack={() => void endEdit()} guard={composeGuard} />
-          ) : rigs && (
-            <section class="f-stage" aria-label="Stage">
-              <RigsStage shot={shot} photo={photo} presets={p.presets} mode={mask} state={rigs} onState={setRigs} onBack={() => setEdit(null)} onUpdated={p.onUpdated} />
-            </section>
-          )}
-        </div>
-      </div>
-    );
-  }
+  }, !inline.editing);
 
   return (
     <>
@@ -247,31 +221,32 @@ function Workspace(p: WorkspaceProps) {
             <div class="plan-head__status"><SaveStatus state={p.save} onRetry={p.onRetry} /></div>
           </div>
 
-          <CutPreview cut={cut} clips={clips} total={total} maxHeight="calc(100vh - 470px)" lock={t.lock_mode}>
-            <Button kind="secondary" size="sm" icon="image-off-outline" kbd="P" onClick={addPlaceholder}>Placeholder</Button>
-            <Button kind={panel === "browser" ? "secondary" : "primary"} size="sm" icon="view-grid-outline" kbd="N" aria-pressed={panel === "browser"} onClick={() => setPanel(panel === "browser" ? "clip" : "browser")}>Shots</Button>
+          <CutPreview cut={guardedCut} clips={clips} total={total} lock={t.lock_mode} stage={inline.stage} editing={!!inline.editing}>
+            <Button kind="secondary" size="sm" icon="image-off-outline" kbd="P" disabled={!!inline.editing} onClick={addPlaceholder}>Placeholder</Button>
+            <Button kind={panel === "browser" ? "secondary" : "primary"} size="sm" icon="view-grid-outline" kbd="N" aria-pressed={panel === "browser"} disabled={!!inline.editing} onClick={() => setPanel(panel === "browser" ? "clip" : "browser")}>Shots</Button>
           </CutPreview>
 
-          <Strip clips={clips} cut={{ ...cut, select: selectClip }} stripRef={stripRef} lock={t.lock_mode} onOpen={open} onReorder={reorder} onDropShot={onDropShot} onContext={(c, e) => clipMenu.openMenu(e, c)} />
+          <Strip clips={clips} cut={guardedCut} stripRef={stripRef} lock={t.lock_mode} editingId={inline.editing?.clipId ?? null} onOpen={open} onReorder={reorder} onDropShot={onDropShot} onContext={(c, e) => clipMenu.openMenu(e, c)} />
         </div>
       </div>
       {clipMenu.menu && (() => {
         const c = clipMenu.menu.ctx;
         return (
           <ContextMenu x={clipMenu.menu.x} y={clipMenu.menu.y} label="Clip" onClose={clipMenu.closeMenu}>
-            {c.kind === "photo" && c.photo.source === "camera" && <MenuItem icon="crop" onClick={() => startEdit("framing", c)}>Re-frame…</MenuItem>}
-            {c.kind === "photo" && <MenuItem icon="draw" onClick={() => startEdit("compose", c)}>Compose…</MenuItem>}
+            {c.kind === "photo" && c.photo.source === "camera" && <MenuItem icon="crop" onClick={() => edit("reframe", c)}>Re-frame</MenuItem>}
+            {c.kind === "photo" && <MenuItem icon="layers-outline" onClick={() => edit("overlay", c)}>Overlay</MenuItem>}
+            {c.kind !== "photo" && <MenuItem icon="draw" onClick={() => edit("sketch", c)}>{c.kind === "sketch" ? "Edit the sketch" : "Sketch it"}</MenuItem>}
             {c.kind === "photo" && <MenuItem icon="image-outline" onClick={() => open(c)}>Open shot</MenuItem>}
-            <MenuItem icon="content-duplicate" onClick={() => duplicate(c)}>Duplicate</MenuItem>
+            <MenuItem icon="content-duplicate" onClick={() => void duplicate(c)}>Duplicate</MenuItem>
             <MenuItem icon="delete-outline" danger onClick={() => removeClip(c)}>Remove</MenuItem>
           </ContextMenu>
         );
       })()}
-      {panel === "clip" && cur
-        ? <ClipPanel key={cur.clip.id} c={cur} count={clips.length} lock={t.lock_mode} durRef={durRef} onUpdate={(patch) => update(cur.clip.id, patch)} onMove={(d) => move(cur, d)} onRemove={() => removeClip(cur)} onDuplicate={() => duplicate(cur)} onOpen={() => open(cur)}
-            onReframe={() => startEdit("framing", cur)} onCompose={() => startEdit("compose", cur)}
+      {inline.panel ?? (panel === "clip" && cur
+        ? <ClipPanel key={cur.clip.id} c={cur} count={clips.length} lock={t.lock_mode} durRef={durRef} onUpdate={(patch) => update(cur.clip.id, patch)} onMove={(d) => move(cur, d)} onRemove={() => removeClip(cur)} onDuplicate={() => void duplicate(cur)} onOpen={() => open(cur)}
+            onReframe={() => edit("reframe", cur)} onOverlay={() => edit("overlay", cur)} onSketch={() => edit("sketch", cur)} onAttachSketch={() => void attachSketch(cur)}
             head={<><span class="meta num">clip {cur.index + 1} of {clips.length}</span><IconButton icon="view-grid-outline" label="Browse shots (N)" title="Browse shots (N)" onClick={() => setPanel("browser")} /></>} />
-        : <Browser {...p} onAdd={addShot} />}
+        : <Browser {...p} onAdd={addShot} />)}
     </>
   );
 }
@@ -320,7 +295,7 @@ function Browser(p: Props & { onAdd: ((s: Shot) => void) | null }) {
 
   const unreviewed = p.shots.filter((s) => s.state === "unreviewed").length;
   return (
-    <Panel label="Shots" width="380px">
+    <Panel label="Shots" width="380px" resize={DRAWER_RESIZE}>
       <PanelHead title="Shots"><span class="meta num">{unreviewed} to review</span><IconButton icon="image-plus" label="New shot" title="New shot: upload or sketch" onClick={p.onNewShot} /></PanelHead>
       <div class="panel-filters">
         <Select label="State" icon="checkbox-marked-outline" value={state} onChange={(v) => setState(v as StateFilter)} options={STATE_OPTIONS} />

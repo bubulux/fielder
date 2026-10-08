@@ -8,10 +8,14 @@ import { loadShot } from "./shots.ts";
  * The dashboard owns them: it edits the vector JSON and uploads a flattened render with every
  * save, which is what the phone shows. Shots embed both lists without the drawing
  * (`composeFor`); the drawing comes with GET /api/overlays/:id and /api/sketches/:id.
+ *
+ * Issue #31: an overlay or sketch drawn inline in a timeline belongs to that timeline clip
+ * (timeline_id + clip_id) until it is promoted to the shot. Shots never embed clip-owned rows,
+ * so the phone does not see them; timelines embed their own (`clipComposeFor`).
  */
 
-interface OverlayRow { id: string; photo_id: string; shot_id: string; name: string; description: string | null; drawing?: string; presentation: string; render_key: string | null; position: number; created_at: string; updated_at: string | null }
-interface SketchRow { id: string; shot_id: string; name: string; kind: string | null; description: string | null; drawing?: string; aspect: number; render_key: string | null; position: number; created_at: string; updated_at: string | null }
+interface OverlayRow { id: string; photo_id: string; shot_id: string; timeline_id: string | null; clip_id: string | null; name: string; description: string | null; drawing?: string; presentation: string; render_key: string | null; position: number; created_at: string; updated_at: string | null }
+interface SketchRow { id: string; shot_id: string | null; timeline_id: string | null; clip_id: string | null; name: string; kind: string | null; description: string | null; drawing?: string; aspect: number; render_key: string | null; position: number; created_at: string; updated_at: string | null }
 
 const MAX_RENDER_BYTES = 6 * 1024 * 1024;
 const MAX_DRAWING_BYTES = 1024 * 1024;
@@ -24,7 +28,7 @@ const renderUrl = (kind: "overlays" | "sketches", r: { id: string; render_key: s
 
 export function overlayToApi(r: OverlayRow) {
   return {
-    id: r.id, photo_id: r.photo_id, shot_id: r.shot_id, name: r.name, description: r.description,
+    id: r.id, photo_id: r.photo_id, shot_id: r.shot_id, timeline_id: r.timeline_id, clip_id: r.clip_id, name: r.name, description: r.description,
     ...(r.drawing !== undefined ? { drawing: JSON.parse(r.drawing) as unknown } : {}),
     presentation: JSON.parse(r.presentation) as unknown, position: r.position,
     render_url: renderUrl("overlays", r), created_at: r.created_at, updated_at: r.updated_at,
@@ -32,7 +36,7 @@ export function overlayToApi(r: OverlayRow) {
 }
 export function sketchToApi(r: SketchRow) {
   return {
-    id: r.id, shot_id: r.shot_id, name: r.name, kind: r.kind, description: r.description,
+    id: r.id, shot_id: r.shot_id, timeline_id: r.timeline_id, clip_id: r.clip_id, name: r.name, kind: r.kind, description: r.description,
     ...(r.drawing !== undefined ? { drawing: JSON.parse(r.drawing) as unknown } : {}),
     aspect: r.aspect, position: r.position,
     render_url: renderUrl("sketches", r), created_at: r.created_at, updated_at: r.updated_at,
@@ -41,8 +45,8 @@ export function sketchToApi(r: SketchRow) {
 export type OverlayApi = ReturnType<typeof overlayToApi>;
 export type SketchApi = ReturnType<typeof sketchToApi>;
 
-const OVERLAY_COLS = "o.id, o.photo_id, ph.shot_id, o.name, o.description, o.presentation, o.render_key, o.position, o.created_at, o.updated_at";
-const SKETCH_COLS = "id, shot_id, name, kind, description, aspect, render_key, position, created_at, updated_at";
+const OVERLAY_COLS = "o.id, o.photo_id, ph.shot_id, o.timeline_id, o.clip_id, o.name, o.description, o.presentation, o.render_key, o.position, o.created_at, o.updated_at";
+const SKETCH_COLS = "id, shot_id, timeline_id, clip_id, name, kind, description, aspect, render_key, position, created_at, updated_at";
 
 /** Overlays and sketches of many shots, without drawings, in display order. */
 export async function composeFor(env: Ctx["env"], shotIds: string[]): Promise<{ overlays: Map<string, OverlayApi[]>; sketches: Map<string, SketchApi[]> }> {
@@ -50,12 +54,48 @@ export async function composeFor(env: Ctx["env"], shotIds: string[]): Promise<{ 
   if (shotIds.length === 0) return { overlays, sketches };
   const ids = JSON.stringify(shotIds);
   const [o, s] = await env.DB.batch([
-    env.DB.prepare(`SELECT ${OVERLAY_COLS} FROM overlays o JOIN photos ph ON ph.id = o.photo_id WHERE ph.shot_id IN (SELECT value FROM json_each(?1)) ORDER BY ph.shot_id, o.position, o.created_at`).bind(ids),
+    env.DB.prepare(`SELECT ${OVERLAY_COLS} FROM overlays o JOIN photos ph ON ph.id = o.photo_id WHERE ph.shot_id IN (SELECT value FROM json_each(?1)) AND o.timeline_id IS NULL ORDER BY ph.shot_id, o.position, o.created_at`).bind(ids),
     env.DB.prepare(`SELECT ${SKETCH_COLS} FROM sketches WHERE shot_id IN (SELECT value FROM json_each(?1)) ORDER BY shot_id, position, created_at`).bind(ids),
   ]);
   for (const r of (o.results ?? []) as OverlayRow[]) overlays.set(r.shot_id, [...(overlays.get(r.shot_id) ?? []), overlayToApi(r)]);
-  for (const r of (s.results ?? []) as SketchRow[]) sketches.set(r.shot_id, [...(sketches.get(r.shot_id) ?? []), sketchToApi(r)]);
+  for (const r of (s.results ?? []) as SketchRow[]) sketches.set(r.shot_id!, [...(sketches.get(r.shot_id!) ?? []), sketchToApi(r)]);
   return { overlays, sketches };
+}
+
+/** The clip-owned overlays and sketches of these timelines, without drawings, keyed by timeline id. */
+export async function clipComposeFor(env: Ctx["env"], timelineIds: string[]): Promise<{ overlays: Map<string, OverlayApi[]>; sketches: Map<string, SketchApi[]> }> {
+  const overlays = new Map<string, OverlayApi[]>(), sketches = new Map<string, SketchApi[]>();
+  if (timelineIds.length === 0) return { overlays, sketches };
+  const ids = JSON.stringify(timelineIds);
+  const [o, s] = await env.DB.batch([
+    env.DB.prepare(`SELECT ${OVERLAY_COLS} FROM overlays o JOIN photos ph ON ph.id = o.photo_id WHERE o.timeline_id IN (SELECT value FROM json_each(?1)) ORDER BY o.created_at`).bind(ids),
+    env.DB.prepare(`SELECT ${SKETCH_COLS} FROM sketches WHERE timeline_id IN (SELECT value FROM json_each(?1)) ORDER BY created_at`).bind(ids),
+  ]);
+  for (const r of (o.results ?? []) as OverlayRow[]) overlays.set(r.timeline_id!, [...(overlays.get(r.timeline_id!) ?? []), overlayToApi(r)]);
+  for (const r of (s.results ?? []) as SketchRow[]) sketches.set(r.timeline_id!, [...(sketches.get(r.timeline_id!) ?? []), sketchToApi(r)]);
+  return { overlays, sketches };
+}
+
+/**
+ * Delete the clip-owned overlays and sketches matching a WHERE clause over `o` (overlays) or `s`
+ * (sketches), and their renders. Used when clips leave a timeline (PUT), a timeline is deleted, or
+ * a shot moves out of the timeline's project.
+ */
+export async function deleteClipCompose(env: Ctx["env"], where: { overlays: D1PreparedStatement | null; sketches: D1PreparedStatement | null; deletes: D1PreparedStatement[] }): Promise<void> {
+  const reads = [where.overlays, where.sketches].filter((x): x is D1PreparedStatement => !!x);
+  const keys = reads.length ? (await env.DB.batch(reads)).flatMap((r) => ((r.results ?? []) as { k: string | null }[]).map((x) => x.k).filter((k): k is string => !!k)) : [];
+  if (where.deletes.length) await env.DB.batch(where.deletes);
+  if (keys.length) await env.SHOTS_BUCKET.delete(keys).catch(() => {});
+}
+
+/** Clip-owned overlays on these shots' photos in timelines of other projects (the shots moved to `projectId`). */
+export function clipOverlaysLeaving(env: Ctx["env"], shotIdsJson: string, projectId: string) {
+  const where = "photo_id IN (SELECT id FROM photos WHERE shot_id IN (SELECT value FROM json_each(?1))) AND timeline_id IN (SELECT id FROM timelines WHERE project_id != ?2)";
+  return {
+    overlays: env.DB.prepare(`SELECT render_key AS k FROM overlays WHERE ${where}`).bind(shotIdsJson, projectId),
+    sketches: null,
+    deletes: [env.DB.prepare(`DELETE FROM overlays WHERE ${where}`).bind(shotIdsJson, projectId)],
+  };
 }
 
 /** R2 keys of every render under a shot (to delete with the shot). */
@@ -112,6 +152,22 @@ const drawingJson = (v: unknown, withLook: boolean): string => {
   if (s.length > MAX_DRAWING_BYTES) throw new HttpError(413, "drawing too large");
   return s;
 };
+/**
+ * The clip owner in a PUT body (both `timeline_id` and `clip_id`, or neither). The timeline must
+ * exist and, for an overlay, be in the project of the photo's shot.
+ */
+async function clipOwner(env: Ctx["env"], m: Record<string, unknown>, projectOfPhoto: string | null): Promise<{ timeline_id: string; clip_id: string } | null> {
+  if ((m.timeline_id === undefined || m.timeline_id === null) && (m.clip_id === undefined || m.clip_id === null)) return null;
+  const timelineId = assertUuid(m.timeline_id, "timeline_id");
+  const clipId = assertUuid(m.clip_id, "clip_id");
+  const t = await env.DB.prepare("SELECT project_id FROM timelines WHERE id = ?1").bind(timelineId).first<{ project_id: string }>();
+  if (!t) throw new HttpError(404, "timeline not found");
+  if (projectOfPhoto && t.project_id !== projectOfPhoto) throw new HttpError(400, "the photo is not in the timeline's project");
+  return { timeline_id: timelineId, clip_id: clipId };
+}
+const sameOwner = (a: { timeline_id: string | null; clip_id: string | null }, b: { timeline_id: string; clip_id: string } | null) =>
+  (a.timeline_id ?? null) === (b?.timeline_id ?? null) && (a.clip_id ?? null) === (b?.clip_id ?? null);
+
 const optPosition = (v: unknown) => (v === undefined || v === null ? null : assertNumber(v, "position", { min: 0, max: 10_000 }));
 
 /** Write the render to R2 (keyed by id and type), then run the row statements; the object is removed again if the rows fail. */
@@ -123,6 +179,16 @@ async function saveWithRender(env: Ctx["env"], kind: "overlays" | "sketches", id
     throw err;
   }
   if (render && oldKey && oldKey !== key) await env.SHOTS_BUCKET.delete(oldKey).catch(() => {});
+}
+
+/** Copy a render object to the key of another row (a duplicated clip gets its own render). */
+async function copyRender(env: Ctx["env"], kind: "overlays" | "sketches", id: string, key: string | null): Promise<string | null> {
+  if (!key) return null;
+  const obj = await env.SHOTS_BUCKET.get(key);
+  if (!obj) return null;
+  const to = `renders/${kind}/${id}.${key.split(".").pop() ?? "jpg"}`;
+  await env.SHOTS_BUCKET.put(to, obj.body, { httpMetadata: obj.httpMetadata, customMetadata: { kind, id } });
+  return to;
 }
 
 async function serveRender(env: Ctx["env"], request: Request, key: string | null) {
@@ -151,8 +217,10 @@ export function registerComposeRoutes(r: Router<Ctx>) {
 
   /**
    * Upsert. JSON, or multipart with `metadata` + `render`:
-   *   { photo_id, name, description?, drawing, presentation, position? }
-   * The photo fixes the shot; moving an overlay to another photo is not supported.
+   *   { photo_id, name, description?, drawing, presentation, position?, timeline_id?, clip_id? }
+   * The photo fixes the shot; moving an overlay to another photo is not supported. With
+   * timeline_id + clip_id the overlay belongs to that timeline clip (issue #31); the owner is
+   * fixed at creation (promotion goes through the timeline route).
    */
   r.on("PUT", "/api/overlays/:id", async ({ env, request }, { id }) => {
     const oid = assertUuid(id, "id");
@@ -164,17 +232,19 @@ export function registerComposeRoutes(r: Router<Ctx>) {
     const perr = validatePresentation(m.presentation);
     if (perr) throw new HttpError(400, `presentation: ${perr}`);
     const presentation = JSON.stringify(m.presentation);
-    const photo = await env.DB.prepare("SELECT shot_id FROM photos WHERE id = ?1").bind(photoId).first<{ shot_id: string }>();
+    const photo = await env.DB.prepare("SELECT ph.shot_id, s.project_id FROM photos ph JOIN shots s ON s.id = ph.shot_id WHERE ph.id = ?1").bind(photoId).first<{ shot_id: string; project_id: string }>();
     if (!photo) throw new HttpError(404, "photo not found");
-    const cur = await env.DB.prepare("SELECT photo_id, render_key, position FROM overlays WHERE id = ?1").bind(oid).first<{ photo_id: string; render_key: string | null; position: number }>();
+    const owner = await clipOwner(env, m, photo.project_id);
+    const cur = await env.DB.prepare("SELECT photo_id, render_key, position, timeline_id, clip_id FROM overlays WHERE id = ?1").bind(oid).first<{ photo_id: string; render_key: string | null; position: number; timeline_id: string | null; clip_id: string | null }>();
     if (cur && cur.photo_id !== photoId) throw new HttpError(409, "an overlay cannot move to another photo");
+    if (cur && !sameOwner(cur, owner)) throw new HttpError(409, "an overlay cannot change its owner here");
     const position = optPosition(m.position) ?? cur?.position ?? ((await env.DB.prepare("SELECT coalesce(max(position), -1) + 1 AS p FROM overlays WHERE photo_id = ?1").bind(photoId).first<{ p: number }>())?.p ?? 0);
     const now = new Date().toISOString();
     await saveWithRender(env, "overlays", oid, render, cur?.render_key ?? null, (key) => [
       env.DB.prepare(
-        `INSERT INTO overlays (id, photo_id, name, description, drawing, presentation, render_key, position, updated_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
+        `INSERT INTO overlays (id, photo_id, name, description, drawing, presentation, render_key, position, updated_at, timeline_id, clip_id) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)
          ON CONFLICT(id) DO UPDATE SET name = ?3, description = ?4, drawing = ?5, presentation = ?6, render_key = ?7, position = ?8, updated_at = ?9`,
-      ).bind(oid, photoId, name, description, drawing, presentation, key, position, now),
+      ).bind(oid, photoId, name, description, drawing, presentation, key, position, now, owner?.timeline_id ?? null, owner?.clip_id ?? null),
     ]);
     return json({ overlay: overlayToApi((await overlay(env, oid, true))!), shot: await loadShot(env, photo.shot_id) }, cur ? 200 : 201);
   });
@@ -206,6 +276,26 @@ export function registerComposeRoutes(r: Router<Ctx>) {
     return json({ deleted: oid, shot: await loadShot(env, row.shot_id) });
   });
 
+  /**
+   * Copy an overlay (shot- or clip-owned) as the own overlay of a timeline clip: { id, timeline_id, clip_id }.
+   * A duplicated clip must not share its drawing with the original (issue #31).
+   */
+  r.on("POST", "/api/overlays/:id/copy", async ({ env, request }, { id }) => {
+    const from = assertUuid(id, "id");
+    const { m } = await readSave(request);
+    const to = assertUuid(m.id, "id");
+    const src = await env.DB.prepare("SELECT o.*, s.project_id FROM overlays o JOIN photos ph ON ph.id = o.photo_id JOIN shots s ON s.id = ph.shot_id WHERE o.id = ?1").bind(from).first<Record<string, unknown> & { photo_id: string; render_key: string | null; project_id: string }>();
+    if (!src) throw new HttpError(404, "overlay not found");
+    const owner = await clipOwner(env, m, src.project_id);
+    if (!owner) throw new HttpError(400, "timeline_id and clip_id are required");
+    if (await env.DB.prepare("SELECT 1 FROM overlays WHERE id = ?1").bind(to).first()) throw new HttpError(409, "an overlay with that id exists");
+    const key = await copyRender(env, "overlays", to, src.render_key);
+    await env.DB.prepare(
+      "INSERT INTO overlays (id, photo_id, name, description, drawing, presentation, render_key, position, updated_at, timeline_id, clip_id) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, 0, ?8, ?9, ?10)",
+    ).bind(to, src.photo_id, src.name, src.description, src.drawing, src.presentation, key, new Date().toISOString(), owner.timeline_id, owner.clip_id).run();
+    return json({ overlay: overlayToApi((await overlay(env, to, false))!) }, 201);
+  });
+
   r.on("GET", "/api/overlays/:id/render", async ({ env, request }, { id }) => {
     const row = await env.DB.prepare("SELECT render_key FROM overlays WHERE id = ?1").bind(assertUuid(id, "id")).first<{ render_key: string | null }>();
     if (!row) throw new HttpError(404, "overlay not found");
@@ -223,28 +313,32 @@ export function registerComposeRoutes(r: Router<Ctx>) {
     return json({ sketch: sketchToApi(row) });
   });
 
-  /** Upsert: { shot_id, name, kind?, description?, drawing, aspect, position? } (+ `render` in multipart). */
+  /**
+   * Upsert: { shot_id, name, kind?, description?, drawing, aspect, position? } (+ `render` in multipart).
+   * Instead of shot_id, timeline_id + clip_id make it a sketch clip's own sketch (issue #31).
+   */
   r.on("PUT", "/api/sketches/:id", async ({ env, request }, { id }) => {
     const sid = assertUuid(id, "id");
     const { m, render } = await readSave(request);
-    const shotId = assertUuid(m.shot_id, "shot_id");
+    const owner = await clipOwner(env, m, null);
+    const shotId = owner ? null : assertUuid(m.shot_id, "shot_id");
     const name = assertString(m.name, "name", MAX_COMPOSE_NAME);
     const kind = optText(m.kind, "kind", MAX_SKETCH_KIND);
     const description = optText(m.description, "description", MAX_DESCRIPTION);
     const drawing = drawingJson(m.drawing, false);
     const aspect = assertNumber(m.aspect, "aspect", { min: 0.25, max: 4 });
-    if (!(await env.DB.prepare("SELECT 1 FROM shots WHERE id = ?1").bind(shotId).first())) throw new HttpError(404, "shot not found");
-    const cur = await env.DB.prepare("SELECT shot_id, render_key, position FROM sketches WHERE id = ?1").bind(sid).first<{ shot_id: string; render_key: string | null; position: number }>();
-    if (cur && cur.shot_id !== shotId) throw new HttpError(409, "a sketch cannot move to another shot");
-    const position = optPosition(m.position) ?? cur?.position ?? ((await env.DB.prepare("SELECT coalesce(max(position), -1) + 1 AS p FROM sketches WHERE shot_id = ?1").bind(shotId).first<{ p: number }>())?.p ?? 0);
+    if (shotId && !(await env.DB.prepare("SELECT 1 FROM shots WHERE id = ?1").bind(shotId).first())) throw new HttpError(404, "shot not found");
+    const cur = await env.DB.prepare("SELECT shot_id, render_key, position, timeline_id, clip_id FROM sketches WHERE id = ?1").bind(sid).first<{ shot_id: string | null; render_key: string | null; position: number; timeline_id: string | null; clip_id: string | null }>();
+    if (cur && (cur.shot_id !== shotId || !sameOwner(cur, owner))) throw new HttpError(409, "a sketch cannot move to another shot or owner");
+    const position = optPosition(m.position) ?? cur?.position ?? (shotId ? ((await env.DB.prepare("SELECT coalesce(max(position), -1) + 1 AS p FROM sketches WHERE shot_id = ?1").bind(shotId).first<{ p: number }>())?.p ?? 0) : 0);
     const now = new Date().toISOString();
     await saveWithRender(env, "sketches", sid, render, cur?.render_key ?? null, (key) => [
       env.DB.prepare(
-        `INSERT INTO sketches (id, shot_id, name, kind, description, drawing, aspect, render_key, position, updated_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)
+        `INSERT INTO sketches (id, shot_id, name, kind, description, drawing, aspect, render_key, position, updated_at, timeline_id, clip_id) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)
          ON CONFLICT(id) DO UPDATE SET name = ?3, kind = ?4, description = ?5, drawing = ?6, aspect = ?7, render_key = ?8, position = ?9, updated_at = ?10`,
-      ).bind(sid, shotId, name, kind, description, drawing, aspect, key, position, now),
+      ).bind(sid, shotId, name, kind, description, drawing, aspect, key, position, now, owner?.timeline_id ?? null, owner?.clip_id ?? null),
     ]);
-    return json({ sketch: sketchToApi((await sketch(env, sid, true))!), shot: await loadShot(env, shotId) }, cur ? 200 : 201);
+    return json({ sketch: sketchToApi((await sketch(env, sid, true))!), shot: shotId ? await loadShot(env, shotId) : null }, cur ? 200 : 201);
   });
 
   /** JSON { name?, kind?, description?, position? }. */
@@ -263,7 +357,7 @@ export function registerComposeRoutes(r: Router<Ctx>) {
     const res = await env.DB.prepare(`UPDATE sketches SET ${sets.join(", ")} WHERE id = ?${args.length}`).bind(...args).run();
     if (!res.meta.changes) throw new HttpError(404, "sketch not found");
     const row = (await sketch(env, sid, true))!;
-    return json({ sketch: sketchToApi(row), shot: await loadShot(env, row.shot_id) });
+    return json({ sketch: sketchToApi(row), shot: row.shot_id ? await loadShot(env, row.shot_id) : null });
   });
 
   r.on("DELETE", "/api/sketches/:id", async ({ env }, { id }) => {
@@ -272,7 +366,24 @@ export function registerComposeRoutes(r: Router<Ctx>) {
     if (!row) throw new HttpError(404, "sketch not found");
     await env.DB.prepare("DELETE FROM sketches WHERE id = ?1").bind(sid).run();
     if (row.render_key) await env.SHOTS_BUCKET.delete(row.render_key).catch(() => {});
-    return json({ deleted: sid, shot: await loadShot(env, row.shot_id) });
+    return json({ deleted: sid, shot: row.shot_id ? await loadShot(env, row.shot_id) : null });
+  });
+
+  /** Copy a sketch as the own sketch of a timeline clip: { id, timeline_id, clip_id }. */
+  r.on("POST", "/api/sketches/:id/copy", async ({ env, request }, { id }) => {
+    const from = assertUuid(id, "id");
+    const { m } = await readSave(request);
+    const to = assertUuid(m.id, "id");
+    const src = await env.DB.prepare("SELECT * FROM sketches WHERE id = ?1").bind(from).first<Record<string, unknown> & { render_key: string | null }>();
+    if (!src) throw new HttpError(404, "sketch not found");
+    const owner = await clipOwner(env, m, null);
+    if (!owner) throw new HttpError(400, "timeline_id and clip_id are required");
+    if (await env.DB.prepare("SELECT 1 FROM sketches WHERE id = ?1").bind(to).first()) throw new HttpError(409, "a sketch with that id exists");
+    const key = await copyRender(env, "sketches", to, src.render_key);
+    await env.DB.prepare(
+      "INSERT INTO sketches (id, shot_id, name, kind, description, drawing, aspect, render_key, position, updated_at, timeline_id, clip_id) VALUES (?1, NULL, ?2, ?3, ?4, ?5, ?6, ?7, 0, ?8, ?9, ?10)",
+    ).bind(to, src.name, src.kind, src.description, src.drawing, src.aspect, key, new Date().toISOString(), owner.timeline_id, owner.clip_id).run();
+    return json({ sketch: sketchToApi((await sketch(env, to, false))!) }, 201);
   });
 
   r.on("GET", "/api/sketches/:id/render", async ({ env, request }, { id }) => {

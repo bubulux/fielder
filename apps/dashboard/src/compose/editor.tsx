@@ -1,0 +1,193 @@
+/**
+ * The drawing editor's core, shared by the shot view's Compose stage and the timeline's inline
+ * editing (issue #31): shape history, selection, tool and style, the tool bar, the keys, and the
+ * Shape and Look panel sections. The caller owns the shapes (they live in its document).
+ */
+import { useRef, useState } from "preact/hooks";
+import { COMPOSE_PALETTE, NEUTRAL_LOOK, STENCIL_LABELS, STENCILS, type Look, type Shape, type Stencil } from "@fielder/vocab";
+import { Button, Chip, cx, Icon, IconButton, Input, Kbd, Seg, Switch } from "../ui";
+import { defaultStyle, shapeId, TOOLS, WIDTHS, type Style, type TextEdit, type Tool } from "./DrawSurface";
+
+export interface DrawingEditor {
+  shapes: Shape[];
+  /** Live update while dragging (no history entry). */
+  preview: (shapes: Shape[]) => void;
+  /** A finished change (history entry). */
+  commit: (shapes: Shape[]) => void;
+  undo: () => void;
+  redo: () => void;
+  canUndo: boolean;
+  canRedo: boolean;
+  selected: string | null;
+  setSelected: (id: string | null) => void;
+  sel: Shape | null;
+  tool: Tool;
+  setTool: (t: Tool) => void;
+  style: Style;
+  setStyle: (f: (s: Style) => Style) => void;
+  /** A style change applies to the selected shape too. */
+  setStyleAnd: (patch: Partial<Style>) => void;
+  updateSel: (patch: Partial<Shape>) => void;
+  removeSel: () => void;
+  duplicateSel: () => void;
+  nudge: (dx: number, dy: number) => false | void;
+  textEdit: TextEdit | null;
+  setTextEdit: (t: TextEdit | null) => void;
+  textDone: (t: TextEdit) => void;
+  /** Start over on another document: clears history, selection and the text box. */
+  reset: (sketch: boolean) => void;
+}
+
+export function useDrawingEditor(shapes: Shape[], setShapes: (s: Shape[]) => void, sketch: boolean): DrawingEditor {
+  const [history, setHistory] = useState<{ past: Shape[][]; future: Shape[][] }>({ past: [], future: [] });
+  const [selected, setSelected] = useState<string | null>(null);
+  const [tool, setTool] = useState<Tool>("pen");
+  const [style, setStyleState] = useState<Style>(() => defaultStyle(sketch));
+  const [textEdit, setTextEdit] = useState<TextEdit | null>(null);
+  const cur = useRef(shapes); cur.current = shapes;
+
+  const commit = (next: Shape[]) => {
+    const before = cur.current;
+    setHistory((h) => ({ past: [...h.past.slice(-99), before], future: [] }));
+    setShapes(next);
+  };
+  const undo = () => setHistory((h) => { const prev = h.past.at(-1); if (!prev) return h; const now = cur.current; setShapes(prev); setSelected(null); return { past: h.past.slice(0, -1), future: [now, ...h.future] }; });
+  const redo = () => setHistory((h) => { const next = h.future[0]; if (!next) return h; const now = cur.current; setShapes(next); setSelected(null); return { past: [...h.past, now], future: h.future.slice(1) }; });
+  const sel = shapes.find((s) => s.id === selected) ?? null;
+  const updateSel = (patch: Partial<Shape>) => { if (!sel) return; commit(shapes.map((s) => (s.id === sel.id ? ({ ...s, ...patch } as Shape) : s))); };
+  const removeSel = () => { if (!sel) return; commit(shapes.filter((s) => s.id !== sel.id)); setSelected(null); };
+  const duplicateSel = () => { if (!sel) return; const copy = moveBy({ ...sel, id: shapeId() }, 0.03, 0.03); commit([...shapes, copy]); setSelected(copy.id); };
+  const nudge = (dx: number, dy: number) => { if (!sel) return false; commit(shapes.map((s) => (s.id === sel.id ? moveBy(s, dx, dy) : s))); };
+  const textDone = (t: TextEdit) => {
+    setTextEdit(null);
+    const text = t.value.trim();
+    if (t.id) { commit(text ? shapes.map((s) => (s.id === t.id ? ({ ...s, text } as Shape) : s)) : shapes.filter((s) => s.id !== t.id)); return; }
+    if (!text) return;
+    const s: Shape = { id: shapeId(), type: "text", at: t.at, text, size: style.textSize, color: style.color, width: 0, opacity: style.opacity };
+    commit([...shapes, s]);
+    setSelected(s.id);
+  };
+  const setStyleAnd = (patch: Partial<Style>) => {
+    setStyleState((s) => ({ ...s, ...patch }));
+    if (!sel) return;
+    const sp: Partial<Shape> = {};
+    if (patch.color !== undefined) sp.color = patch.color;
+    if (patch.width !== undefined && sel.type !== "text" && sel.type !== "stencil") sp.width = patch.width;
+    if (patch.opacity !== undefined) sp.opacity = patch.opacity;
+    if (patch.fill !== undefined && (sel.type === "rect" || sel.type === "ellipse")) (sp as { fill?: boolean }).fill = patch.fill;
+    if (patch.stencil !== undefined && sel.type === "stencil") (sp as { stencil?: Stencil }).stencil = patch.stencil;
+    if (Object.keys(sp).length) updateSel(sp);
+  };
+  const reset = (forSketch: boolean) => {
+    setHistory({ past: [], future: [] }); setSelected(null); setTextEdit(null);
+    // Yellow reads on photos, black on the white sketch canvas.
+    setStyleState((s) => ({ ...s, color: forSketch ? (s.color === "#FFD60A" ? "#0B0B0C" : s.color) : s.color === "#0B0B0C" ? "#FFD60A" : s.color }));
+  };
+  return {
+    shapes, preview: setShapes, commit, undo, redo, canUndo: history.past.length > 0, canRedo: history.future.length > 0,
+    selected, setSelected, sel, tool, setTool, style, setStyle: setStyleState, setStyleAnd, updateSel, removeSel, duplicateSel, nudge,
+    textEdit, setTextEdit, textDone, reset,
+  };
+}
+
+/** The editor's keys: tools, colours, undo/redo, remove and nudge the selected shape. */
+export function drawingKeys(ed: DrawingEditor): Record<string, () => void | boolean> {
+  return {
+    "Mod+z": () => ed.undo(),
+    "Mod+Z": () => ed.redo(), // ⌘⇧Z: keys.ts names a shifted letter by its upper case
+    "Mod+y": () => ed.redo(),
+    Delete: () => ed.removeSel(),
+    Backspace: () => ed.removeSel(),
+    ArrowLeft: () => ed.nudge(-0.005, 0),
+    ArrowRight: () => ed.nudge(0.005, 0),
+    ArrowUp: () => ed.nudge(0, -0.005),
+    ArrowDown: () => ed.nudge(0, 0.005),
+    ...Object.fromEntries(TOOLS.map((t) => [t.key.toLowerCase(), () => ed.setTool(t.id)])),
+    ...Object.fromEntries(COMPOSE_PALETTE.map((c, i) => [String((i + 1) % 10), () => ed.setStyleAnd({ color: c })])),
+  };
+}
+
+/** Tools, colours, stroke width, fill/stencil options and undo/redo. */
+export function DrawToolbar({ ed, compact }: { ed: DrawingEditor; compact?: boolean }) {
+  const { tool, style, sel } = ed;
+  return (
+    <>
+      <Seg label="Tool" value={tool} onChange={ed.setTool} options={TOOLS.map((t) => ({ id: t.id, icon: t.icon, title: `${t.label} (${t.key})` }))} />
+      <div class="swatches" role="group" aria-label="Colour">
+        {COMPOSE_PALETTE.map((c, i) => <button key={c} type="button" class={cx("swatch", style.color === c && "is-sel")} style={{ background: c }} title={`Colour ${(i + 1) % 10}`} aria-pressed={style.color === c} onClick={() => ed.setStyleAnd({ color: c })}>{style.color === c && <Icon name="check" />}</button>)}
+      </div>
+      <Seg label="Stroke width" value={WIDTHS.find((w) => w.w === style.width)?.id ?? "m"} onChange={(id) => ed.setStyleAnd({ width: WIDTHS.find((w) => w.id === id)!.w })} options={WIDTHS.map((w) => ({ id: w.id, label: w.label, title: `Stroke ${w.label}` }))} />
+      {(tool === "rect" || tool === "ellipse" || sel?.type === "rect" || sel?.type === "ellipse") && <Chip selected={style.fill} onClick={() => ed.setStyleAnd({ fill: !style.fill })}>Fill</Chip>}
+      {(tool === "stencil" || sel?.type === "stencil") && <Seg label="Stencil" value={style.stencil} onChange={(s) => ed.setStyleAnd({ stencil: s })} options={STENCILS.map((s) => ({ id: s, label: compact ? STENCIL_LABELS[s].slice(0, 3) : STENCIL_LABELS[s] }))} />}
+      <div class="btn-row" style={{ gap: "2px" }}>
+        <IconButton icon="undo" label="Undo (⌘Z)" title="Undo (⌘Z)" disabled={!ed.canUndo} onClick={ed.undo} />
+        <IconButton icon="redo" label="Redo (⌘⇧Z)" title="Redo (⌘⇧Z)" disabled={!ed.canRedo} onClick={ed.redo} />
+      </div>
+    </>
+  );
+}
+
+/** Panel section for the selected shape. */
+export function ShapeSection({ ed }: { ed: DrawingEditor }) {
+  const { sel } = ed;
+  return (
+    <div class="f-sec">
+      <div class="f-sec__head"><Icon name="shape-outline" />Shape<span class="f-sec__aside">{sel ? sel.type : "none selected"}</span></div>
+      {sel ? (
+        <>
+          <Range label="Opacity" value={sel.opacity} min={0} max={1} onChange={(v) => ed.setStyleAnd({ opacity: v })} />
+          {(sel.type === "text" || sel.type === "stencil") && <Range label="Size" value={sel.size} min={0.02} max={0.4} onChange={(v) => { ed.updateSel({ size: v } as Partial<Shape>); ed.setStyle((s) => (sel.type === "text" ? { ...s, textSize: v } : { ...s, stencilSize: v })); }} />}
+          {sel.type === "stencil" && <Range label="Rotation" value={sel.rotation} min={-180} max={180} step={5} onChange={(v) => ed.updateSel({ rotation: v } as Partial<Shape>)} format={(v) => `${Math.round(v)}°`} />}
+          {sel.type === "text" && <Input sm value={sel.text} maxLength={200} aria-label="Text" onInput={(e) => ed.updateSel({ text: (e.target as HTMLInputElement).value } as Partial<Shape>)} />}
+          <div class="btn-row">
+            <Button kind="secondary" size="sm" icon="content-duplicate" onClick={ed.duplicateSel}>Duplicate</Button>
+            <Button kind="danger" size="sm" icon="delete-outline" kbd="Del" onClick={ed.removeSel}>Remove</Button>
+          </div>
+        </>
+      ) : <span class="meta">Use the Select tool (<Kbd>V</Kbd>) and click a shape to change it. Colour and width in the bar apply to the next shape, or to the selected one.</span>}
+    </div>
+  );
+}
+
+/** Panel section for an overlay's look (exposure, contrast, tint, vignette…). */
+export function LookSection({ look, onLook }: { look: Look; onLook: (l: Look) => void }) {
+  const set = (patch: Partial<Look>) => onLook({ ...look, ...patch });
+  return (
+    <div class="f-sec">
+      <div class="f-sec__head"><Icon name="tune-variant" />Look<span class="f-sec__aside"><button type="button" class="f-linkbtn" onClick={() => onLook({ ...NEUTRAL_LOOK })}>Reset</button></span></div>
+      <Range label="Exposure" value={look.exposure} min={-1} max={1} onChange={(v) => set({ exposure: v })} format={(v) => `${v > 0 ? "+" : ""}${(v * 3).toFixed(1)} EV`} />
+      <Range label="Contrast" value={look.contrast} min={-1} max={1} onChange={(v) => set({ contrast: v })} />
+      <Range label="Saturation" value={look.saturation} min={-1} max={1} onChange={(v) => set({ saturation: v })} />
+      <Switch on={look.bw} onClick={() => set({ bw: !look.bw })}>Black and white</Switch>
+      <div class="f-field">
+        <span class="f-field__label">Tint</span>
+        <div class="swatches">
+          <button type="button" class={cx("swatch swatch--none", !look.tint && "is-sel")} title="No tint" onClick={() => set({ tint: null })}>{!look.tint && <Icon name="check" />}</button>
+          {COMPOSE_PALETTE.map((c) => <button key={c} type="button" class={cx("swatch", look.tint === c && "is-sel")} style={{ background: c }} title={c} onClick={() => set({ tint: c })}>{look.tint === c && <Icon name="check" />}</button>)}
+        </div>
+      </div>
+      {look.tint && <Range label="Tint opacity" value={look.tint_opacity} min={0} max={1} onChange={(v) => set({ tint_opacity: v })} />}
+      <Range label="Vignette" value={look.vignette} min={0} max={1} onChange={(v) => set({ vignette: v })} />
+      <Range label="Softness" value={look.blur} min={0} max={1} onChange={(v) => set({ blur: v })} />
+    </div>
+  );
+}
+
+/** A labelled range slider with its value. */
+export function Range({ label, value, min, max, step = 0.01, onChange, format }: { label: string; value: number; min: number; max: number; step?: number; onChange: (v: number) => void; format?: (v: number) => string }) {
+  return (
+    <label class="f-range">
+      <span class="f-range__label">{label}<span class="num">{format ? format(value) : `${Math.round(((value - min) / (max - min)) * 100)} %`}</span></span>
+      <input type="range" min={min} max={max} step={step} value={value} onInput={(e) => onChange(Number((e.target as HTMLInputElement).value))} onDblClick={() => onChange(min < 0 ? 0 : min)} />
+    </label>
+  );
+}
+
+export function moveBy(s: Shape, dx: number, dy: number): Shape {
+  const mv = (p: [number, number]): [number, number] => [p[0] + dx, p[1] + dy];
+  switch (s.type) {
+    case "path": return { ...s, points: s.points.map(mv) };
+    case "line": case "arrow": case "rect": case "ellipse": return { ...s, from: mv(s.from), to: mv(s.to) };
+    case "text": case "stencil": return { ...s, at: mv(s.at) };
+  }
+}

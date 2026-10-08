@@ -2,9 +2,11 @@ import { useMemo, useRef, useState } from "preact/hooks";
 import { fetchTimelines, type Preset, type Project, type Shot, type Timeline, type TimelineClip } from "./api";
 import { cover, shotTitle } from "./format";
 import { Framed, type MaskMode } from "./Framed";
-import { useKeys } from "./keys";
-import { ClipPanel, clock, CutPreview, LockSelect, newPlaceholder, resolveClips, Strip, useCut, useTimelineStore, clipsOfShot, type ResolvedClip } from "./TimelineParts";
-import { Banner, Button, Checkbox, cx, Empty, EmptyNote, Field, Icon, IconButton, Input, Kbd, ListRow, MenuItem, Panel, PanelBody, PanelHead, Popover, SaveStatus, Select, Spinner, Toolbar, ToolbarTitle, type SaveState } from "./ui";
+import { guardCut, useClipEditing, type EditKind } from "./ClipEditing";
+import { afterG, useKeys } from "./keys";
+import { useSettings } from "./settings";
+import { ClipPanel, clock, copyClip, CutPreview, DRAWER_RESIZE, LockSelect, TimelineRail, newPlaceholder, resolveClips, Strip, useCut, useTimelineStore, clipsOfShot, type ResolvedClip } from "./TimelineParts";
+import { Banner, Button, Checkbox, Empty, Field, Icon, IconButton, Input, Kbd, ListRow, MenuItem, Panel, PanelBody, PanelHead, Popover, SaveStatus, Select, toast, Toolbar, ToolbarTitle, type SaveState } from "./ui";
 
 /**
  * Timeline (issue #12, part 2): rough cuts of a project out of its photos. A clip is one photo,
@@ -27,7 +29,7 @@ interface Props {
   onOpen: (s: Shot, list: Shot[]) => void;
 }
 
-export function TimelinePage({ project, projects, onPickProject, shots, mask, timelineId, onTimeline, onOpen }: Props) {
+export function TimelinePage({ project, projects, onPickProject, shots, presets, mask, timelineId, onTimeline, onOpen }: Props) {
   const projectId = project?.id ?? null;
   const store = useTimelineStore((set, fail) => {
     if (!projectId) return;
@@ -52,34 +54,23 @@ export function TimelinePage({ project, projects, onPickProject, shots, mask, ti
     );
   }
   const current = list?.find((t) => t.id === timelineId) ?? null;
-  const total = (t: Timeline) => t.clips.reduce((a, c) => a + c.duration_ms, 0);
   return (
     <div class="f-app__body">
-      <Panel left width="260px" label="Timelines">
-        <PanelHead title="Timelines"><Button size="sm" icon="plus" title="New timeline (⇧N)" onClick={() => void create()}>New</Button></PanelHead>
-        <PanelBody flush role="listbox" aria-label="Timelines">
-          {!list ? <div class="status"><Spinner /></div> : list.length === 0 ? <EmptyNote title="No timelines yet">“New” starts an empty cut.</EmptyNote> : list.map((t) => (
-            <div key={t.id} role="option" aria-selected={t.id === timelineId} tabIndex={0} class={cx("f-dayitem", t.id === timelineId && "is-selected")} onClick={() => onTimeline(t.id)} onKeyDown={(e) => { if (e.key === "Enter") onTimeline(t.id); }}>
-              <span class="f-dayitem__date">{t.name}</span>
-              <span class="f-dayitem__meta num">{t.clips.length} clip{t.clips.length === 1 ? "" : "s"} · {clock(total(t))}</span>
-            </div>
-          ))}
-        </PanelBody>
-      </Panel>
+      <TimelineRail list={list} selectedId={timelineId} onSelect={onTimeline} onCreate={() => void create()} />
       {list && list.length === 0 ? (
         <Empty icon="filmstrip" title={`No timelines in ${project.name}`} actions={<Button icon="plus" onClick={() => void create()}>New timeline</Button>}>
           Arrange photos and overlays in order, give each a hold time, and play the cut to see which shots carry the sequence.
         </Empty>
       ) : current ? (
-        <Editor key={current.id} timeline={current} shots={shots} mask={mask} onChange={store.change} onDelete={() => void remove(current)} onOpen={onOpen} save={save} onRetry={store.retry} error={save === "error" ? store.error : null} />
+        <Editor key={current.id} timeline={current} shots={shots} presets={presets} mask={mask} onChange={store.change} onDelete={() => void remove(current)} onOpen={onOpen} save={save} onRetry={store.retry} error={save === "error" ? store.error : null} />
       ) : <Empty icon="filmstrip" title="Pick a timeline" />}
     </div>
   );
 }
 
-interface EditorProps { timeline: Timeline; shots: Shot[]; mask: MaskMode; onChange: (t: Timeline) => void; onDelete: () => void; onOpen: (s: Shot, list: Shot[]) => void; save: SaveState; onRetry: () => void; error: string | null }
+interface EditorProps { timeline: Timeline; shots: Shot[]; presets: Preset[]; mask: MaskMode; onChange: (t: Timeline) => void; onDelete: () => void; onOpen: (s: Shot, list: Shot[]) => void; save: SaveState; onRetry: () => void; error: string | null }
 
-function Editor({ timeline: t, shots, mask, onChange, onDelete, onOpen, save, onRetry, error }: EditorProps) {
+function Editor({ timeline: t, shots, presets, mask, onChange, onDelete, onOpen, save, onRetry, error }: EditorProps) {
   const byId = useMemo(() => new Map(shots.map((s) => [s.id, s])), [shots]);
   const clips = useMemo(() => resolveClips(t, byId), [t, byId]);
   const total = clips.reduce((a, c) => a + c.clip.duration_ms, 0);
@@ -89,13 +80,34 @@ function Editor({ timeline: t, shots, mask, onChange, onDelete, onOpen, save, on
   const [menu, setMenu] = useState(false);
   const stripRef = useRef<HTMLDivElement>(null);
   const durRef = useRef<HTMLInputElement>(null);
+  const settings = useSettings();
+  const inline = useClipEditing({ timeline: t, clips, presets, onChange });
+  const guardedCut = guardCut(cut, inline, settings.inlinePlayhead);
+  const edit = (kind: EditKind, c: ResolvedClip) => { cut.select(c.clip.id); setAdding(false); inline.start(kind, c); };
+  const latest = useRef(t); latest.current = t;
 
   const setClips = (list: TimelineClip[]) => onChange({ ...t, clips: list });
   const update = (id: string, patch: Partial<TimelineClip>) => setClips(t.clips.map((c) => (c.id === id ? { ...c, ...patch } : c)));
   const move = (c: ResolvedClip, d: number) => { const i = t.clips.indexOf(c.clip); if (i + d < 0 || i + d >= t.clips.length) return; const l = [...t.clips]; const [x] = l.splice(i, 1); l.splice(i + d, 0, x); setClips(l); };
-  const reorder = (clipId: string, index: number) => { const i = t.clips.findIndex((c) => c.id === clipId); if (i < 0) return; const l = [...t.clips]; const [x] = l.splice(i, 1); l.splice(i < index ? index - 1 : index, 0, x); setClips(l); };
+  /** `index` counts rendered clips; map it into the stored list (dead clips are skipped in render). */
+  const reorder = (clipId: string, index: number) => {
+    const from = t.clips.findIndex((c) => c.id === clipId);
+    if (from < 0) return;
+    let at = index >= clips.length ? t.clips.length : t.clips.indexOf(clips[index].clip);
+    const l = [...t.clips]; const [x] = l.splice(from, 1);
+    if (from < at) at -= 1;
+    l.splice(at, 0, x); setClips(l);
+  };
   const removeClip = (c: ResolvedClip) => { const i = clips.indexOf(c); setClips(t.clips.filter((x) => x !== c.clip)); const n = clips[i + 1] ?? clips[i - 1]; cut.select(n?.clip.id ?? null); };
-  const duplicate = (c: ResolvedClip) => { const i = t.clips.indexOf(c.clip); const copy = { ...c.clip, id: crypto.randomUUID() }; const l = [...t.clips]; l.splice(i + 1, 0, copy); setClips(l); cut.select(copy.id); };
+  const duplicate = async (c: ResolvedClip) => {
+    try {
+      const copy = await copyClip(t, c.clip);
+      const now = latest.current;
+      const l = [...now.clips]; l.splice(now.clips.findIndex((x) => x.id === c.clip.id) + 1, 0, copy);
+      onChange({ ...now, clips: l });
+      cut.select(copy.id);
+    } catch (e) { toast(`Duplicate failed: ${(e as Error).message}`, "danger"); }
+  };
   const addShots = (list: Shot[]) => {
     const fresh = list.flatMap((s) => clipsOfShot(s, mask));
     setClips([...t.clips, ...fresh]);
@@ -117,8 +129,10 @@ function Editor({ timeline: t, shots, mask, onChange, onDelete, onOpen, save, on
     d: () => durRef.current?.focus(),
     n: () => setAdding((a) => !a),
     p: addPlaceholder,
+    r: () => { if (afterG()) return false; if (cur?.kind === "photo") edit("reframe", cur); },
+    c: () => { if (afterG()) return false; if (cur) edit(cur.kind === "photo" ? "overlay" : "sketch", cur); },
     Enter: () => { if (cur) open(cur); },
-  });
+  }, !inline.editing);
 
   return (
     <>
@@ -138,16 +152,17 @@ function Editor({ timeline: t, shots, mask, onChange, onDelete, onOpen, save, on
             </div>
           </div>
 
-          <CutPreview cut={cut} clips={clips} total={total} maxHeight="calc(100vh - 470px)" lock={t.lock_mode}>
-            <Button kind="secondary" size="sm" icon="image-off-outline" kbd="P" onClick={addPlaceholder}>Placeholder</Button>
-            <Button kind={adding ? "secondary" : "primary"} size="sm" icon="plus" kbd="N" aria-pressed={adding} onClick={() => setAdding(!adding)}>Add shots</Button>
+          <CutPreview cut={guardedCut} clips={clips} total={total} lock={t.lock_mode} stage={inline.stage} editing={!!inline.editing}>
+            <Button kind="secondary" size="sm" icon="image-off-outline" kbd="P" disabled={!!inline.editing} onClick={addPlaceholder}>Placeholder</Button>
+            <Button kind={adding ? "secondary" : "primary"} size="sm" icon="plus" kbd="N" aria-pressed={adding} disabled={!!inline.editing} onClick={() => setAdding(!adding)}>Add shots</Button>
           </CutPreview>
 
-          <Strip clips={clips} cut={cut} stripRef={stripRef} lock={t.lock_mode} onOpen={open} onReorder={reorder} />
+          <Strip clips={clips} cut={guardedCut} stripRef={stripRef} lock={t.lock_mode} editingId={inline.editing?.clipId ?? null} onOpen={open} onReorder={reorder} />
         </div>
       </div>
-      {adding ? <AddPanel shots={shots} mask={mask} onAdd={addShots} onClose={() => setAdding(false)} />
-        : cur && <ClipPanel key={cur.clip.id} c={cur} count={clips.length} lock={t.lock_mode} durRef={durRef} onUpdate={(p) => update(cur.clip.id, p)} onMove={(d) => move(cur, d)} onRemove={() => removeClip(cur)} onDuplicate={() => duplicate(cur)} onOpen={() => open(cur)} />}
+      {inline.panel ?? (adding ? <AddPanel shots={shots} mask={mask} onAdd={addShots} onClose={() => setAdding(false)} />
+        : cur && <ClipPanel key={cur.clip.id} c={cur} count={clips.length} lock={t.lock_mode} durRef={durRef} onUpdate={(p) => update(cur.clip.id, p)} onMove={(d) => move(cur, d)} onRemove={() => removeClip(cur)} onDuplicate={() => void duplicate(cur)} onOpen={() => open(cur)}
+            onReframe={() => edit("reframe", cur)} onOverlay={() => edit("overlay", cur)} onSketch={() => edit("sketch", cur)} />)}
     </>
   );
 }
@@ -162,7 +177,7 @@ function AddPanel({ shots, mask, onAdd, onClose }: { shots: Shot[]; mask: MaskMo
   for (const s of candidates) { const k = s.location_name ?? "No location"; byLocation.set(k, [...(byLocation.get(k) ?? []), s]); }
   useKeys({ Escape: onClose });
   return (
-    <Panel label="Add shots" width="340px">
+    <Panel label="Add shots" width="340px" resize={DRAWER_RESIZE}>
       <PanelHead title="Add shots"><Kbd>N</Kbd><IconButton icon="close" label="Close" onClick={onClose} /></PanelHead>
       <div class="panel-filters">
         <Select label="Location" icon="map-marker-outline" value={location} onChange={setLocation} options={[{ value: "", label: "All locations" }, ...locations.map(([id, name]) => ({ value: id, label: name }))]} />

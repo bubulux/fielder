@@ -6,14 +6,16 @@
  */
 import type { ComponentChildren } from "preact";
 import { useEffect, useMemo, useRef, useState, type MutableRef } from "preact/hooks";
-import { COMPOSE_PALETTE, emptyDrawing, lookFilter, NEUTRAL_LOOK, PRESENTATION_MODES, SKETCH_ASPECTS, SKETCH_KIND_LABELS, SKETCH_KINDS, sketchKindLabel, STENCIL_LABELS, STENCILS, type Drawing, type Look, type Presentation, type Shape, type Stencil } from "@fielder/vocab";
+import { emptyDrawing, lookFilter, NEUTRAL_LOOK, PRESENTATION_MODES, SKETCH_ASPECTS, SKETCH_KIND_LABELS, SKETCH_KINDS, sketchKindLabel, type Drawing, type Look, type Presentation, type Shape } from "@fielder/vocab";
 import { deleteOverlay, deleteSketch, fetchOverlay, fetchSketch, patchOverlay, patchSketch, putOverlay, putSketch, type Overlay, type Photo, type Preset, type Shot, type Sketch } from "../api";
 import { frameModeLabel } from "../format";
 import { Framed, framedLayout } from "../Framed";
+import { FromTimelines } from "../FromTimelines";
 import { useKeys } from "../keys";
 import { FramingSelect, presentationFrame, rootPresentation } from "../FramingSelect";
-import { Button, Chip, Combobox, confirmDialog, cx, Empty, Icon, IconButton, Input, Kbd, MarkdownField, ReorderButtons, SaveStatus, Seg, Switch, toast, ToolbarSpacer, type SaveState } from "../ui";
-import { defaultStyle, DrawSurface, shapeId, TOOLS, WIDTHS, type Style, type TextEdit, type Tool } from "./DrawSurface";
+import { Button, Combobox, confirmDialog, cx, Empty, Icon, IconButton, Input, MarkdownField, ReorderButtons, SaveStatus, Seg, toast, ToolbarSpacer, type SaveState } from "../ui";
+import { DrawSurface } from "./DrawSurface";
+import { DrawToolbar, drawingKeys, LookSection, ShapeSection, useDrawingEditor } from "./editor";
 import type { CanvasRect } from "./geometry";
 import { BLUR_FRACTION, renderOverlay, renderSketch, vignetteCss } from "./render";
 
@@ -47,12 +49,9 @@ export function Compose(p: Props) {
   const [doc, setDoc] = useState<Doc | null>(null);
   const [saved, setSaved] = useState<Doc | null>(null);
   const [loading, setLoading] = useState<string | null>(null);
-  const [history, setHistory] = useState<{ past: Shape[][]; future: Shape[][] }>({ past: [], future: [] });
-  const [selected, setSelected] = useState<string | null>(null);
-  const [tool, setTool] = useState<Tool>("pen");
-  const [style, setStyle] = useState<Style>(() => defaultStyle(false));
-  const [textEdit, setTextEdit] = useState<TextEdit | null>(null);
   const [save, setSave] = useState<SaveState>("idle");
+  const setShapes = (shapes: Shape[]) => setDoc((d) => (d ? { ...d, shapes } : d));
+  const ed = useDrawingEditor(doc?.shapes ?? [], setShapes, false);
   const dirty = !!doc && !same(doc, saved);
   const docRef = useRef(doc); docRef.current = doc;
   const dirtyRef = useRef(dirty); dirtyRef.current = dirty;
@@ -75,11 +74,8 @@ export function Compose(p: Props) {
   // Another shot or photo: close the item (the guard already ran).
   useEffect(() => { close(); }, [shot.id, photo.id]);
 
-  function close() { setDoc(null); setSaved(null); setHistory({ past: [], future: [] }); setSelected(null); setTextEdit(null); setSave("idle"); }
-  function openDoc(d: Doc) {
-    setDoc(d); setSaved(d.isNew ? null : d); setHistory({ past: [], future: [] }); setSelected(null); setTextEdit(null); setSave("idle");
-    setStyle((s) => ({ ...s, color: d.kind === "sketch" ? (s.color === "#FFD60A" ? "#0B0B0C" : s.color) : s.color === "#0B0B0C" ? "#FFD60A" : s.color }));
-  }
+  function close() { setDoc(null); setSaved(null); ed.reset(false); setSave("idle"); }
+  function openDoc(d: Doc) { setDoc(d); setSaved(d.isNew ? null : d); ed.reset(d.kind === "sketch"); setSave("idle"); }
   async function open(kind: "overlay" | "sketch", id: string) {
     if (doc?.id === id) return;
     if (dirty && !(await p.guard.current?.())) return;
@@ -105,42 +101,6 @@ export function Compose(p: Props) {
       openDoc({ kind, id: crypto.randomUUID(), name: `Sketch ${n}`, sketchKind: null, description: "", shapes: [], aspect: 16 / 9, position: shot.sketches.length, isNew: true });
     }
   }
-
-  // ----- shapes + history -----
-  const setShapes = (shapes: Shape[]) => setDoc((d) => (d ? { ...d, shapes } : d));
-  const commit = (shapes: Shape[]) => {
-    const before = docRef.current?.shapes ?? [];
-    setHistory((h) => ({ past: [...h.past.slice(-99), before], future: [] }));
-    setShapes(shapes);
-  };
-  const undo = () => setHistory((h) => { const prev = h.past.at(-1); if (!prev || !docRef.current) return h; const cur = docRef.current.shapes; setShapes(prev); setSelected(null); return { past: h.past.slice(0, -1), future: [cur, ...h.future] }; });
-  const redo = () => setHistory((h) => { const next = h.future[0]; if (!next || !docRef.current) return h; const cur = docRef.current.shapes; setShapes(next); setSelected(null); return { past: [...h.past, cur], future: h.future.slice(1) }; });
-  const sel = doc?.shapes.find((s) => s.id === selected) ?? null;
-  const updateSel = (patch: Partial<Shape>) => { if (!doc || !sel) return; commit(doc.shapes.map((s) => (s.id === sel.id ? ({ ...s, ...patch } as Shape) : s))); };
-  const removeSel = () => { if (!doc || !sel) return; commit(doc.shapes.filter((s) => s.id !== sel.id)); setSelected(null); };
-  const nudge = (dx: number, dy: number) => { if (!doc || !sel) return false; commit(doc.shapes.map((s) => (s.id === sel.id ? moveBy(s, dx, dy) : s))); };
-  const textDone = (t: TextEdit) => {
-    setTextEdit(null);
-    if (!doc) return;
-    const text = t.value.trim();
-    if (t.id) { commit(text ? doc.shapes.map((s) => (s.id === t.id ? ({ ...s, text } as Shape) : s)) : doc.shapes.filter((s) => s.id !== t.id)); return; }
-    if (!text) return;
-    const s: Shape = { id: shapeId(), type: "text", at: t.at, text, size: style.textSize, color: style.color, width: 0, opacity: style.opacity };
-    commit([...doc.shapes, s]);
-    setSelected(s.id);
-  };
-  /** A style change applies to the selected shape too. */
-  const setStyleAnd = (patch: Partial<Style>) => {
-    setStyle((s) => ({ ...s, ...patch }));
-    if (!sel) return;
-    const sp: Partial<Shape> = {};
-    if (patch.color !== undefined) sp.color = patch.color;
-    if (patch.width !== undefined && sel.type !== "text" && sel.type !== "stencil") sp.width = patch.width;
-    if (patch.opacity !== undefined) sp.opacity = patch.opacity;
-    if (patch.fill !== undefined && (sel.type === "rect" || sel.type === "ellipse")) (sp as { fill?: boolean }).fill = patch.fill;
-    if (patch.stencil !== undefined && sel.type === "stencil") (sp as { stencil?: Stencil }).stencil = patch.stencil;
-    if (Object.keys(sp).length) updateSel(sp);
-  };
 
   // ----- save / delete / reorder -----
   async function doSave(): Promise<boolean> {
@@ -190,24 +150,13 @@ export function Compose(p: Props) {
   }
 
   useKeys({
+    ...drawingKeys(ed),
     "Mod+s": () => { void doSave(); },
-    "Mod+z": () => undo(),
-    "Mod+Z": () => redo(), // ⌘⇧Z: keys.ts names a shifted letter by its upper case
-    "Mod+y": () => redo(),
-    Escape: () => { if (textEdit) { setTextEdit(null); return; } if (selected) { setSelected(null); return; } if (dirty) { void p.guard.current?.().then((ok: boolean) => { if (ok) { close(); } }); return; } if (doc) { close(); return; } p.onBack(); },
-    Delete: () => removeSel(),
-    Backspace: () => removeSel(),
-    ArrowLeft: () => nudge(-0.005, 0),
-    ArrowRight: () => nudge(0.005, 0),
-    ArrowUp: () => nudge(0, -0.005),
-    ArrowDown: () => nudge(0, 0.005),
-    ...Object.fromEntries(TOOLS.map((t) => [t.key.toLowerCase(), () => setTool(t.id)])),
-    ...Object.fromEntries(COMPOSE_PALETTE.map((c, i) => [String((i + 1) % 10), () => setStyleAnd({ color: c })])),
+    Escape: () => { if (ed.textEdit) { ed.setTextEdit(null); return; } if (ed.selected) { ed.setSelected(null); return; } if (dirty) { void p.guard.current?.().then((ok: boolean) => { if (ok) { close(); } }); return; } if (doc) { close(); return; } p.onBack(); },
   });
 
   // ----- presentation (overlay) -----
   const setPresentation = (patch: Partial<Presentation>) => setDoc((d) => (d && d.kind === "overlay" ? { ...d, presentation: { ...d.presentation, ...patch } } : d));
-  const setLook = (patch: Partial<Look>) => setDoc((d) => (d && d.kind === "overlay" ? { ...d, look: { ...d.look, ...patch } } : d));
 
   // ----- surface geometry -----
   const layout = doc?.kind === "overlay" ? framedLayout(photo, doc.presentation.mode, presentationFrame(photo, doc.presentation)) : null;
@@ -238,17 +187,7 @@ export function Compose(p: Props) {
         <div class="f-stage__bar">
           {doc ? (
             <>
-              <Seg label="Tool" value={tool} onChange={setTool} options={TOOLS.map((t) => ({ id: t.id, icon: t.icon, title: `${t.label} (${t.key})` }))} />
-              <div class="swatches" role="group" aria-label="Colour">
-                {COMPOSE_PALETTE.map((c, i) => <button key={c} type="button" class={cx("swatch", style.color === c && "is-sel")} style={{ background: c }} title={`Colour ${(i + 1) % 10}`} aria-pressed={style.color === c} onClick={() => setStyleAnd({ color: c })}>{style.color === c && <Icon name="check" />}</button>)}
-              </div>
-              <Seg label="Stroke width" value={WIDTHS.find((w) => w.w === style.width)?.id ?? "m"} onChange={(id) => setStyleAnd({ width: WIDTHS.find((w) => w.id === id)!.w })} options={WIDTHS.map((w) => ({ id: w.id, label: w.label, title: `Stroke ${w.label}` }))} />
-              {(tool === "rect" || tool === "ellipse" || sel?.type === "rect" || sel?.type === "ellipse") && <Chip selected={style.fill} onClick={() => setStyleAnd({ fill: !style.fill })}>Fill</Chip>}
-              {(tool === "stencil" || sel?.type === "stencil") && <Seg label="Stencil" value={style.stencil} onChange={(s) => setStyleAnd({ stencil: s })} options={STENCILS.map((s) => ({ id: s, label: STENCIL_LABELS[s] }))} />}
-              <div class="btn-row" style={{ gap: "2px" }}>
-                <IconButton icon="undo" label="Undo (⌘Z)" title="Undo (⌘Z)" disabled={!history.past.length} onClick={undo} />
-                <IconButton icon="redo" label="Redo (⌘⇧Z)" title="Redo (⌘⇧Z)" disabled={!history.future.length} onClick={redo} />
-              </div>
+              <DrawToolbar ed={ed} />
               <ToolbarSpacer />
               <span class="meta">{doc.kind === "overlay" ? `${frameModeLabel(doc.presentation.mode)} · ${doc.presentation.label ?? "as shot"}` : `${sketchKindLabel(doc.sketchKind) || "Sketch"} · ${SKETCH_ASPECTS.find((a) => Math.abs(a.aspect - doc.aspect) < 0.01)?.id ?? doc.aspect.toFixed(2)}`}</span>
             </>
@@ -256,14 +195,15 @@ export function Compose(p: Props) {
             <>
               <span class="meta">{n > 1 ? `Overlays belong to one photo · photo ${p.photoIndex + 1} of ${n}` : "Overlays draw on the photo; sketches are free canvases"}</span>
               <ToolbarSpacer />
+              <FromTimelines shot={shot} photo={photo} kinds={["overlay", "sketch"]} onUpdated={p.onUpdated} />
               <Button kind="ghost" size="sm" kbd="Esc" onClick={p.onBack}>Back to photo</Button>
             </>
           )}
         </div>
         <div class="f-stage__view compose__view">
           {doc ? (
-            <DrawSurface shapes={doc.shapes} onPreview={setShapes} onCommit={commit} selected={selected} onSelect={setSelected} tool={tool} style={style}
-              canvasOf={canvasOf} aspect={aspect} maxHeight="calc(100vh - 300px)" background={background} sketch={doc.kind === "sketch"} textEdit={textEdit} onTextEdit={setTextEdit} onTextDone={textDone} />
+            <DrawSurface shapes={doc.shapes} onPreview={ed.preview} onCommit={ed.commit} selected={ed.selected} onSelect={ed.setSelected} tool={ed.tool} style={ed.style}
+              canvasOf={canvasOf} aspect={aspect} maxHeight="calc(100vh - 300px)" background={background} sketch={doc.kind === "sketch"} textEdit={ed.textEdit} onTextEdit={ed.setTextEdit} onTextDone={ed.textDone} />
           ) : (
             <Empty icon="draw" title={overlays.length + shot.sketches.length ? "Pick an overlay or sketch" : "Nothing composed yet"} actions={<><Button icon="layers-plus" onClick={() => void create("overlay")}>New overlay</Button><Button kind="secondary" icon="floor-plan" onClick={() => void create("sketch")}>New sketch</Button></>}>
               An overlay draws on this photo and can change its look; a sketch is a floor plan or diagram for the shot.
@@ -334,41 +274,11 @@ export function Compose(p: Props) {
                     {photo.source === "camera" && <FramingSelect photo={photo} value={doc.presentation} onChange={setPresentation} />}
                     <span class="meta">The drawing stays in place in every mode and rig; this is only how it opens.</span>
                   </div>
-                  <div class="f-sec">
-                    <div class="f-sec__head"><Icon name="tune-variant" />Look<span class="f-sec__aside"><button type="button" class="f-linkbtn" onClick={() => setDoc({ ...doc, look: { ...NEUTRAL_LOOK } })}>Reset</button></span></div>
-                    <Range label="Exposure" value={doc.look.exposure} min={-1} max={1} onChange={(v) => setLook({ exposure: v })} format={(v) => `${v > 0 ? "+" : ""}${(v * 3).toFixed(1)} EV`} />
-                    <Range label="Contrast" value={doc.look.contrast} min={-1} max={1} onChange={(v) => setLook({ contrast: v })} />
-                    <Range label="Saturation" value={doc.look.saturation} min={-1} max={1} onChange={(v) => setLook({ saturation: v })} />
-                    <Switch on={doc.look.bw} onClick={() => setLook({ bw: !doc.look.bw })}>Black and white</Switch>
-                    <div class="f-field">
-                      <span class="f-field__label">Tint</span>
-                      <div class="swatches">
-                        <button type="button" class={cx("swatch swatch--none", !doc.look.tint && "is-sel")} title="No tint" onClick={() => setLook({ tint: null })}>{!doc.look.tint && <Icon name="check" />}</button>
-                        {COMPOSE_PALETTE.map((c) => <button key={c} type="button" class={cx("swatch", doc.look.tint === c && "is-sel")} style={{ background: c }} title={c} onClick={() => setLook({ tint: c })}>{doc.look.tint === c && <Icon name="check" />}</button>)}
-                      </div>
-                    </div>
-                    {doc.look.tint && <Range label="Tint opacity" value={doc.look.tint_opacity} min={0} max={1} onChange={(v) => setLook({ tint_opacity: v })} />}
-                    <Range label="Vignette" value={doc.look.vignette} min={0} max={1} onChange={(v) => setLook({ vignette: v })} />
-                    <Range label="Softness" value={doc.look.blur} min={0} max={1} onChange={(v) => setLook({ blur: v })} />
-                  </div>
+                  <LookSection look={doc.look} onLook={(look) => setDoc({ ...doc, look })} />
                 </>
               )}
 
-              <div class="f-sec">
-                <div class="f-sec__head"><Icon name="shape-outline" />Shape<span class="f-sec__aside">{sel ? sel.type : "none selected"}</span></div>
-                {sel ? (
-                  <>
-                    <Range label="Opacity" value={sel.opacity} min={0} max={1} onChange={(v) => setStyleAnd({ opacity: v })} />
-                    {(sel.type === "text" || sel.type === "stencil") && <Range label="Size" value={sel.size} min={0.02} max={0.4} onChange={(v) => { updateSel({ size: v } as Partial<Shape>); setStyle((s) => (sel.type === "text" ? { ...s, textSize: v } : { ...s, stencilSize: v })); }} />}
-                    {sel.type === "stencil" && <Range label="Rotation" value={sel.rotation} min={-180} max={180} step={5} onChange={(v) => updateSel({ rotation: v } as Partial<Shape>)} format={(v) => `${Math.round(v)}°`} />}
-                    {sel.type === "text" && <Input sm value={sel.text} maxLength={200} aria-label="Text" onInput={(e) => updateSel({ text: (e.target as HTMLInputElement).value } as Partial<Shape>)} />}
-                    <div class="btn-row">
-                      <Button kind="secondary" size="sm" icon="content-duplicate" onClick={() => { const copy = moveBy({ ...sel, id: shapeId() }, 0.03, 0.03); commit([...doc.shapes, copy]); setSelected(copy.id); }}>Duplicate</Button>
-                      <Button kind="danger" size="sm" icon="delete-outline" kbd="Del" onClick={removeSel}>Remove</Button>
-                    </div>
-                  </>
-                ) : <span class="meta">Use the Select tool (<Kbd>V</Kbd>) and click a shape to change it. Colour and width in the bar apply to the next shape, or to the selected one.</span>}
-              </div>
+              <ShapeSection ed={ed} />
 
               <div class="f-sec">
                 <div class="f-sec__head"><Icon name="text-long" />Description</div>
@@ -380,25 +290,6 @@ export function Compose(p: Props) {
       </aside>
     </>
   );
-}
-
-/** A labelled range slider with its value. */
-function Range({ label, value, min, max, step = 0.01, onChange, format }: { label: string; value: number; min: number; max: number; step?: number; onChange: (v: number) => void; format?: (v: number) => string }) {
-  return (
-    <label class="f-range">
-      <span class="f-range__label">{label}<span class="num">{format ? format(value) : `${Math.round(((value - min) / (max - min)) * 100)} %`}</span></span>
-      <input type="range" min={min} max={max} step={step} value={value} onInput={(e) => onChange(Number((e.target as HTMLInputElement).value))} onDblClick={() => onChange(min < 0 ? 0 : min)} />
-    </label>
-  );
-}
-
-function moveBy(s: Shape, dx: number, dy: number): Shape {
-  const mv = (p: [number, number]): [number, number] => [p[0] + dx, p[1] + dy];
-  switch (s.type) {
-    case "path": return { ...s, points: s.points.map(mv) };
-    case "line": case "arrow": case "rect": case "ellipse": return { ...s, from: mv(s.from), to: mv(s.to) };
-    case "text": case "stencil": return { ...s, at: mv(s.at) };
-  }
 }
 
 export { emptyDrawing };

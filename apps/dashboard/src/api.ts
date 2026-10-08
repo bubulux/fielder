@@ -67,13 +67,16 @@ export interface Shot {
 /** A drawing + look over one photo (issue #12). `drawing` is only present when fetched alone. */
 export interface Overlay {
   id: string; photo_id: string; shot_id: string; name: string; description: string | null;
+  /** Set when the overlay belongs to a timeline clip (issue #31); shots never embed those. */
+  timeline_id?: string | null; clip_id?: string | null;
   drawing?: Drawing; presentation: Presentation; position: number;
   /** Flattened render (photo + look + drawing, photo-sized), or null before the first save with a render. */
   render_url: string | null; created_at: string; updated_at: string | null;
 }
 /** A free canvas on the shot (floor plan, lighting diagram, …). */
 export interface Sketch {
-  id: string; shot_id: string; name: string; kind: string | null; description: string | null;
+  /** A timeline clip's own sketch has no shot (issue #31); shots only embed their own. */
+  id: string; shot_id: string; timeline_id?: string | null; clip_id?: string | null; name: string; kind: string | null; description: string | null;
   drawing?: Drawing; aspect: number; position: number; render_url: string | null; created_at: string; updated_at: string | null;
 }
 export interface Project { id: string; name: string; notes: string | null; created_at: string; updated_at: string | null; shot_count: number; /** Extra-field definitions the project uses, in order. */ field_ids: string[] }
@@ -195,12 +198,19 @@ export const deleteDay = (id: string) => send<{ deleted: string }>("DELETE", `/a
  * A rough cut of a project out of its photos (issue #12, part 2). A clip without a photo is a
  * placeholder (issue #31): `title` says what is wanted there; overlay and presentation are null.
  */
-export interface TimelineClip { id: string; photo_id: string | null; shot_id: string | null; /** Seen through this overlay's render; null = the photo as is. */ overlay_id: string | null; presentation: Presentation | null; duration_ms: number; notes: string | null; title: string | null }
-export interface Timeline { id: string; project_id: string; name: string; notes: string | null; /** Forces one presentation mode on every clip; null = per clip. */ lock_mode: Presentation["mode"] | null; created_at: string; updated_at: string | null; clips: TimelineClip[] }
+export interface TimelineClip { id: string; photo_id: string | null; shot_id: string | null; /** Seen through this overlay's render; null = the photo as is. */ overlay_id: string | null; presentation: Presentation | null; duration_ms: number; notes: string | null; title: string | null; /** A placeholder with a sketch is a sketch clip. */ sketch_id: string | null }
+export interface Timeline {
+  id: string; project_id: string; name: string; notes: string | null; /** Forces one presentation mode on every clip; null = per clip. */ lock_mode: Presentation["mode"] | null; created_at: string; updated_at: string | null; clips: TimelineClip[];
+  /** The clips' own overlays and sketches (made inline, issue #31), without drawings; read-only for the PUT. */
+  overlays: Overlay[]; sketches: Sketch[];
+}
 export const fetchTimelines = (projectId: string) => get<{ timelines: Timeline[] }>(`/api/timelines?project_id=${projectId}`).then((r) => r.timelines);
 /** Replaces the whole timeline. Clips of photos that left the project are dropped by the server. */
 export const putTimeline = (t: Omit<Timeline, "created_at" | "updated_at">) =>
-  send<{ timeline: Timeline }>("PUT", `/api/timelines/${t.id}`, { project_id: t.project_id, name: t.name, notes: t.notes, lock_mode: t.lock_mode, clips: t.clips.map((c) => ({ id: c.id, photo_id: c.photo_id, overlay_id: c.overlay_id, presentation: c.presentation, duration_ms: c.duration_ms, notes: c.notes, title: c.title })) }).then((r) => r.timeline);
+  send<{ timeline: Timeline }>("PUT", `/api/timelines/${t.id}`, { project_id: t.project_id, name: t.name, notes: t.notes, lock_mode: t.lock_mode, clips: t.clips.map((c) => ({ id: c.id, photo_id: c.photo_id, overlay_id: c.overlay_id, presentation: c.presentation, duration_ms: c.duration_ms, notes: c.notes, title: c.title, sketch_id: c.sketch_id })) }).then((r) => r.timeline);
+/** A clip's own re-frame, overlay or sketch becomes the shot's (issue #31). */
+export const promoteClip = (timelineId: string, clipId: string, body: { what: "framing" | "overlay" | "sketch"; name?: string; shot_id?: string; sketch_id?: string }) =>
+  send<{ timeline: Timeline; shot: Shot }>("POST", `/api/timelines/${timelineId}/clips/${clipId}/promote`, body);
 export const deleteTimeline = (id: string) => send<{ deleted: string }>("DELETE", `/api/timelines/${id}`).then(() => undefined);
 
 export const fetchPresets = () => get<{ presets: Preset[] }>("/api/presets").then((r) => r.presets);
@@ -267,6 +277,15 @@ export interface SketchSave { shot_id: string; name: string; kind: string | null
 export const putSketch = (id: string, m: SketchSave, render: Blob | null) => putComposed<{ sketch: Sketch & { drawing: Drawing }; shot: Shot }>(`/api/sketches/${id}`, m, render);
 export const patchSketch = (id: string, m: { name?: string; kind?: string | null; description?: string | null; position?: number }) => send<{ sketch: Sketch; shot: Shot }>("PATCH", `/api/sketches/${id}`, m);
 export const deleteSketch = (id: string) => send<{ deleted: string; shot: Shot }>("DELETE", `/api/sketches/${id}`);
+
+// ---------- A timeline clip's own overlay and sketch (issue #31) ----------
+export interface ClipOwner { timeline_id: string; clip_id: string }
+export const putClipOverlay = (id: string, m: OverlaySave & ClipOwner, render: Blob | null) => putComposed<{ overlay: Overlay & { drawing: Drawing }; shot: Shot }>(`/api/overlays/${id}`, m, render);
+export const putClipSketch = (id: string, m: Omit<SketchSave, "shot_id"> & ClipOwner, render: Blob | null) => putComposed<{ sketch: Sketch & { drawing: Drawing }; shot: null }>(`/api/sketches/${id}`, m, render);
+export const deleteClipSketch = (id: string) => send<{ deleted: string; shot: null }>("DELETE", `/api/sketches/${id}`);
+/** Copy an overlay / sketch as another clip's own (a duplicated clip gets its own drawing). */
+export const copyOverlay = (from: string, to: string, owner: ClipOwner) => send<{ overlay: Overlay }>("POST", `/api/overlays/${from}/copy`, { id: to, ...owner }).then((r) => r.overlay);
+export const copySketch = (from: string, to: string, owner: ClipOwner) => send<{ sketch: Sketch }>("POST", `/api/sketches/${from}/copy`, { id: to, ...owner }).then((r) => r.sketch);
 
 export const fetchLocations = () => get<{ locations: Location[] }>("/api/locations").then((r) => r.locations);
 /** Upsert; a 409 carries body.existing_id when another location already has the name. */
