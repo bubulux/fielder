@@ -306,6 +306,8 @@ button { font: inherit; }
 .rw-used:hover { background: var(--accent-hover); }
 .rw-used .mdi { font-size: 15px; }
 .rw-card .f-card__img { background: var(--photo-bg); }
+/* Hover scrub on sequence cards (issue #39): a fixed red line over the photo (recording red, like the phone; black outline for light photos), under the badges. */
+.scrub__line { position: absolute; top: 0; bottom: 0; width: 2px; margin-left: -1px; background: #D0121B; box-shadow: 0 0 0 1px #000; pointer-events: none; }
 .rw-card__body { flex-direction: row; align-items: center; gap: 8px; }
 .rw-card__txt { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
 .rw-card__acts { flex: none; display: flex; gap: 4px; }
