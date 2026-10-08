@@ -6,7 +6,7 @@ import { guardCut, useClipEditing, type EditKind } from "./ClipEditing";
 import { afterG, useKeys } from "./keys";
 import type { CutPosition } from "./router";
 import { useSettings } from "./settings";
-import { ClipMenu, ClipPanel, clock, duplicateUnit, insertAfterUnit, insertShot, moveUnitTo, normalizeGroups, restorePhotos, setGroup, stepUnit, ungroup, withoutClip, CutPreview, DRAWER_RESIZE, LockSelect, TimelineRail, newPlaceholder, resolveClips, setShotState, Strip, useCut, useCutUrl, useTimelineStore, type ResolvedClip } from "./TimelineParts";
+import { ClipMenu, ClipPanel, clock, CutDecision, duplicateUnit, insertAfterUnit, insertShot, moveUnitTo, normalizeGroups, restorePhotos, setGroup, stepUnit, ungroup, withoutClip, CutPreview, DRAWER_RESIZE, LockSelect, TimelineRail, newPlaceholder, resolveClips, setShotState, Strip, useCut, useCutUrl, useTimelineStore, type ResolvedClip } from "./TimelineParts";
 import { Banner, Button, Checkbox, Empty, Field, Icon, IconButton, Input, Kbd, ListRow, MenuItem, Panel, PanelBody, PanelHead, Popover, SaveStatus, Select, toast, Toolbar, ToolbarTitle, useCtxMenu, type SaveState } from "./ui";
 
 /**
@@ -30,7 +30,7 @@ interface Props {
   at?: CutPosition | null;
   onTimeline: (id: string | null) => void;
   onOpen: (s: Shot, list: Shot[]) => void;
-  onUpdated: (s: Shot) => void;
+  onUpdated: (s: Shot | Shot[]) => void;
 }
 
 export function TimelinePage({ project, projects, onPickProject, shots, presets, mask, timelineId, at, onTimeline, onOpen, onUpdated }: Props) {
@@ -72,7 +72,7 @@ export function TimelinePage({ project, projects, onPickProject, shots, presets,
   );
 }
 
-interface EditorProps { timeline: Timeline; at?: CutPosition | null; shots: Shot[]; presets: Preset[]; mask: MaskMode; onChange: (t: Timeline) => void; onDelete: () => void; onOpen: (s: Shot, list: Shot[]) => void; onUpdated: (s: Shot) => void; save: SaveState; onRetry: () => void; error: string | null }
+interface EditorProps { timeline: Timeline; at?: CutPosition | null; shots: Shot[]; presets: Preset[]; mask: MaskMode; onChange: (t: Timeline) => void; onDelete: () => void; onOpen: (s: Shot, list: Shot[]) => void; onUpdated: (s: Shot | Shot[]) => void; save: SaveState; onRetry: () => void; error: string | null }
 
 function Editor({ timeline: t, at, shots, presets, mask, onChange, onDelete, onOpen, onUpdated, save, onRetry, error }: EditorProps) {
   const byId = useMemo(() => new Map(shots.map((s) => [s.id, s])), [shots]);
@@ -151,6 +151,7 @@ function Editor({ timeline: t, at, shots, presets, mask, onChange, onDelete, onO
             <Field label="Name" style={{ flex: 1, minWidth: "220px" }}><Input value={t.name} maxLength={120} style={{ fontWeight: 700 }} onInput={(e) => onChange({ ...t, name: (e.target as HTMLInputElement).value || "Untitled" })} /></Field>
             <Field label="Length"><span class="f-input num" style={{ fontWeight: 700, padding: "0 10px", display: "inline-flex", alignItems: "center" }}>{clock(total)} · {clips.length} clip{clips.length === 1 ? "" : "s"}</span></Field>
             <Field label="Presentation" as="div"><LockSelect value={t.lock_mode} onChange={(m) => onChange({ ...t, lock_mode: m })} /></Field>
+            <CutDecision clips={clips} onUpdated={onUpdated} />
             <div class="plan-head__status">
               <SaveStatus state={save} onRetry={onRetry} />
               <div class="menu-anchor">
