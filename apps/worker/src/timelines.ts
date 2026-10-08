@@ -2,6 +2,8 @@ import { PRESENTATION_MODES, validatePresentation, type Presentation } from "@fi
 import { assertNumber, assertString, assertUuid, HttpError, json, readJson, type Router } from "./http.ts";
 import type { Ctx } from "./index.ts";
 import { assertProjectExists } from "./projects.ts";
+import { clipComposeFor, deleteClipCompose } from "./compose.ts";
+import { registerPromote } from "./promote.ts";
 
 /**
  * Timelines (issue #12, part 2): a project's rough cuts out of scouted photos. Dashboard only.
@@ -11,21 +13,32 @@ import { assertProjectExists } from "./projects.ts";
  * shot is dropped onto it. The phone never reads these.
  */
 
-interface TimelineRow { id: string; project_id: string; name: string; notes: string | null; lock_mode: string | null; created_at: string; updated_at: string | null }
-interface ClipRow { id: string; timeline_id: string; position: number; photo_id: string | null; shot_id: string | null; overlay_id: string | null; presentation: string | null; duration_ms: number; notes: string | null; title: string | null }
+export interface TimelineRow { id: string; project_id: string; name: string; notes: string | null; lock_mode: string | null; created_at: string; updated_at: string | null }
+interface ClipRow { id: string; timeline_id: string; position: number; photo_id: string | null; shot_id: string | null; overlay_id: string | null; presentation: string | null; duration_ms: number; notes: string | null; title: string | null; sketch_id: string | null }
 
 const MAX_CLIPS = 500;
 const MIN_MS = 100, MAX_MS = 3_600_000;
 
-const clipToApi = (c: ClipRow) => ({ id: c.id, photo_id: c.photo_id, shot_id: c.shot_id, overlay_id: c.overlay_id, presentation: c.presentation === null ? null : JSON.parse(c.presentation) as unknown, duration_ms: c.duration_ms, notes: c.notes, title: c.title });
+const clipToApi = (c: ClipRow) => ({ id: c.id, photo_id: c.photo_id, shot_id: c.shot_id, overlay_id: c.overlay_id, presentation: c.presentation === null ? null : JSON.parse(c.presentation) as unknown, duration_ms: c.duration_ms, notes: c.notes, title: c.title, sketch_id: c.sketch_id });
 
-async function withClips(env: Ctx["env"], rows: TimelineRow[]) {
+export async function withClips(env: Ctx["env"], rows: TimelineRow[]) {
   if (rows.length === 0) return [];
   const { results } = await env.DB.prepare(
     `SELECT c.*, ph.shot_id FROM timeline_clips c LEFT JOIN photos ph ON ph.id = c.photo_id
      WHERE c.timeline_id IN (SELECT value FROM json_each(?1)) ORDER BY c.timeline_id, c.position`,
   ).bind(JSON.stringify(rows.map((t) => t.id))).all<ClipRow>();
-  return rows.map((t) => ({ ...t, clips: results.filter((c) => c.timeline_id === t.id).map(clipToApi) }));
+  const own = await clipComposeFor(env, rows.map((t) => t.id));
+  // The clips' own overlays and sketches (issue #31) come along, without drawings.
+  return rows.map((t) => ({ ...t, clips: results.filter((c) => c.timeline_id === t.id).map(clipToApi), overlays: own.overlays.get(t.id) ?? [], sketches: own.sketches.get(t.id) ?? [] }));
+}
+
+/** Reads + deletes for the clip-owned overlays and sketches matching `where` (on both tables). */
+function ownedBy(env: Ctx["env"], where: string, args: unknown[]) {
+  return {
+    overlays: env.DB.prepare(`SELECT render_key AS k FROM overlays WHERE ${where}`).bind(...args),
+    sketches: env.DB.prepare(`SELECT render_key AS k FROM sketches WHERE ${where}`).bind(...args),
+    deletes: [env.DB.prepare(`DELETE FROM overlays WHERE ${where}`).bind(...args), env.DB.prepare(`DELETE FROM sketches WHERE ${where}`).bind(...args)],
+  };
 }
 
 /** How many timelines (of any project) hold a photo of this shot; for the delete confirmation. */
@@ -70,8 +83,9 @@ export function registerTimelineRoutes(r: Router<Ctx>) {
         notes: opt(o.notes, `clips[${i}].notes`, 1000),
       };
       if (o.photo_id === undefined || o.photo_id === null) {
-        // A placeholder holds the spot: no photo, overlay or presentation, but a title.
-        return { ...base, photo_id: null, overlay_id: null, presentation: null, title: assertString(o.title, `clips[${i}].title`, 120) };
+        // A placeholder holds the spot: no photo, overlay or presentation, but a title. With a sketch it is a sketch clip.
+        const sketchId = o.sketch_id === undefined || o.sketch_id === null ? null : assertUuid(o.sketch_id, `clips[${i}].sketch_id`);
+        return { ...base, photo_id: null, overlay_id: null, presentation: null, title: assertString(o.title, `clips[${i}].title`, 120), sketch_id: sketchId as string | null };
       }
       const perr = validatePresentation(o.presentation);
       if (perr) throw new HttpError(400, `clips[${i}].presentation: ${perr}`);
@@ -81,6 +95,7 @@ export function registerTimelineRoutes(r: Router<Ctx>) {
         overlay_id: o.overlay_id === undefined || o.overlay_id === null ? null : assertUuid(o.overlay_id, `clips[${i}].overlay_id`),
         presentation: JSON.stringify(o.presentation) as string | null,
         title: null as string | null,
+        sketch_id: null as string | null,
       };
     });
     if (new Set(clips.map((c) => c.id)).size !== clips.length) throw new HttpError(400, "a clip id is listed twice");
@@ -93,10 +108,27 @@ export function registerTimelineRoutes(r: Router<Ctx>) {
       clips = clips.filter((c) => c.photo_id === null || ok.has(c.photo_id));
       const overlayIds = [...new Set(clips.map((c) => c.overlay_id).filter((x): x is string => !!x))];
       if (overlayIds.length) {
-        const owned = new Map((await env.DB.prepare("SELECT id, photo_id FROM overlays WHERE id IN (SELECT value FROM json_each(?1))").bind(JSON.stringify(overlayIds)).all<{ id: string; photo_id: string }>()).results.map((o) => [o.id, o.photo_id]));
-        for (const c of clips) if (c.overlay_id && owned.get(c.overlay_id) !== c.photo_id) c.overlay_id = null;
+        // A clip may show its photo's shot overlays or its own one, never another clip's.
+        const rows = new Map((await env.DB.prepare("SELECT id, photo_id, timeline_id, clip_id FROM overlays WHERE id IN (SELECT value FROM json_each(?1))").bind(JSON.stringify(overlayIds)).all<{ id: string; photo_id: string; timeline_id: string | null; clip_id: string | null }>()).results.map((o) => [o.id, o]));
+        for (const c of clips) {
+          const o = c.overlay_id ? rows.get(c.overlay_id) : undefined;
+          if (c.overlay_id && (!o || o.photo_id !== c.photo_id || (o.timeline_id !== null && (o.timeline_id !== tid || o.clip_id !== c.id)))) c.overlay_id = null;
+        }
       }
     }
+    const sketchIds = [...new Set(clips.map((c) => c.sketch_id).filter((x): x is string => !!x))];
+    if (sketchIds.length) {
+      // A sketch clip shows its own sketch or a sketch of a shot in the project; anything else falls back to a placeholder.
+      const rows = new Map((await env.DB.prepare("SELECT sk.id, sk.timeline_id, sk.clip_id, s.project_id FROM sketches sk LEFT JOIN shots s ON s.id = sk.shot_id WHERE sk.id IN (SELECT value FROM json_each(?1))").bind(JSON.stringify(sketchIds)).all<{ id: string; timeline_id: string | null; clip_id: string | null; project_id: string | null }>()).results.map((x) => [x.id, x]));
+      for (const c of clips) {
+        const k = c.sketch_id ? rows.get(c.sketch_id) : undefined;
+        if (c.sketch_id && (!k || (k.timeline_id !== null ? k.timeline_id !== tid || k.clip_id !== c.id : k.project_id !== projectId))) c.sketch_id = null;
+      }
+    }
+    // Clips that leave the timeline take their own overlays and sketches along (clips not yet saved have none).
+    const before = (await env.DB.prepare("SELECT id FROM timeline_clips WHERE timeline_id = ?1").bind(tid).all<{ id: string }>()).results.map((x) => x.id);
+    const kept = new Set(clips.map((c) => c.id));
+    const removed = JSON.stringify(before.filter((x) => !kept.has(x)));
     const now = new Date().toISOString();
     await env.DB.batch([
       env.DB.prepare(
@@ -104,17 +136,22 @@ export function registerTimelineRoutes(r: Router<Ctx>) {
          ON CONFLICT(id) DO UPDATE SET project_id = ?2, name = ?3, notes = ?4, lock_mode = ?5, updated_at = ?6`,
       ).bind(tid, projectId, name, notes, lockMode, now),
       env.DB.prepare("DELETE FROM timeline_clips WHERE timeline_id = ?1").bind(tid),
-      ...clips.map((c, i) => env.DB.prepare("INSERT INTO timeline_clips (id, timeline_id, position, photo_id, overlay_id, presentation, duration_ms, notes, title) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)")
-        .bind(c.id, tid, i, c.photo_id, c.overlay_id, c.presentation, c.duration_ms, c.notes, c.title)),
+      ...clips.map((c, i) => env.DB.prepare("INSERT INTO timeline_clips (id, timeline_id, position, photo_id, overlay_id, presentation, duration_ms, notes, title, sketch_id) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)")
+        .bind(c.id, tid, i, c.photo_id, c.overlay_id, c.presentation, c.duration_ms, c.notes, c.title, c.sketch_id)),
     ]);
+    if (removed !== "[]") await deleteClipCompose(env, ownedBy(env, "timeline_id = ?1 AND clip_id IN (SELECT value FROM json_each(?2))", [tid, removed]));
     const row = await env.DB.prepare("SELECT * FROM timelines WHERE id = ?1").bind(tid).first<TimelineRow>();
     return json({ timeline: (await withClips(env, [row!]))[0] });
   });
 
   r.on("DELETE", "/api/timelines/:id", async ({ env }, { id }) => {
     const tid = assertUuid(id, "id");
-    const res = await env.DB.prepare("DELETE FROM timelines WHERE id = ?1").bind(tid).run();
-    if (!res.meta.changes) throw new HttpError(404, "timeline not found");
+    if (!(await env.DB.prepare("SELECT 1 FROM timelines WHERE id = ?1").bind(tid).first())) throw new HttpError(404, "timeline not found");
+    // The clips' own overlays and sketches go first (with their renders); the timeline then cascades the rest.
+    await deleteClipCompose(env, ownedBy(env, "timeline_id = ?1", [tid]));
+    await env.DB.prepare("DELETE FROM timelines WHERE id = ?1").bind(tid).run();
     return json({ deleted: tid });
   });
+
+  registerPromote(r);
 }

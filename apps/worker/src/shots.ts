@@ -1,5 +1,5 @@
 import { CAMERA_SUPPORTS, INT_EXT, isOneOf, LIGHT, PHOTO_SOURCES, MAX_DESCRIPTION, MOVEMENTS, patchExtra, pruneExtra, SHOT_SIZES, SHOT_STATES, validateExtra, validateValues, WEATHER, type Extra, type FieldDef } from "@fielder/vocab";
-import { composeFor, renderKeysOf, type OverlayApi, type SketchApi } from "./compose.ts";
+import { clipOverlaysLeaving, composeFor, deleteClipCompose, renderKeysOf, type OverlayApi, type SketchApi } from "./compose.ts";
 import { framingsFor, type FramingApi } from "./framings.ts";
 import { projectFieldDefs } from "./fields.ts";
 import { assertEnum, assertIsoTimestamp, assertNumber, assertString, assertUuid, HttpError, json, readJson, type Router } from "./http.ts";
@@ -427,6 +427,8 @@ export function registerShotRoutes(r: Router<Ctx>) {
       env.DB.prepare("DELETE FROM day_shots WHERE shot_id = ?1 AND day_id IN (SELECT id FROM shooting_days WHERE project_id != ?2)").bind(sid, movedTo),
       env.DB.prepare("DELETE FROM timeline_clips WHERE photo_id IN (SELECT id FROM photos WHERE shot_id = ?1) AND timeline_id IN (SELECT id FROM timelines WHERE project_id != ?2)").bind(sid, movedTo),
     ]);
+    // Their clips' own overlays go with them (issue #31).
+    if (movedTo) await deleteClipCompose(env, clipOverlaysLeaving(env, JSON.stringify([sid]), movedTo));
     return json({ shot: await loadShot(env, sid) });
   });
 
@@ -490,6 +492,7 @@ export function registerShotRoutes(r: Router<Ctx>) {
       stmts.push(env.DB.prepare("DELETE FROM timeline_clips WHERE photo_id IN (SELECT id FROM photos WHERE shot_id IN (SELECT value FROM json_each(?1))) AND timeline_id IN (SELECT id FROM timelines WHERE project_id != ?2)").bind(list, movedTo));
     }
     await env.DB.batch(stmts);
+    if (movedTo) await deleteClipCompose(env, clipOverlaysLeaving(env, list, movedTo));
 
     const { results } = await env.DB.prepare(`${SHOT_SQL} WHERE s.id IN (SELECT value FROM json_each(?1))`).bind(list).all<ShotRow>();
     const [photos, compose] = await Promise.all([photosFor(env, ids), extrasFor(env, ids)]);

@@ -63,15 +63,19 @@ Shots embed both lists without the drawing; see [compose](features/compose.md) f
 | GET | `/api/overlays/:id/render` | The render; `render_url` on the overlay carries `?v=<updated_at>`, so it is cached as immutable |
 | GET / PUT / PATCH / DELETE | `/api/sketches/:id` | Same, with `{ shot_id, name, kind?, description?, drawing (look null), aspect (0.25..4), position? }`; PATCH takes `kind` too |
 | GET | `/api/sketches/:id/render` | |
+| POST | `/api/overlays/:id/copy` · `/api/sketches/:id/copy` | `{ id, timeline_id, clip_id }`: copy (with the render) as a timeline clip's own overlay / sketch; used when a clip is duplicated. `201` |
+
+**Clip-owned overlays and sketches** (issue #31): with `timeline_id` + `clip_id` in the PUT body (instead of `shot_id` for a sketch) the row belongs to that timeline clip. The owner is fixed at creation (`409` on a change); the timeline must be in the photo's project. Shots never embed clip-owned rows, so the phone does not see them; they carry `timeline_id`/`clip_id` (null when shot-owned). A sketch PUT/PATCH/DELETE of a clip-owned sketch returns `shot: null`.
 
 ## Timelines (`timelines.ts`)
 
 | Method | Path | Notes |
 | --- | --- | --- |
-| GET | `/api/timelines?project_id=` | Each with `clips: [{ id, photo_id, shot_id, overlay_id, presentation, duration_ms, notes, title }]` in order. A placeholder clip has `photo_id`/`shot_id`/`overlay_id`/`presentation` null and a `title`. |
+| GET | `/api/timelines?project_id=` | Each with `clips: [{ id, photo_id, shot_id, overlay_id, presentation, duration_ms, notes, title, sketch_id }]` in order, plus `overlays` and `sketches`: the clips' own (issue #31), without drawings. A placeholder clip has `photo_id`/`shot_id`/`overlay_id`/`presentation` null and a `title`. |
 | GET | `/api/timelines/:id` | |
-| PUT | `/api/timelines/:id` | `{ project_id, name, notes?, lock_mode?, clips: [...] }` replaces the whole timeline (≤ 500 clips). `lock_mode` (a presentation mode or null) forces one mode on every clip. A clip is `{ id, photo_id, overlay_id?, presentation, duration_ms, notes? }` or a placeholder `{ id, title, duration_ms, notes? }`. Clips whose photo is not in the project are dropped silently; an overlay that is not the photo's is nulled. |
-| DELETE | `/api/timelines/:id` | |
+| PUT | `/api/timelines/:id` | `{ project_id, name, notes?, lock_mode?, clips: [...] }` replaces the whole timeline (≤ 500 clips). `lock_mode` (a presentation mode or null) forces one mode on every clip. A clip is `{ id, photo_id, overlay_id?, presentation, duration_ms, notes? }` or a placeholder `{ id, title, duration_ms, notes? }`; a placeholder with `sketch_id` is a **sketch clip**. A clip may show a shot overlay of its photo or its own overlay, never another clip's (nulled); a sketch clip's sketch must be its own or a shot sketch in the project (else it falls back to a placeholder). Clips that leave the timeline take their own overlays and sketches (and renders) along. Clips whose photo is not in the project are dropped silently; an overlay that is not the photo's is nulled. |
+| DELETE | `/api/timelines/:id` | Deletes the clips' own overlays and sketches with their renders too. |
+| POST | `/api/timelines/:id/clips/:clip/promote` | `{ what: "framing" \| "overlay" \| "sketch", name?, shot_id? }`: the clip's own re-frame becomes a saved framing of its photo (an identical framing — same rig, lens and frame — is linked instead; the clip then references it), its own overlay becomes the photo's (the clip keeps pointing at it), or a sketch clip's own sketch becomes a sketch of `shot_id` (a shot in the project). The clip must be saved. → `{ timeline, shot }` |
 
 ## Locations, rigs, views
 
