@@ -8,7 +8,7 @@ export const LIBRARY_SECTIONS: readonly LibrarySection[] = ["projects", "fields"
 export type Route =
   | { page: "shots"; viewId: string | null }
   | { page: "shot"; shotId: string; stage: Stage }
-  | { page: "review" }
+  | { page: "review"; timelineId: string | null }
   | { page: "plan"; dayId: string | null }
   | { page: "timeline"; timelineId: string | null }
   | { page: "settings" }
@@ -27,7 +27,7 @@ export function parseRoute(hash: string): Route {
         return { page: "shot", shotId: parts[1], stage: st === "rigs" || st === "position" || st === "compose" ? st : "photo" };
       }
       return { page: "shots", viewId: q.get("view") };
-    case "review": return { page: "review" };
+    case "review": return { page: "review", timelineId: parts[1] ?? null };
     case "plan": return { page: "plan", dayId: parts[1] ?? null };
     case "timeline": return { page: "timeline", timelineId: parts[1] ?? null };
     case "settings": return { page: "settings" };
@@ -43,7 +43,7 @@ export function routeHash(r: Route): string {
   switch (r.page) {
     case "shots": return r.viewId ? `#/shots?view=${r.viewId}` : "#/shots";
     case "shot": return `#/shots/${r.shotId}${r.stage === "photo" ? "" : `?stage=${r.stage}`}`;
-    case "review": return "#/review";
+    case "review": return r.timelineId ? `#/review/${r.timelineId}` : "#/review";
     case "plan": return r.dayId ? `#/plan/${r.dayId}` : "#/plan";
     case "timeline": return r.timelineId ? `#/timeline/${r.timelineId}` : "#/timeline";
     case "settings": return "#/settings";

@@ -12,6 +12,8 @@ D1 (SQLite) database `fielder-db`, schema in `apps/worker/migrations/`. Images l
 | `0004_shooting_days.sql` | `shooting_days`, `day_shots` |
 | `0005_capture_flow.sql` | `shots.shot_size`, `camera_support`, `movement`; `photos` rebuilt with nullable `lat`/`lon` (copied row by row, both or neither set) |
 | `0006_compose.sql` | `shots.description`; `overlays`, `sketches` ([compose](features/compose.md)) |
+| `0012_timeline_lock.sql` | `timelines.lock_mode`: one presentation mode forced on every clip ([timeline](features/timeline.md)) |
+| `0011_placeholder_clips.sql` | `timeline_clips` rebuilt (copied): nullable `photo_id`/`presentation`, new `title` for placeholder clips ([timeline](features/timeline.md)) |
 | `0010_framings.sql` | `framings`; `photos.root_framing_id` ([framing](features/rig-explorer.md)) |
 | `0009_photo_source.sql` | `photos.source` (camera · upload · drawn) ([new shot](features/new-shot.md)) |
 | `0008_location_positions.sql` | `locations.lat`, `lon`; `shots.position_from_location` ([positions](features/positions.md)) |
@@ -51,7 +53,7 @@ Add a new numbered file for every change; never edit one that was applied to pro
 
 `shooting_days(id, project_id → CASCADE, date YYYY-MM-DD, title, notes, …)` and `day_shots(day_id, shot_id, position, planned_time HH:MM, notes)`.
 
-`timelines(id, project_id → projects CASCADE, name, notes, created_at, updated_at)` and `timeline_clips(id, timeline_id → CASCADE, position, photo_id → photos CASCADE, overlay_id → overlays SET NULL, presentation JSON, duration_ms 100..3600000, notes)`. See [timeline](features/timeline.md).
+`timelines(id, project_id → projects CASCADE, name, notes, lock_mode, created_at, updated_at)` and `timeline_clips(id, timeline_id → CASCADE, position, photo_id → photos CASCADE, overlay_id → overlays SET NULL, presentation JSON, duration_ms 100..3600000, notes, title)`. A clip is either a photo clip (`photo_id` + `presentation`) or a placeholder (`title` only, no photo/overlay/presentation; a CHECK enforces the two shapes). See [timeline](features/timeline.md).
 
 ## JSON shapes on photos
 
