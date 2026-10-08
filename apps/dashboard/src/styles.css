@@ -15,6 +15,9 @@ html { background: var(--bg); color: var(--text); font: var(--weight-regular) va
 ::-webkit-scrollbar-thumb:hover { background-color: var(--border); }
 ::-webkit-scrollbar-thumb:active { background-color: var(--accent); }
 ::-webkit-scrollbar-button { display: none; }
+/* The scrollbar's room is always kept where content scrolls, so a scrollbar appearing never nudges the layout: a stable gutter for vertical scrolling, a permanent (clear) track for the horizontal strips. The narrow rails stay without one (it would push their icons off-centre). */
+.f-scroll, .f-panel__body, .f-modal__body, .f-sheet__body, .newshot__files, .gate__list { scrollbar-gutter: stable; }
+.tl-strip-wrap, .f-strip { overflow-x: scroll; overflow-y: hidden; }
 :focus-visible { outline: var(--focus-width) solid var(--focus); outline-offset: var(--focus-offset); }
 ::selection { background: var(--accent); color: var(--on-accent); }
 a { color: var(--accent); text-underline-offset: 2px; }
