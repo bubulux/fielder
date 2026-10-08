@@ -1,5 +1,6 @@
 /** Same-origin API; the Access session cookie is sent automatically. */
-import type { Framing, PhotoSource, Drawing, Extra, FieldDef, FieldDefinition, FilterGroup, Presentation } from "@fielder/vocab";
+import type { Framing, PhotoSource, Drawing, Extra, FieldDef, FieldDefinition, FilterGroup, Presentation, ClipGroup } from "@fielder/vocab";
+export type { ClipGroup } from "@fielder/vocab";
 export type { FieldDefinition };
 export type ShotState = "unreviewed" | "approved" | "archived";
 
@@ -198,9 +199,11 @@ export const deleteDay = (id: string) => send<{ deleted: string }>("DELETE", `/a
  * A rough cut of a project out of its photos (issue #12, part 2). A clip without a photo is a
  * placeholder (issue #31): `title` says what is wanted there; overlay and presentation are null.
  */
-export interface TimelineClip { id: string; photo_id: string | null; shot_id: string | null; /** Seen through this overlay's render; null = the photo as is. */ overlay_id: string | null; presentation: Presentation | null; duration_ms: number; notes: string | null; title: string | null; /** A placeholder with a sketch is a sketch clip. */ sketch_id: string | null }
+export interface TimelineClip { id: string; photo_id: string | null; shot_id: string | null; /** Seen through this overlay's render; null = the photo as is. */ overlay_id: string | null; presentation: Presentation | null; duration_ms: number; notes: string | null; title: string | null; /** A placeholder with a sketch is a sketch clip. */ sketch_id: string | null; /** The sequence block it belongs to (issue #37). */ group_id: string | null }
 export interface Timeline {
   id: string; project_id: string; name: string; notes: string | null; /** Forces one presentation mode on every clip; null = per clip. */ lock_mode: Presentation["mode"] | null; created_at: string; updated_at: string | null; clips: TimelineClip[];
+  /** Sequence blocks' length settings (issue #37); the server recomputes a "total" block's clip durations. */
+  groups: ClipGroup[];
   /** The clips' own overlays and sketches (made inline, issue #31), without drawings; read-only for the PUT. */
   overlays: Overlay[]; sketches: Sketch[];
 }

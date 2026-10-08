@@ -6,7 +6,7 @@ import { guardCut, useClipEditing, type EditKind } from "./ClipEditing";
 import { afterG, useKeys } from "./keys";
 import type { CutPosition } from "./router";
 import { useSettings } from "./settings";
-import { ClipMenu, ClipPanel, clock, copyClip, CutPreview, DRAWER_RESIZE, LockSelect, TimelineRail, newPlaceholder, resolveClips, setShotState, Strip, useCut, useCutUrl, useTimelineStore, clipsOfShot, type ResolvedClip } from "./TimelineParts";
+import { ClipMenu, ClipPanel, clock, duplicateUnit, insertAfterUnit, insertShot, moveUnitTo, normalizeGroups, restorePhotos, setGroup, stepUnit, ungroup, withoutClip, CutPreview, DRAWER_RESIZE, LockSelect, TimelineRail, newPlaceholder, resolveClips, setShotState, Strip, useCut, useCutUrl, useTimelineStore, type ResolvedClip } from "./TimelineParts";
 import { Banner, Button, Checkbox, Empty, Field, Icon, IconButton, Input, Kbd, ListRow, MenuItem, Panel, PanelBody, PanelHead, Popover, SaveStatus, Select, toast, Toolbar, ToolbarTitle, useCtxMenu, type SaveState } from "./ui";
 
 /**
@@ -85,7 +85,9 @@ function Editor({ timeline: t, at, shots, presets, mask, onChange, onDelete, onO
   const stripRef = useRef<HTMLDivElement>(null);
   const durRef = useRef<HTMLInputElement>(null);
   const settings = useSettings();
-  const inline = useClipEditing({ timeline: t, clips, presets, onChange });
+  // Every change keeps the sequence blocks consistent (issue #37).
+  const change = (next: Timeline) => onChange(normalizeGroups(next));
+  const inline = useClipEditing({ timeline: t, clips, presets, onChange: change });
   const guardedCut = guardCut(cut, inline, settings.inlinePlayhead);
   const edit = (kind: EditKind, c: ResolvedClip) => { cut.select(c.clip.id); setAdding(false); inline.start(kind, c); };
   useCutUrl("timeline", t.id, clips, cut, inline.editing?.kind ?? null, edit, at);
@@ -93,32 +95,31 @@ function Editor({ timeline: t, at, shots, presets, mask, onChange, onDelete, onO
   const clipMenu = useCtxMenu<ResolvedClip>();
   const decide = (s: Shot, to: Shot["state"]) => void setShotState(s, to, onUpdated);
 
-  const setClips = (list: TimelineClip[]) => onChange({ ...t, clips: list });
+  const setClips = (list: TimelineClip[]) => change({ ...t, clips: list });
   const update = (id: string, patch: Partial<TimelineClip>) => setClips(t.clips.map((c) => (c.id === id ? { ...c, ...patch } : c)));
-  const move = (c: ResolvedClip, d: number) => { const i = t.clips.indexOf(c.clip); if (i + d < 0 || i + d >= t.clips.length) return; const l = [...t.clips]; const [x] = l.splice(i, 1); l.splice(i + d, 0, x); setClips(l); };
+  const move = (c: ResolvedClip, d: number) => setClips(stepUnit(t.clips, c.clip.id, d));
   /** `index` counts rendered clips; map it into the stored list (dead clips are skipped in render). */
-  const reorder = (clipId: string, index: number) => {
-    const from = t.clips.findIndex((c) => c.id === clipId);
-    if (from < 0) return;
-    let at = index >= clips.length ? t.clips.length : t.clips.indexOf(clips[index].clip);
-    const l = [...t.clips]; const [x] = l.splice(from, 1);
-    if (from < at) at -= 1;
-    l.splice(at, 0, x); setClips(l);
+  const reorder = (clipId: string, index: number) => setClips(moveUnitTo(t.clips, clipId, index >= clips.length ? t.clips.length : t.clips.indexOf(clips[index].clip)));
+  const removeClip = (c: ResolvedClip) => {
+    const next = withoutClip(t.clips, c.clip.id, settings.seqRemove === "block");
+    const kept = new Set(next.map((x) => x.id));
+    const i = clips.indexOf(c);
+    const n = clips.slice(i + 1).find((x) => kept.has(x.clip.id)) ?? clips.slice(0, i).reverse().find((x) => kept.has(x.clip.id));
+    setClips(next);
+    cut.select(n?.clip.id ?? null);
   };
-  const removeClip = (c: ResolvedClip) => { const i = clips.indexOf(c); setClips(t.clips.filter((x) => x !== c.clip)); const n = clips[i + 1] ?? clips[i - 1]; cut.select(n?.clip.id ?? null); };
   const duplicate = async (c: ResolvedClip) => {
     try {
-      const copy = await copyClip(t, c.clip);
-      const now = latest.current;
-      const l = [...now.clips]; l.splice(now.clips.findIndex((x) => x.id === c.clip.id) + 1, 0, copy);
-      onChange({ ...now, clips: l });
-      cut.select(copy.id);
+      const { copies, group } = await duplicateUnit(t, c.clip.id);
+      change(insertAfterUnit(latest.current, c.clip.id, copies, group));
+      cut.select(copies[0].id);
     } catch (e) { toast(`Duplicate failed: ${(e as Error).message}`, "danger"); }
   };
   const addShots = (list: Shot[]) => {
-    const fresh = list.flatMap((s) => clipsOfShot(s, mask));
-    setClips([...t.clips, ...fresh]);
-    if (!cur && fresh[0]) cut.select(fresh[0].id);
+    let next = t, first: string | null = null;
+    for (const s of list) { const r = insertShot(next, s, mask); next = r.t; first ??= r.first; }
+    change(next);
+    if (!cur && first) cut.select(first);
   };
   const addPlaceholder = () => { const p = newPlaceholder("Placeholder"); setClips([...t.clips, p]); cut.select(p.id); };
   const open = (c: ResolvedClip) => { if (c.kind === "photo") onOpen(c.shot, shotList); };
@@ -171,7 +172,9 @@ function Editor({ timeline: t, at, shots, presets, mask, onChange, onDelete, onO
       {inline.panel ?? (adding ? <AddPanel shots={shots} mask={mask} onAdd={addShots} onClose={() => setAdding(false)} />
         : cur && <ClipPanel key={cur.clip.id} c={cur} count={clips.length} lock={t.lock_mode} durRef={durRef} onUpdate={(p) => update(cur.clip.id, p)} onMove={(d) => move(cur, d)} onRemove={() => removeClip(cur)} onDuplicate={() => void duplicate(cur)} onOpen={() => open(cur)}
             onReframe={() => edit("reframe", cur)} onOverlay={() => edit("overlay", cur)} onSketch={() => edit("sketch", cur)}
-            onState={cur.kind === "photo" ? (to) => decide(cur.shot, to) : undefined} />)}
+            onState={cur.kind === "photo" ? (to) => decide(cur.shot, to) : undefined}
+            onGroup={(g) => change(setGroup(t, g))} onUngroup={() => cur.clip.group_id && change(ungroup(t, cur.clip.group_id))}
+            onRestore={() => cur.kind === "photo" && cur.clip.group_id && change(restorePhotos(t, cur.clip.group_id, cur.shot, mask))} />)}
     </>
   );
 }

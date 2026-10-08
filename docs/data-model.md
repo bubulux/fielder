@@ -12,6 +12,7 @@ D1 (SQLite) database `fielder-db`, schema in `apps/worker/migrations/`. Images l
 | `0004_shooting_days.sql` | `shooting_days`, `day_shots` |
 | `0005_capture_flow.sql` | `shots.shot_size`, `camera_support`, `movement`; `photos` rebuilt with nullable `lat`/`lon` (copied row by row, both or neither set) |
 | `0006_compose.sql` | `shots.description`; `overlays`, `sketches` ([compose](features/compose.md)) |
+| `0014_sequence_blocks.sql` | `timelines.groups` (JSON), `timeline_clips.group_id`: sequence blocks ([timeline](features/timeline.md)) |
 | `0013_clip_owned_compose.sql` | `overlays.timeline_id`, `clip_id`; `sketches` rebuilt (copied) with nullable `shot_id` + `timeline_id`, `clip_id`; `timeline_clips.sketch_id` (sketch clips) ([timeline](features/timeline.md)) |
 | `0012_timeline_lock.sql` | `timelines.lock_mode`: one presentation mode forced on every clip ([timeline](features/timeline.md)) |
 | `0011_placeholder_clips.sql` | `timeline_clips` rebuilt (copied): nullable `photo_id`/`presentation`, new `title` for placeholder clips ([timeline](features/timeline.md)) |
@@ -54,7 +55,7 @@ Add a new numbered file for every change; never edit one that was applied to pro
 
 `shooting_days(id, project_id → CASCADE, date YYYY-MM-DD, title, notes, …)` and `day_shots(day_id, shot_id, position, planned_time HH:MM, notes)`.
 
-`timelines(id, project_id → projects CASCADE, name, notes, lock_mode, created_at, updated_at)` and `timeline_clips(id, timeline_id → CASCADE, position, photo_id → photos CASCADE, overlay_id → overlays SET NULL, presentation JSON, duration_ms 100..3600000, notes, title)`. A clip is either a photo clip (`photo_id` + `presentation`) or a placeholder (`title` only, no photo/overlay/presentation; a CHECK enforces the two shapes); a placeholder with `sketch_id → sketches SET NULL` is a sketch clip (deleting the sketch turns it back into a placeholder). See [timeline](features/timeline.md).
+`timelines(id, project_id → projects CASCADE, name, notes, lock_mode, groups JSON, created_at, updated_at)` and `timeline_clips(id, timeline_id → CASCADE, position, photo_id → photos CASCADE, overlay_id → overlays SET NULL, presentation JSON, duration_ms 100..3600000, notes, title, group_id)`. `groups` holds the sequence blocks' settings (`[{ id, mode each|total, total_ms, split even|edges, edge_weight }]`); `group_id` (no FK, checked on PUT) puts a photo clip in one. A block's clips are adjacent and of one shot; a `total` block's `duration_ms` are the computed split. A clip is either a photo clip (`photo_id` + `presentation`) or a placeholder (`title` only, no photo/overlay/presentation; a CHECK enforces the two shapes); a placeholder with `sketch_id → sketches SET NULL` is a sketch clip (deleting the sketch turns it back into a placeholder). See [timeline](features/timeline.md).
 
 ## JSON shapes on photos
 

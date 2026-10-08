@@ -15,8 +15,10 @@ export interface Settings {
    * saved first).
    */
   inlinePlayhead: "pin" | "leave";
+  /** Removing a photo of a sequence block (issue #37): "photo" drops just that photo, "block" the whole sequence. */
+  seqRemove: "photo" | "block";
 }
-export const DEFAULT_SETTINGS: Settings = { newShotState: "approved", inlinePlayhead: "pin" };
+export const DEFAULT_SETTINGS: Settings = { newShotState: "approved", inlinePlayhead: "pin", seqRemove: "photo" };
 
 function read(): Settings {
   try {
@@ -24,6 +26,7 @@ function read(): Settings {
     return {
       newShotState: raw.newShotState === "unreviewed" ? "unreviewed" : DEFAULT_SETTINGS.newShotState,
       inlinePlayhead: raw.inlinePlayhead === "leave" ? "leave" : DEFAULT_SETTINGS.inlinePlayhead,
+      seqRemove: raw.seqRemove === "block" ? "block" : DEFAULT_SETTINGS.seqRemove,
     };
   } catch { return { ...DEFAULT_SETTINGS }; }
 }

@@ -6,7 +6,7 @@ import { Framed, type MaskMode } from "./Framed";
 import { afterG, useKeys } from "./keys";
 import type { CutPosition } from "./router";
 import { useSettings } from "./settings";
-import { ClipMenu, ClipPanel, clock, clipsOfShot, copyClip, CutPreview, defaultPresentation, DRAWER_RESIZE, duplicateTimeline, LockSelect, TimelineRail, newPlaceholder, resolveClips, setShotState, shotDrag, shotUsage, DECISIONS, Strip, useCut, useCutUrl, useTimelineStore, type Cut, type ResolvedClip } from "./TimelineParts";
+import { ClipMenu, ClipPanel, clock, CutPreview, DRAWER_RESIZE, duplicateUnit, fillSpot, insertAfterUnit, insertShot, moveUnitTo, normalizeGroups, restorePhotos, setGroup, stepUnit, ungroup, withoutClip, duplicateTimeline, LockSelect, TimelineRail, newPlaceholder, resolveClips, setShotState, shotDrag, shotUsage, DECISIONS, Strip, useCut, useCutUrl, useTimelineStore, type Cut, type ResolvedClip } from "./TimelineParts";
 import { Banner, Button, ContextMenu, cx, Empty, EmptyNote, Field, Icon, IconButton, Input, MenuItem, Panel, PanelBody, PanelHead, promptDialog, SaveStatus, Seg, Select, SeqBadge, StateMarker, toast, Toolbar, ToolbarTitle, useCtxMenu, type SaveState } from "./ui";
 
 /**
@@ -117,32 +117,29 @@ function Workspace(p: WorkspaceProps) {
   const durRef = useRef<HTMLInputElement>(null);
   const clipMenu = useCtxMenu<ResolvedClip>();
   const settings = useSettings();
-  const inline = useClipEditing({ timeline: t, clips, presets: p.presets, onChange: p.onChange });
+  // Every change keeps the sequence blocks consistent (issue #37).
+  const change = (next: Timeline) => p.onChange(normalizeGroups(next));
+  const inline = useClipEditing({ timeline: t, clips, presets: p.presets, onChange: change });
 
-  const setClips = (list: TimelineClip[]) => p.onChange({ ...t, clips: list });
+  const setClips = (list: TimelineClip[]) => change({ ...t, clips: list });
   const update = (id: string, patch: Partial<TimelineClip>) => setClips(t.clips.map((c) => (c.id === id ? { ...c, ...patch } : c)));
-  const move = (c: ResolvedClip, d: number) => { const i = t.clips.indexOf(c.clip); if (i + d < 0 || i + d >= t.clips.length) return; const l = [...t.clips]; const [x] = l.splice(i, 1); l.splice(i + d, 0, x); setClips(l); };
+  const move = (c: ResolvedClip, d: number) => setClips(stepUnit(t.clips, c.clip.id, d));
   /** `index` counts rendered clips; map it into the stored list (dead clips are skipped in render). */
   const storedIndex = (index: number) => (index >= clips.length ? t.clips.length : t.clips.indexOf(clips[index].clip));
-  const reorder = (clipId: string, index: number) => {
-    const from = t.clips.findIndex((c) => c.id === clipId);
-    if (from < 0) return;
-    let at = storedIndex(index);
-    const l = [...t.clips];
-    const [x] = l.splice(from, 1);
-    if (from < at) at -= 1;
-    l.splice(at, 0, x);
-    setClips(l);
+  const reorder = (clipId: string, index: number) => setClips(moveUnitTo(t.clips, clipId, storedIndex(index)));
+  const removeClip = (c: ResolvedClip) => {
+    const next = withoutClip(t.clips, c.clip.id, settings.seqRemove === "block");
+    const kept = new Set(next.map((x) => x.id));
+    const i = clips.indexOf(c);
+    const n = clips.slice(i + 1).find((x) => kept.has(x.clip.id)) ?? clips.slice(0, i).reverse().find((x) => kept.has(x.clip.id));
+    setClips(next);
+    cut.select(n?.clip.id ?? null);
   };
-  const removeClip = (c: ResolvedClip) => { const i = clips.indexOf(c); setClips(t.clips.filter((x) => x !== c.clip)); const n = clips[i + 1] ?? clips[i - 1]; cut.select(n?.clip.id ?? null); };
   const duplicate = async (c: ResolvedClip) => {
     try {
-      const copy = await copyClip(t, c.clip);
-      const now = latest.current;
-      const i = now.clips.findIndex((x) => x.id === c.clip.id);
-      const l = [...now.clips]; l.splice(i + 1, 0, copy);
-      p.onChange({ ...now, clips: l });
-      cut.select(copy.id);
+      const { copies, group } = await duplicateUnit(t, c.clip.id);
+      change(insertAfterUnit(latest.current, c.clip.id, copies, group));
+      cut.select(copies[0].id);
     } catch (e) { toast(`Duplicate failed: ${(e as Error).message}`, "danger"); }
   };
   const latest = useRef(t); latest.current = t;
@@ -171,25 +168,21 @@ function Workspace(p: WorkspaceProps) {
     toast(`${shotTitle(s)} is still unreviewed`, "info", { label: "Approve", run: () => void patchShot(s.id, { state: "approved" }).then(p.onUpdated).catch((e: Error) => toast(`Update failed: ${e.message}`, "danger")) });
   };
   const addShot = (s: Shot, index?: number) => {
-    const fresh = clipsOfShot(s, mask);
-    const l = [...t.clips];
-    l.splice(index === undefined ? l.length : index, 0, ...fresh);
-    setClips(l);
-    if (!inline.editing) cut.select(fresh[0].id);
+    const r = insertShot(t, s, mask, index);
+    change(r.t);
+    if (!inline.editing) cut.select(r.first);
     offerApprove(s);
   };
   const onDropShot = (shotId: string, at: { index: number } | { fill: string }) => {
     const s = byId.get(shotId);
     if (!s) return;
     if ("index" in at) return addShot(s, storedIndex(at.index));
-    // Fill the placeholder (or sketch clip) with the shot's cover photo; hold time and notes stay, a sketch stays the clip's own.
+    // Fill the placeholder (or sketch clip): hold time and notes stay, a sketch stays the clip's own; a sequence fills it as a block in that time.
     const ph = t.clips.find((c) => c.id === at.fill);
     if (!ph) return;
     if (inline.editing?.clipId === ph.id) { toast("Finish editing this clip first", "info"); return; }
-    const photo = cover(s);
-    setClips(t.clips.map((c) => (c === ph ? { ...c, photo_id: photo.id, shot_id: s.id, overlay_id: null, presentation: defaultPresentation(photo, mask), title: null, sketch_id: null } : c)));
+    change(fillSpot(t, ph.id, s, mask));
     if (!inline.editing) cut.select(ph.id);
-    if (s.photos.length > 1) toast(`Sequence: the spot took the first photo of ${s.photos.length}`, "info");
     offerApprove(s);
   };
   /** The sketch a spot had before a shot filled it becomes that shot's sketch. */
@@ -246,6 +239,8 @@ function Workspace(p: WorkspaceProps) {
         ? <ClipPanel key={cur.clip.id} c={cur} count={clips.length} lock={t.lock_mode} durRef={durRef} onUpdate={(patch) => update(cur.clip.id, patch)} onMove={(d) => move(cur, d)} onRemove={() => removeClip(cur)} onDuplicate={() => void duplicate(cur)} onOpen={() => open(cur)}
             onReframe={() => edit("reframe", cur)} onOverlay={() => edit("overlay", cur)} onSketch={() => edit("sketch", cur)} onAttachSketch={() => void attachSketch(cur)}
             onState={cur.kind === "photo" ? (to) => void setShotState(cur.shot, to, p.onUpdated) : undefined}
+            onGroup={(g) => change(setGroup(t, g))} onUngroup={() => cur.clip.group_id && change(ungroup(t, cur.clip.group_id))}
+            onRestore={() => cur.kind === "photo" && cur.clip.group_id && change(restorePhotos(t, cur.clip.group_id, cur.shot, mask))}
             head={<><span class="meta num">clip {cur.index + 1} of {clips.length}</span><IconButton icon="view-grid-outline" label="Browse shots (N)" title="Browse shots (N)" onClick={() => setPanel("browser")} /></>} />
         : <Browser {...p} onAdd={addShot} usage={usage} onJump={jumpTo} />)}
     </>

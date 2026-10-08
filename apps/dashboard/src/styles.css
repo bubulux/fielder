@@ -277,6 +277,13 @@ button { font: inherit; }
 .tl-clip__name { font: var(--weight-semibold) var(--text-micro)/1.2 var(--font-sans); display: flex; align-items: center; gap: 3px; }
 .tl-clip__dur { font: var(--weight-bold) var(--text-micro)/1.2 var(--font-sans); color: var(--text-dim); }
 /* Placeholder clips and drag targets (issue #31). */
+/* Sequence blocks (issue #37): a solid band over the block, its clips capped in the same colour. */
+.tl-seqs { position: relative; height: 22px; }
+.tl-seq { position: absolute; top: 0; height: 20px; display: flex; align-items: center; gap: 4px; padding: 0 6px; overflow: hidden; border-radius: var(--radius-sm) var(--radius-sm) 0 0; background: var(--text); color: var(--bg); font: var(--weight-bold) 11px/1 var(--font-sans); cursor: grab; white-space: nowrap; }
+.tl-seq.is-sel { background: var(--accent); color: var(--on-accent); }
+.tl-seq__len { margin-left: auto; padding-left: 6px; }
+.tl-clip--seq { border-top: 3px solid var(--text); }
+.tl-clip--seq.is-sel { border-top-color: var(--accent); }
 .tl-clip--ph { border-style: dashed; color: var(--text-dim); background: transparent; }
 .tl-clip__thumb--ph { align-items: center; justify-content: center; background: transparent; border: 1px dashed var(--border); border-radius: 3px; font-size: 22px; }
 .tl-clip.is-fill { border-style: solid; border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent); background: var(--accent-tint); color: var(--text); }
